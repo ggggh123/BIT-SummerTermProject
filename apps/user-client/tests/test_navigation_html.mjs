@@ -1,11 +1,45 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
 
 const htmlPath = new URL('../resources/map/navigation.html', import.meta.url);
 const qrcPath = new URL('../resources/resources.qrc', import.meta.url);
+const executableSuffix = process.platform === 'win32' ? '.exe' : '';
+
+function canRun(command) {
+  const result = spawnSync(command, ['--version'], { encoding: 'utf8', windowsHide: true });
+  return !result.error && result.status === 0;
+}
+
+function* queryQtHostDirectories() {
+  for (const qtpaths of [`qtpaths6${executableSuffix}`, `qtpaths${executableSuffix}`]) {
+    if (!canRun(qtpaths)) continue;
+    for (const query of ['QT_HOST_LIBEXECS', 'QT_INSTALL_LIBEXECS', 'QT_HOST_BINS', 'QT_INSTALL_BINS']) {
+      const result = spawnSync(qtpaths, ['--query', query], { encoding: 'utf8', windowsHide: true });
+      const directory = result.status === 0 ? result.stdout.trim() : '';
+      if (directory) yield directory;
+    }
+  }
+}
+
+function resolveRcc() {
+  if (process.env.QT_RCC) {
+    if (canRun(process.env.QT_RCC)) return process.env.QT_RCC;
+    throw new Error(`QT_RCC is not an executable Qt resource compiler: ${process.env.QT_RCC}. Set QT_RCC to the full path of rcc.`);
+  }
+
+  const candidates = [];
+  for (const directory of queryQtHostDirectories()) candidates.push(join(directory, `rcc${executableSuffix}`));
+  candidates.push(`rcc6${executableSuffix}`, `rcc${executableSuffix}`, `rcc-qt6${executableSuffix}`);
+  const rcc = candidates.find(canRun);
+  if (rcc) return rcc;
+  throw new Error('Unable to locate Qt rcc. Set QT_RCC to the full path of the Qt resource compiler.');
+}
+
+const rccExecutable = resolveRcc();
 
 function makeElement(tagName = 'div') {
   return {
@@ -103,7 +137,7 @@ test('qrc manifest exposes only the checked-in navigation route page', () => {
   const qrc = readFileSync(qrcPath, 'utf8');
   const files = [...qrc.matchAll(/<file(?:\s[^>]*)?>([^<]+)<\/file>/g)].map((match) => match[1].trim());
   assert.deepEqual(files, ['map/navigation.html']);
-  const mapping = execFileSync('/usr/lib/qt6/libexec/rcc', ['--list-mapping', qrcPath.pathname], { encoding: 'utf8' });
+  const mapping = execFileSync(rccExecutable, ['--list-mapping', qrcPath.pathname], { encoding: 'utf8' });
   assert.deepEqual(mapping.trim().split('\n').map((line) => line.split('\t')[0]), [':/map/navigation.html']);
 });
 
