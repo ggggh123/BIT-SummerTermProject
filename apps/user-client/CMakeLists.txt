@@ -2,7 +2,7 @@ if(NOT TARGET ev_protocol)
     message(FATAL_ERROR "apps/user-client requires the shared ev_protocol target")
 endif()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network WebEngineWidgets Test)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Widgets Network WebEngineWidgets Test)
 
 add_library(ev_user_client_core STATIC
     src/app/UserAppConfig.cpp
