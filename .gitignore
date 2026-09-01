@@ -7,3 +7,16 @@
 # Web dashboard local artifacts (generated, never commit)
 dashboard/.vendor-cache/
 dashboard/runtime/
+
+/build/
+/.venv/
+/runtime/
+**/runtime/
+*.user
+*.user.*
+*.db
+*.db-wal
+*.db-shm
+*.log
+config.local.ini
+.env
