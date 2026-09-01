@@ -36,6 +36,8 @@ private slots:
     void similarPrefixDoesNotCountAsTheRequiredToken();
     void nonVmwareVendorIsUnchanged();
     void similarVendorNameIsUnchanged();
+    void spaceDelimitedVmwareLookalikeIsUnchanged();
+    void commaDelimitedVmwareLookalikeIsUnchanged();
     void applyReadsVendorAndUpdatesTheEnvironment();
     void unreadableVendorHasNoSideEffect();
 };
@@ -75,6 +77,22 @@ void WebEngineRuntimeTest::similarVendorNameIsUnchanged() {
     QCOMPARE(
         WebEngineRuntime::chromiumFlagsForSystem(
             existingFlags, QByteArrayLiteral("VMwareCompatible Systems")),
+        existingFlags);
+}
+
+void WebEngineRuntimeTest::spaceDelimitedVmwareLookalikeIsUnchanged() {
+    const QByteArray existingFlags("--existing-test-flag=value");
+    QCOMPARE(
+        WebEngineRuntime::chromiumFlagsForSystem(
+            existingFlags, QByteArrayLiteral("VMware Fake Vendor")),
+        existingFlags);
+}
+
+void WebEngineRuntimeTest::commaDelimitedVmwareLookalikeIsUnchanged() {
+    const QByteArray existingFlags("--existing-test-flag=value");
+    QCOMPARE(
+        WebEngineRuntime::chromiumFlagsForSystem(
+            existingFlags, QByteArrayLiteral("VMware,Compatible Systems")),
         existingFlags);
 }
 

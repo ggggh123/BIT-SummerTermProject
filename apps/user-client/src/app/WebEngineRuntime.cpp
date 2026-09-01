@@ -9,17 +9,7 @@ constexpr auto kChromiumFlagsEnvironment = "QTWEBENGINE_CHROMIUM_FLAGS";
 constexpr auto kIgnoreGpuBlocklistFlag = "--ignore-gpu-blocklist";
 
 bool isVmwareVendor(const QByteArray &systemVendor) {
-    const QByteArray normalizedVendor = systemVendor.trimmed().toLower();
-    constexpr qsizetype vendorNameLength = 6;
-    if (!normalizedVendor.startsWith("vmware")) {
-        return false;
-    }
-    if (normalizedVendor.size() == vendorNameLength) {
-        return true;
-    }
-
-    const char delimiter = normalizedVendor.at(vendorNameLength);
-    return delimiter == ',' || std::isspace(static_cast<unsigned char>(delimiter));
+    return systemVendor.trimmed().toLower() == QByteArrayLiteral("vmware, inc.");
 }
 
 bool containsExactToken(const QByteArray &flags, const QByteArray &token) {
