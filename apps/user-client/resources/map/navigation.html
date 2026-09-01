@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>充电站路线导航</title>
+  <style>
+    html, body, #map { width: 100%; height: 100%; margin: 0; font-family: sans-serif; }
+    #route-panel { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 2; padding: 10px 12px; background: rgba(255, 255, 255, .94); border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, .2); }
+    #route-status { color: #222; }
+    #route-empty { margin-top: 4px; color: #8a5a00; }
+    #route-retry { margin-top: 8px; padding: 6px 12px; }
+  </style>
+</head>
+<body>
+  <div id="map" aria-label="腾讯地图路线"></div>
+  <section id="route-panel" aria-live="polite">
+    <div id="route-status">等待地图配置。</div>
+    <div id="route-empty">暂无路线，请配置地图后重试。</div>
+    <button id="route-retry" type="button" style="display:none">重试路线规划</button>
+  </section>
+  <script>
+  (() => {
+    const mapElement = document.getElementById('map');
+    const statusElement = document.getElementById('route-status');
+    const emptyElement = document.getElementById('route-empty');
+    const retryElement = document.getElementById('route-retry');
+    let runtimeMapKey = '';
+    let map = null;
+    let mapLoadPromise = null;
+    let lastAttemptedRequest = null;
+    let lastSuccessfulRequest = null;
+    let lastSuccessfulLabel = '';
+
+    window.lastRouteStatus = { state: 'idle' };
+
+    function safeText(value) {
+      return String(value ?? '').replace(/[<>]/g, '');
+    }
+
+    function copyRequest(request) {
+      return {
+        from: { lat: request.from.lat, lng: request.from.lng },
+        to: { lat: request.to.lat, lng: request.to.lng },
+        mode: request.mode,
+        stationName: safeText(request.stationName) || '目的地',
+      };
+    }
+
+    function publishStatus(state, message) {
+      window.lastRouteStatus = {
+        state,
+        message: safeText(message),
+        label: lastSuccessfulLabel,
+        lastSuccessfulRequest: lastSuccessfulRequest ? copyRequest(lastSuccessfulRequest) : null,
+      };
+    }
+
+    function showSuccess(message) {
+      statusElement.textContent = safeText(message);
+      emptyElement.textContent = '';
+      retryElement.style.display = 'none';
+      publishStatus('success', message);
+    }
+
+    function showFailure(message) {
+      const visibleMessage = safeText(message);
+      statusElement.textContent = visibleMessage;
+      if (lastSuccessfulRequest) {
+        emptyElement.textContent = `当前仍显示上次成功路线：${lastSuccessfulLabel}。`;
+      } else {
+        emptyElement.textContent = '暂无可显示路线，请检查网络和输入后重试。';
+      }
+      retryElement.style.display = '';
+      publishStatus('error', visibleMessage);
+    }
+
+    function fail(message) {
+      showFailure(message);
+      return Promise.reject(new Error(message));
+    }
+
+    function validCoordinate(point) {
+      return point && Number.isFinite(point.lat) && Number.isFinite(point.lng)
+        && point.lat >= -90 && point.lat <= 90 && point.lng >= -180 && point.lng <= 180;
+    }
+
+    function createMap() {
+      if (map) return map;
+      if (!window.TMap || !window.TMap.Map) throw new Error('地图加载不可用');
+      map = new window.TMap.Map(mapElement, {
+        center: new window.TMap.LatLng(39.9042, 116.4074),
+        zoom: 12,
+      });
+      return map;
+    }
+
+    function loadMapApi() {
+      if (mapLoadPromise) return mapLoadPromise;
+      mapLoadPromise = new Promise((resolve, reject) => {
+        const callbackName = `__tmapRouteReady_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          if (!window.TMap || !window.TMap.Map) return;
+          finished = true;
+          delete window[callbackName];
+          try {
+            resolve(createMap());
+          } catch (_) {
+            reject(new Error('地图加载失败，请重试。'));
+          }
+        };
+        const failLoad = () => {
+          if (finished) return;
+          finished = true;
+          delete window[callbackName];
+          reject(new Error('地图加载失败，请检查网络后重试。'));
+        };
+        window[callbackName] = finish;
+        const script = document.createElement('script');
+        script.async = true;
+        script.onerror = failLoad;
+        script.onload = finish;
+        script.src = `https://map.qq.com/api/gljs?v=1.exp&key=${encodeURIComponent(runtimeMapKey)}&libraries=service&callback=${callbackName}`;
+        document.head.appendChild(script);
+      }).catch((_) => {
+        mapLoadPromise = null;
+        throw new Error('地图加载失败，请检查网络后重试。');
+      });
+      return mapLoadPromise;
+    }
+
+    window.configureMap = ({ key } = {}) => {
+      if (typeof key !== 'string' || !key.trim()) return fail('缺少腾讯地图配置，请提供有效 Key 后重试。');
+      runtimeMapKey = key.trim();
+      return loadMapApi().then(() => {
+        statusElement.textContent = '地图已加载，请选择路线。';
+        if (!lastSuccessfulRequest) emptyElement.textContent = '暂无路线，请选择起点和充电站。';
+        return map;
+      }).catch((_) => fail('地图加载失败，请检查网络后重试。'));
+    };
+
+    function routePaths(polyline) {
+      if (!Array.isArray(polyline) || polyline.length === 0) return null;
+      const paths = polyline.map((point) => {
+        if (!validCoordinate(point)) return null;
+        return new window.TMap.LatLng(point.lat, point.lng);
+      });
+      return paths.every(Boolean) ? paths : null;
+    }
+
+    window.renderRoute = async (request = {}) => {
+      if (!validCoordinate(request.from) || !validCoordinate(request.to)) return fail('起点和终点坐标无效，请重新选择。');
+      if (request.mode !== 'driving' && request.mode !== 'walking') return fail('仅支持驾车或步行导航。');
+      if (!map || !window.TMap || !window.TMap.service) return fail('地图尚未加载，请先配置地图后重试。');
+
+      const cleanRequest = copyRequest(request);
+      lastAttemptedRequest = cleanRequest;
+      try {
+        const from = new window.TMap.LatLng(cleanRequest.from.lat, cleanRequest.from.lng);
+        const to = new window.TMap.LatLng(cleanRequest.to.lat, cleanRequest.to.lng);
+        const service = cleanRequest.mode === 'driving'
+          ? new window.TMap.service.Driving({ map })
+          : new window.TMap.service.Walking();
+        const plan = await service.search({ from, to });
+        const route = plan?.result?.routes?.[0] ?? plan?.routes?.[0];
+        const paths = routePaths(route?.polyline);
+        if (!paths) throw new Error('empty route');
+        new window.TMap.MultiPolyline({
+          map,
+          styles: { route: { color: '#2f80ed', width: 6, borderWidth: 1 } },
+          geometries: [{ id: 'route', styleId: 'route', paths }],
+        });
+        lastSuccessfulRequest = cleanRequest;
+        lastSuccessfulLabel = `${cleanRequest.stationName}（${cleanRequest.mode === 'driving' ? '驾车' : '步行'}）`;
+        showSuccess(`路线规划成功：${lastSuccessfulLabel}`);
+        return window.lastRouteStatus;
+      } catch (_) {
+        return fail('路线规划失败，请检查网络后重试。');
+      }
+    };
+
+    retryElement.addEventListener('click', () => {
+      if (lastAttemptedRequest) window.renderRoute(lastAttemptedRequest).catch(() => {});
+    });
+  })();
+  </script>
+</body>
+</html>
