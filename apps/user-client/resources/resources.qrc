@@ -1,5 +1,5 @@
 <!DOCTYPE RCC><RCC version="1.0">
   <qresource prefix="/map">
-    <file>map/navigation.html</file>
+    <file alias="navigation.html">map/navigation.html</file>
   </qresource>
 </RCC>

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
@@ -28,7 +29,7 @@ function makeElement(tagName = 'div') {
 }
 
 function fakeTMap({ routeResult } = {}) {
-  const calls = { maps: [], driving: [], walking: [], searches: [], polylines: [] };
+  const calls = { maps: [], driving: [], walking: [], searches: [], polylineStyles: [], polylines: [], detachedLayers: [] };
   let nextRouteResult = routeResult ?? { result: { routes: [{ polyline: [{ lat: 39.9, lng: 116.4 }, { lat: 39.91, lng: 116.41 }] }] } };
   class LatLng {
     constructor(lat, lng) { this.lat = lat; this.lng = lng; }
@@ -44,11 +45,15 @@ function fakeTMap({ routeResult } = {}) {
     constructor(options) { calls.walking.push(options); }
     search(request) { calls.searches.push({ kind: 'walking', request }); return Promise.resolve(nextRouteResult); }
   }
+  class PolylineStyle {
+    constructor(options) { this.options = options; calls.polylineStyles.push(this); }
+  }
   class MultiPolyline {
-    constructor(options) { calls.polylines.push(options); }
+    constructor(options) { this.options = options; calls.polylines.push(this); }
+    setMap(map) { calls.detachedLayers.push({ layer: this, map }); }
   }
   return {
-    api: { LatLng, Map, MultiPolyline, service: { Driving, Walking } },
+    api: { LatLng, Map, PolylineStyle, MultiPolyline, service: { Driving, Walking } },
     calls,
     setRouteResult(value) { nextRouteResult = value; },
   };
@@ -98,7 +103,8 @@ test('qrc manifest exposes only the checked-in navigation route page', () => {
   const qrc = readFileSync(qrcPath, 'utf8');
   const files = [...qrc.matchAll(/<file(?:\s[^>]*)?>([^<]+)<\/file>/g)].map((match) => match[1].trim());
   assert.deepEqual(files, ['map/navigation.html']);
-  assert.match(qrc, /<qresource\s+prefix="\/map">/);
+  const mapping = execFileSync('/usr/lib/qt6/libexec/rcc', ['--list-mapping', qrcPath.pathname], { encoding: 'utf8' });
+  assert.deepEqual(mapping.trim().split('\n').map((line) => line.split('\t')[0]), [':/map/navigation.html']);
 });
 
 test('page has no committed key and does not load remote code before configuration', () => {
@@ -147,6 +153,33 @@ test('configureMap requests the official GL service library with only URL-encode
   assert.equal(fake.calls.maps.length, 1);
 });
 
+test('an unusable successful script load rejects visibly instead of leaving configuration pending', async () => {
+  const page = loadPage();
+  const configuration = page.context.configureMap({ key: 'private-test-key' });
+  page.scripts[0].onload();
+  await assert.rejects(configuration, /地图加载失败/);
+  assert.match(page.elements['route-status'].textContent, /地图加载失败/);
+  assert.equal(page.elements['route-retry'].style.display, '');
+});
+
+test('Retry recovers API loading with a private key before a pending route', async () => {
+  const page = loadPage();
+  const runtimeKey = 'private retry +&=';
+  const configuration = page.context.configureMap({ key: runtimeKey });
+  page.scripts[0].onerror();
+  await assert.rejects(configuration, /地图加载失败/);
+  const retry = page.elements['route-retry'].click();
+  assert.equal(typeof retry?.then, 'function', 'Retry must return the retry promise for controlled callers');
+  assert.equal(page.scripts.length, 2, 'Retry must request a fresh API script after API failure');
+  const fake = fakeTMap();
+  page.context.TMap = fake.api;
+  page.scripts[1].onload();
+  await retry;
+  assert.equal(fake.calls.maps.length, 1);
+  const exposed = `${JSON.stringify(page.context.lastRouteStatus)} ${page.elements['route-status'].textContent} ${page.elements['route-empty'].textContent} ${page.logs.join(' ')}`;
+  assert.doesNotMatch(exposed, new RegExp(runtimeKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
 test('route runtime keeps the key secret while constructing Tencent driving and walking searches', async () => {
   const page = loadPage();
   const runtimeKey = 'not-for-status-+-&';
@@ -159,12 +192,16 @@ test('route runtime keeps the key secret while constructing Tencent driving and 
   assert.deepEqual({ ...fake.calls.searches[0].request.to }, to);
   assert.equal(fake.calls.searches[0].kind, 'driving');
   assert.equal(fake.calls.polylines.length, 1);
+  assert.equal(fake.calls.polylineStyles.length, 1);
+  assert.ok(fake.calls.polylines[0].options.styles.route instanceof fake.api.PolylineStyle);
   assert.equal(page.context.lastRouteStatus.state, 'success');
   assert.match(page.context.lastRouteStatus.label, /朝阳充电站/);
 
   await page.context.renderRoute({ from, to, mode: 'walking', stationName: '朝阳充电站' });
   assert.equal(fake.calls.walking.length, 1);
   assert.equal(fake.calls.searches[1].kind, 'walking');
+  assert.equal(fake.calls.polylines.length, 2);
+  assert.deepEqual(fake.calls.detachedLayers, [{ layer: fake.calls.polylines[0], map: null }]);
   const exposed = `${JSON.stringify(page.context.lastRouteStatus)} ${page.elements['route-status'].textContent} ${page.elements['route-empty'].textContent} ${page.logs.join(' ')}`;
   assert.doesNotMatch(exposed, new RegExp(runtimeKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
@@ -184,6 +221,12 @@ test('later route failure remains visible and retryable without replacing the la
   assert.match(page.elements['route-status'].textContent, /路线/);
   assert.match(page.elements['route-empty'].textContent, /上次成功路线/);
   assert.equal(page.elements['route-retry'].style.display, '');
+  fake.setRouteResult({ result: { routes: [{ polyline: [{ lat: 39.9, lng: 116.4 }, { lat: 39.91, lng: 116.41 }] }] } });
+  const retry = page.elements['route-retry'].click();
+  assert.equal(typeof retry?.then, 'function', 'Retry must return the route retry promise');
+  await retry;
+  assert.equal(fake.calls.searches.length, 3, 'Retry must start another route search');
+  assert.equal(page.context.lastRouteStatus.state, 'success');
 });
 
 test('empty or malformed Tencent route results fail safely', async () => {
