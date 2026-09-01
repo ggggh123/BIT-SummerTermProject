@@ -6,6 +6,7 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Widgets Network WebEngineWidge
 
 add_library(ev_user_client_core STATIC
     src/app/UserAppConfig.cpp
+    src/app/WebEngineRuntime.cpp
     src/domain/Formatters.cpp
     src/ui/MainWindow.cpp
 )
@@ -27,3 +28,7 @@ add_executable(tst_user_formatters tests/tst_formatters.cpp)
 target_link_libraries(tst_user_formatters PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_formatters COMMAND tst_user_formatters)
 set_tests_properties(user_formatters PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_executable(tst_user_webengine_runtime tests/tst_webengine_runtime.cpp)
+target_link_libraries(tst_user_webengine_runtime PRIVATE ev_user_client_core Qt6::Test)
+add_test(NAME user_webengine_runtime COMMAND tst_user_webengine_runtime)
