@@ -1,5 +1,7 @@
 #include "services/UserApi.h"
 
+#include "contracts/Actions.h"
+#include "contracts/Statuses.h"
 #include "net/TcpJsonClient.h"
 #include "protocol/Envelope.h"
 
@@ -177,11 +179,8 @@ bool parseCharger(const QJsonValue &value, ev::user::Charger *charger)
     }
     const QJsonValue type = object.value(QStringLiteral("type"));
     const QJsonValue status = object.value(QStringLiteral("status"));
-    static const QSet<QString> statuses{
-        QStringLiteral("idle"), QStringLiteral("reserved"), QStringLiteral("charging"),
-        QStringLiteral("fault"), QStringLiteral("restarting")};
     if (!type.isString() || (type.toString() != QStringLiteral("fast") && type.toString() != QStringLiteral("slow"))
-        || !status.isString() || !statuses.contains(status.toString())) {
+        || !status.isString() || !ev::status::isCharger(status.toString())) {
         return false;
     }
     decoded.type = type.toString();
@@ -249,10 +248,9 @@ bool parseForecastRecord(const QJsonValue &value, ev::user::ForecastRecord *reco
     }
     const long double busyRatio = static_cast<long double>(decoded.predictedBusyCount)
         / static_cast<long double>(chargerCount);
-    const QString expectedCongestion = busyRatio < 0.5L
-        ? QStringLiteral("low")
-        : (busyRatio < 0.8L ? QStringLiteral("medium") : QStringLiteral("high"));
-    if (decoded.congestionLevel != expectedCongestion) {
+    const qsizetype expectedCongestionIndex = busyRatio < 0.5L ? 0 : (busyRatio < 0.8L ? 1 : 2);
+    if (!ev::status::isCongestion(decoded.congestionLevel)
+        || decoded.congestionLevel != ev::status::Congestions.at(expectedCongestionIndex)) {
         return false;
     }
     decoded.isPeak = object.value(QStringLiteral("isPeak")).toBool();
@@ -310,7 +308,7 @@ bool parseStationDetail(const QJsonObject &data, qint64 requestedStationId,
         }
         chargerIds.insert(charger.chargerId);
         chargerCodes.insert(charger.code);
-        if (charger.status == QStringLiteral("idle")) {
+        if (charger.status == ev::status::Chargers.constFirst()) {
             ++idleCount;
         }
         decoded.chargers.append(std::move(charger));
@@ -323,7 +321,9 @@ bool parseStationDetail(const QJsonObject &data, qint64 requestedStationId,
     return true;
 }
 
-bool parseLatestForecast(const QJsonObject &data, ev::user::ForecastLatestResult *result)
+bool parseLatestForecast(const QJsonObject &data,
+                         const QHash<qint64, qint64> &forecastStationCounts,
+                         ev::user::ForecastLatestResult *result)
 {
     if (!hasExactlyKeys(data, {"forecastRun", "records"})
         || !data.value(QStringLiteral("records")).isArray()) {
@@ -340,7 +340,8 @@ bool parseLatestForecast(const QJsonObject &data, ev::user::ForecastLatestResult
         return true;
     }
     ev::user::ForecastRun run;
-    if (!parseForecastRun(runValue, &run) || records.size() != 144) {
+    if (!parseForecastRun(runValue, &run) || records.size() != 144
+        || forecastStationCounts.size() != 6) {
         return false;
     }
     qint64 previousStationId = 0;
@@ -354,7 +355,10 @@ bool parseLatestForecast(const QJsonObject &data, ev::user::ForecastLatestResult
             return false;
         }
         const QString key = QStringLiteral("%1:%2").arg(record.stationId).arg(record.horizonH);
-        if (unique.contains(key)
+        const auto expectedCount = forecastStationCounts.constFind(record.stationId);
+        if (expectedCount == forecastStationCounts.cend()
+            || record.predictedBusyCount + record.predictedIdleCount != expectedCount.value()
+            || unique.contains(key)
             || (record.stationId < previousStationId)
             || (record.stationId == previousStationId && record.horizonH <= previousHorizon)
             || QDateTime::fromString(record.forecastAt, Qt::ISODate) != cutoff.addSecs(record.horizonH * 3600)) {
@@ -400,7 +404,7 @@ bool parseUser(const QJsonValue &value, ev::user::User *user)
     const QJsonValue status = object.value(QStringLiteral("status"));
     if (!mobile.isString() || !kMobilePattern.match(mobile.toString()).hasMatch()
         || !avatarPath.isString() || !status.isString()
-        || (status.toString() != QStringLiteral("active") && status.toString() != QStringLiteral("frozen"))) {
+        || !ev::status::isUser(status.toString())) {
         return false;
     }
     decoded.mobile = mobile.toString();
@@ -491,6 +495,7 @@ void UserApi::loginByPhone(const QString &mobile)
 {
     ++sessionGeneration_;
     user_.reset();
+    stationSnapshots_.clear();
     token_.clear();
     emit loginPendingChanged(true);
     if (!kMobilePattern.match(mobile).hasMatch()) {
@@ -499,7 +504,7 @@ void UserApi::loginByPhone(const QString &mobile)
         return;
     }
     const QString requestId = client_->send(
-        QStringLiteral("auth.user_login"), QJsonObject{{QStringLiteral("mobile"), mobile}});
+        ev::actions::AuthUserLogin, QJsonObject{{QStringLiteral("mobile"), mobile}});
     pendingOperations_.insert(requestId, {Operation::Login, sessionGeneration_});
 }
 
@@ -509,51 +514,61 @@ void UserApi::loadCurrentOrder()
         emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
         return;
     }
-    const QString requestId = client_->send(QStringLiteral("order.current"), {}, token_);
+    const QString requestId = client_->send(ev::actions::OrderCurrent, {}, token_);
     pendingOperations_.insert(requestId, {Operation::CurrentOrder, sessionGeneration_});
 }
 
-void UserApi::loadNearbyStations(const ev::user::GeoPoint &origin)
+QString UserApi::loadNearbyStations(const ev::user::GeoPoint &origin)
 {
     if (!user_.has_value() || token_.isEmpty()) {
         emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
-        return;
+        return {};
     }
     if (!std::isfinite(origin.latitude) || origin.latitude < -90.0 || origin.latitude > 90.0
         || !std::isfinite(origin.longitude) || origin.longitude < -180.0 || origin.longitude > 180.0) {
         emitFailure(QString(), QStringLiteral("INVALID_COORDINATE"), QStringLiteral("坐标无效"));
-        return;
+        return {};
     }
     const QString requestId = client_->send(
-        QStringLiteral("station.list"),
+        ev::actions::StationList,
         QJsonObject{{QStringLiteral("latitude"), origin.latitude},
                     {QStringLiteral("longitude"), origin.longitude}}, token_);
     pendingOperations_.insert(requestId, {Operation::NearbyStations, sessionGeneration_, origin});
+    return requestId;
 }
 
-void UserApi::loadStationDetail(qint64 stationId)
+QString UserApi::loadStationDetail(qint64 stationId)
 {
     if (!user_.has_value() || token_.isEmpty()) {
         emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
-        return;
+        return {};
     }
     if (stationId <= 0 || stationId > kMaxSafeInteger) {
         emitFailure(QString(), QStringLiteral("INVALID_STATION"), QStringLiteral("充电站无效"));
-        return;
+        return {};
     }
     const QString requestId = client_->send(
-        QStringLiteral("station.detail"), QJsonObject{{QStringLiteral("stationId"), stationId}}, token_);
+        ev::actions::StationDetail, QJsonObject{{QStringLiteral("stationId"), stationId}}, token_);
     pendingOperations_.insert(requestId, {Operation::StationDetail, sessionGeneration_, {}, stationId});
+    return requestId;
 }
 
-void UserApi::loadLatestForecast()
+QString UserApi::loadLatestForecast(const QString &stationListRequestId)
 {
     if (!user_.has_value() || token_.isEmpty()) {
         emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
-        return;
+        return {};
     }
-    const QString requestId = client_->send(QStringLiteral("forecast.latest"), {}, token_);
-    pendingOperations_.insert(requestId, {Operation::LatestForecast, sessionGeneration_});
+    const auto snapshot = stationSnapshots_.constFind(stationListRequestId);
+    if (snapshot == stationSnapshots_.cend() || snapshot->size() != 6) {
+        emitFailure(QString(), QStringLiteral("INVALID_RESPONSE"), kInvalidResponseMessage);
+        return {};
+    }
+    const QString requestId = client_->send(ev::actions::ForecastLatest, {}, token_);
+    PendingOperation pending{Operation::LatestForecast, sessionGeneration_};
+    pending.forecastStationCounts = snapshot.value();
+    pendingOperations_.insert(requestId, std::move(pending));
+    return requestId;
 }
 
 std::optional<ev::user::User> UserApi::sessionUser() const
@@ -623,7 +638,14 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
             emitInvalidResponse(response.requestId);
             return;
         }
-        emit nearbyStationsLoaded(result);
+        QHash<qint64, qint64> stationCounts;
+        for (const auto &station : result.stations) {
+            if (station.forecastEnabled) {
+                stationCounts.insert(station.stationId, station.chargerCount);
+            }
+        }
+        stationSnapshots_.insert(response.requestId, std::move(stationCounts));
+        emit nearbyStationsLoaded(response.requestId, result);
         return;
     }
     if (pending.operation == Operation::StationDetail) {
@@ -632,15 +654,15 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
             emitInvalidResponse(response.requestId);
             return;
         }
-        emit stationDetailLoaded(result);
+        emit stationDetailLoaded(response.requestId, result);
         return;
     }
     ev::user::ForecastLatestResult result;
-    if (!parseLatestForecast(data, &result)) {
+    if (!parseLatestForecast(data, pending.forecastStationCounts, &result)) {
         emitInvalidResponse(response.requestId);
         return;
     }
-    emit latestForecastLoaded(result);
+    emit latestForecastLoaded(response.requestId, result);
 }
 
 void UserApi::handleTransportFailure(const QString &requestId, const QString &code, const QString &message)

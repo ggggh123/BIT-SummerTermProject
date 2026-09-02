@@ -5,6 +5,7 @@
 #include "services/UserApi.h"
 #include "ui/LoginPage.h"
 #include "ui/MainWindow.h"
+#include "ui/NearbyPage.h"
 
 #include <QEventLoop>
 #include <QElapsedTimer>
@@ -208,6 +209,10 @@ private slots:
     void nearbyStationsUseOwnedSessionValidateDistanceAndSortTies();
     void stationDetailDecodesCompleteAuthoritativeObjects();
     void latestForecastDecodesCompleteRunAndExactNoPrediction();
+    void latestForecastRejectsRecordsOutsideMatchingStationSnapshot();
+    void task4ResultSignalsCarryIdsAcrossIdenticalArgumentRaces();
+    void nearbyPageRejectsReversedSameOriginAndStationResults();
+    void nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates();
 };
 
 void UserApiTest::loginSendsOnlyPhoneAndDecodesCompleteSession()
@@ -496,7 +501,7 @@ void UserApiTest::nearbyStationsUseOwnedSessionValidateDistanceAndSortTies()
     QTRY_VERIFY(api.sessionUser().has_value());
 
     const ev::user::GeoPoint origin{39.958, 116.317};
-    api.loadNearbyStations(origin);
+    const QString listRequestId = api.loadNearbyStations(origin);
     const auto list = takeRequest(peer);
     QCOMPARE(list.action, QStringLiteral("station.list"));
     QCOMPARE(list.token, QStringLiteral("station-token"));
@@ -505,7 +510,9 @@ void UserApiTest::nearbyStationsUseOwnedSessionValidateDistanceAndSortTies()
     reply(peer, list.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("stations"), QJsonArray{stationObject(9, 2.0), stationObject(3, 1.0), stationObject(2, 1.0)}}});
     QTRY_COMPARE(loaded.size(), 1);
-    const auto result = qvariant_cast<ev::user::StationListResult>(loaded.takeFirst().at(0));
+    const auto resultArgs = loaded.takeFirst();
+    QCOMPARE(resultArgs.at(0).toString(), listRequestId);
+    const auto result = qvariant_cast<ev::user::StationListResult>(resultArgs.at(1));
     QCOMPARE(result.origin.latitude, origin.latitude);
     QCOMPARE(result.stations.size(), 3);
     QCOMPARE(result.stations.at(0).stationId, qint64{2});
@@ -514,7 +521,8 @@ void UserApiTest::nearbyStationsUseOwnedSessionValidateDistanceAndSortTies()
     QVERIFY(result.stations.at(0).distanceKm.has_value());
     QCOMPARE(*result.stations.at(0).distanceKm, 1.0);
 
-    api.loadNearbyStations(origin);
+    const QString malformedRequestId = api.loadNearbyStations(origin);
+    QVERIFY(!malformedRequestId.isEmpty());
     const auto malformed = takeRequest(peer);
     reply(peer, malformed.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("stations"), QJsonArray{stationObject(3, 0.0, false)}}});
@@ -540,7 +548,7 @@ void UserApiTest::stationDetailDecodesCompleteAuthoritativeObjects()
           QJsonObject{{QStringLiteral("token"), QStringLiteral("detail-token")}, {QStringLiteral("user"), userObject()}});
     QTRY_VERIFY(api.sessionUser().has_value());
 
-    api.loadStationDetail(3);
+    const QString detailRequestId = api.loadStationDetail(3);
     const auto detail = takeRequest(peer);
     QCOMPARE(detail.action, QStringLiteral("station.detail"));
     const QJsonObject expectedDetailPayload{{QStringLiteral("stationId"), 3}};
@@ -551,14 +559,17 @@ void UserApiTest::stationDetailDecodesCompleteAuthoritativeObjects()
                                                                chargerObject(32, 3, QStringLiteral("charging")),
                                                                chargerObject(33, 3, QStringLiteral("charging"))}}});
     QTRY_COMPARE(loaded.size(), 1);
-    const auto result = qvariant_cast<ev::user::StationDetailResult>(loaded.takeFirst().at(0));
+    const auto detailArgs = loaded.takeFirst();
+    QCOMPARE(detailArgs.at(0).toString(), detailRequestId);
+    const auto result = qvariant_cast<ev::user::StationDetailResult>(detailArgs.at(1));
     QCOMPARE(result.station.stationId, qint64{3});
     QCOMPARE(result.station.chargerCount, qint64{4});
     QCOMPARE(result.station.idleCount, qint64{2});
     QCOMPARE(result.chargers.size(), 4);
     QCOMPARE(result.chargers.first().chargerId, qint64{30});
 
-    api.loadStationDetail(3);
+    const QString mismatchedRequestId = api.loadStationDetail(3);
+    QVERIFY(!mismatchedRequestId.isEmpty());
     const auto mismatched = takeRequest(peer);
     reply(peer, mismatched.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
@@ -577,6 +588,7 @@ void UserApiTest::latestForecastDecodesCompleteRunAndExactNoPrediction()
     QTcpSocket *peer = server.nextPendingConnection();
     UserApi api(&client);
     QSignalSpy loaded(&api, &UserApi::latestForecastLoaded);
+    QSignalSpy stationSnapshot(&api, &UserApi::nearbyStationsLoaded);
     QSignalSpy failures(&api, &UserApi::requestFailed);
 
     api.loginByPhone(QString::fromLatin1(kMobile));
@@ -585,13 +597,24 @@ void UserApiTest::latestForecastDecodesCompleteRunAndExactNoPrediction()
           QJsonObject{{QStringLiteral("token"), QStringLiteral("forecast-token")}, {QStringLiteral("user"), userObject()}});
     QTRY_VERIFY(api.sessionUser().has_value());
 
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    const QString stationSnapshotRequestId = api.loadNearbyStations(origin);
+    const auto stationsRequest = takeRequest(peer);
+    QJsonArray snapshotStations;
+    for (qint64 stationId = 1; stationId <= 6; ++stationId) {
+        snapshotStations.append(stationObject(stationId, stationId / 10.0));
+    }
+    reply(peer, stationsRequest.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), snapshotStations}});
+    QTRY_COMPARE(stationSnapshot.size(), 1);
+
     QJsonArray records;
     for (qint64 stationId = 1; stationId <= 6; ++stationId) {
         for (int horizonH = 1; horizonH <= 24; ++horizonH) {
             records.append(forecastRecordObject(stationId, horizonH));
         }
     }
-    api.loadLatestForecast();
+    const QString latestRequestId = api.loadLatestForecast(stationSnapshotRequestId);
     const auto latest = takeRequest(peer);
     QCOMPARE(latest.action, QStringLiteral("forecast.latest"));
     QCOMPARE(latest.token, QStringLiteral("forecast-token"));
@@ -599,29 +622,423 @@ void UserApiTest::latestForecastDecodesCompleteRunAndExactNoPrediction()
     reply(peer, latest.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("forecastRun"), forecastRunObject(true)}, {QStringLiteral("records"), records}});
     QTRY_COMPARE(loaded.size(), 1);
-    auto result = qvariant_cast<ev::user::ForecastLatestResult>(loaded.takeFirst().at(0));
+    auto forecastArgs = loaded.takeFirst();
+    QCOMPARE(forecastArgs.at(0).toString(), latestRequestId);
+    auto result = qvariant_cast<ev::user::ForecastLatestResult>(forecastArgs.at(1));
     QVERIFY(result.forecastRun.has_value());
     QVERIFY(result.forecastRun->stale);
     QCOMPARE(result.forecastRun->payloadHash, QString(64, QLatin1Char('a')));
     QCOMPARE(result.records.size(), 144);
     QCOMPARE(result.records.first().horizonH, 1);
 
-    api.loadLatestForecast();
+    const QString emptyRequestId = api.loadLatestForecast(stationSnapshotRequestId);
     const auto empty = takeRequest(peer);
     reply(peer, empty.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("forecastRun"), QJsonValue(QJsonValue::Null)}, {QStringLiteral("records"), QJsonArray{}}});
     QTRY_COMPARE(loaded.size(), 1);
-    result = qvariant_cast<ev::user::ForecastLatestResult>(loaded.takeFirst().at(0));
+    forecastArgs = loaded.takeFirst();
+    QCOMPARE(forecastArgs.at(0).toString(), emptyRequestId);
+    result = qvariant_cast<ev::user::ForecastLatestResult>(forecastArgs.at(1));
     QVERIFY(!result.forecastRun.has_value());
     QVERIFY(result.records.isEmpty());
 
-    api.loadLatestForecast();
+    const QString contradictoryRequestId = api.loadLatestForecast(stationSnapshotRequestId);
+    QVERIFY(!contradictoryRequestId.isEmpty());
     const auto contradictory = takeRequest(peer);
     reply(peer, contradictory.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("forecastRun"), QJsonValue(QJsonValue::Null)},
                       {QStringLiteral("records"), QJsonArray{forecastRecordObject(1, 1)}}});
     QTRY_COMPARE(failures.size(), 1);
     QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code, QStringLiteral("INVALID_RESPONSE"));
+}
+
+void UserApiTest::latestForecastRejectsRecordsOutsideMatchingStationSnapshot()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    UserApi api(&client);
+    QSignalSpy stationsLoaded(&api, &UserApi::nearbyStationsLoaded);
+    QSignalSpy forecastsLoaded(&api, &UserApi::latestForecastLoaded);
+    QSignalSpy failures(&api, &UserApi::requestFailed);
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("snapshot-token")},
+                      {QStringLiteral("user"), userObject()}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    const QString stationSnapshotRequestId = api.loadNearbyStations(origin);
+    const auto stationList = takeRequest(peer);
+    QJsonArray stations;
+    for (qint64 stationId = 11; stationId <= 16; ++stationId) {
+        stations.append(stationObject(stationId, stationId / 10.0));
+    }
+    stations.append(stationObject(99, 9.9, true, false));
+    reply(peer, stationList.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), stations}});
+    QTRY_COMPARE(stationsLoaded.size(), 1);
+
+    QJsonArray wrongIds;
+    for (qint64 stationId = 1; stationId <= 6; ++stationId) {
+        for (int horizonH = 1; horizonH <= 24; ++horizonH) {
+            wrongIds.append(forecastRecordObject(stationId, horizonH));
+        }
+    }
+    const QString wrongIdsOperationId = api.loadLatestForecast(stationSnapshotRequestId);
+    QVERIFY(!wrongIdsOperationId.isEmpty());
+    const auto wrongIdRequest = takeRequest(peer);
+    reply(peer, wrongIdRequest.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), forecastRunObject()},
+                      {QStringLiteral("records"), wrongIds}});
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code,
+             QStringLiteral("INVALID_RESPONSE"));
+    QCOMPARE(forecastsLoaded.size(), 0);
+
+    QJsonArray wrongCounts;
+    for (qint64 stationId = 11; stationId <= 16; ++stationId) {
+        for (int horizonH = 1; horizonH <= 24; ++horizonH) {
+            QJsonObject record = forecastRecordObject(stationId, horizonH);
+            if (stationId == 11 && horizonH == 1) {
+                record.insert(QStringLiteral("predictedBusyCount"), 3);
+                record.insert(QStringLiteral("predictedIdleCount"), 2);
+                record.insert(QStringLiteral("congestionLevel"), QStringLiteral("medium"));
+            }
+            wrongCounts.append(record);
+        }
+    }
+    const QString wrongCountsOperationId = api.loadLatestForecast(stationSnapshotRequestId);
+    QVERIFY(!wrongCountsOperationId.isEmpty());
+    const auto wrongCountRequest = takeRequest(peer);
+    reply(peer, wrongCountRequest.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), forecastRunObject()},
+                      {QStringLiteral("records"), wrongCounts}});
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code,
+             QStringLiteral("INVALID_RESPONSE"));
+    QCOMPARE(forecastsLoaded.size(), 0);
+
+    const QString shortSnapshotRequestId = api.loadNearbyStations(origin);
+    const auto shortList = takeRequest(peer);
+    QJsonArray shortStations;
+    for (qint64 stationId = 21; stationId <= 25; ++stationId) {
+        shortStations.append(stationObject(stationId, stationId / 10.0));
+    }
+    reply(peer, shortList.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), shortStations}});
+    QTRY_COMPARE(stationsLoaded.size(), 2);
+    const QString rejectedForecastId = api.loadLatestForecast(shortSnapshotRequestId);
+    QVERIFY(rejectedForecastId.isEmpty());
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code,
+             QStringLiteral("INVALID_RESPONSE"));
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+}
+
+void UserApiTest::task4ResultSignalsCarryIdsAcrossIdenticalArgumentRaces()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    UserApi api(&client);
+    QSignalSpy stationResults(&api, &UserApi::nearbyStationsLoaded);
+    QSignalSpy detailResults(&api, &UserApi::stationDetailLoaded);
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("race-token")},
+                      {QStringLiteral("user"), userObject()}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    const QString firstStationsOperationId = api.loadNearbyStations(origin);
+    QVERIFY(!firstStationsOperationId.isEmpty());
+    const auto firstStations = takeRequest(peer);
+    const QString secondStationsOperationId = api.loadNearbyStations(origin);
+    QVERIFY(!secondStationsOperationId.isEmpty());
+    const auto secondStations = takeRequest(peer);
+    reply(peer, secondStations.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), QJsonArray{stationObject(2, 0.2)}}});
+    reply(peer, firstStations.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), QJsonArray{stationObject(1, 0.1)}}});
+    QTRY_COMPARE(stationResults.size(), 2);
+    QCOMPARE(stationResults.at(0).size(), 2);
+    QCOMPARE(stationResults.at(0).at(0).toString(), secondStations.requestId);
+    QCOMPARE(qvariant_cast<ev::user::StationListResult>(stationResults.at(0).at(1))
+                 .stations.first().stationId,
+             qint64{2});
+    QCOMPARE(stationResults.at(1).at(0).toString(), firstStations.requestId);
+
+    const QString firstDetailOperationId = api.loadStationDetail(3);
+    QVERIFY(!firstDetailOperationId.isEmpty());
+    const auto firstDetail = takeRequest(peer);
+    const QString secondDetailOperationId = api.loadStationDetail(3);
+    QVERIFY(!secondDetailOperationId.isEmpty());
+    const auto secondDetail = takeRequest(peer);
+    const QJsonArray newerChargers{
+        chargerObject(30, 3), chargerObject(31, 3),
+        chargerObject(32, 3, QStringLiteral("charging")),
+        chargerObject(33, 3, QStringLiteral("charging"))};
+    const QJsonArray olderChargers{
+        chargerObject(40, 3), chargerObject(41, 3),
+        chargerObject(42, 3, QStringLiteral("charging")),
+        chargerObject(43, 3, QStringLiteral("charging"))};
+    reply(peer, secondDetail.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                      {QStringLiteral("chargers"), newerChargers}});
+    reply(peer, firstDetail.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                      {QStringLiteral("chargers"), olderChargers}});
+    QTRY_COMPARE(detailResults.size(), 2);
+    QCOMPARE(detailResults.at(0).size(), 2);
+    QCOMPARE(detailResults.at(0).at(0).toString(), secondDetail.requestId);
+    QCOMPARE(qvariant_cast<ev::user::StationDetailResult>(detailResults.at(0).at(1))
+                 .chargers.first().chargerId,
+             qint64{30});
+    QCOMPARE(detailResults.at(1).at(0).toString(), firstDetail.requestId);
+}
+
+void UserApiTest::nearbyPageRejectsReversedSameOriginAndStationResults()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    UserApi api(&client);
+    NearbyPage page(&api, nullptr);
+    QSignalSpy selections(&page, &NearbyPage::chargerSelected);
+    QSignalSpy forecastResults(&api, &UserApi::latestForecastLoaded);
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("page-race-token")},
+                      {QStringLiteral("user"), userObject()}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    page.origin_ = origin;
+    page.originGeneration_ = 1;
+    page.requestNearbyStations(origin);
+    const auto firstStations = takeRequest(peer);
+    page.requestNearbyStations(origin);
+    const auto secondStations = takeRequest(peer);
+    QJsonArray canonicalStations;
+    canonicalStations.append(stationObject(2, 0.2));
+    for (qint64 stationId = 11; stationId <= 15; ++stationId) {
+        canonicalStations.append(stationObject(stationId, stationId / 10.0));
+    }
+    reply(peer, secondStations.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), canonicalStations}});
+    QTRY_VERIFY(page.findChild<QLabel *>(QStringLiteral("stationName_2")) != nullptr);
+    const auto firstForecast = takeRequest(peer);
+    QCOMPARE(firstForecast.action, QStringLiteral("forecast.latest"));
+    QJsonArray currentForecastRecords;
+    const QList<qint64> forecastStationIds{2, 11, 12, 13, 14, 15};
+    for (qint64 stationId : forecastStationIds) {
+        for (int horizonH = 1; horizonH <= 24; ++horizonH) {
+            currentForecastRecords.append(forecastRecordObject(stationId, horizonH));
+        }
+    }
+    page.requestNearbyStations(origin);
+    const auto thirdStations = takeRequest(peer);
+    reply(peer, firstForecast.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), forecastRunObject()},
+                      {QStringLiteral("records"), currentForecastRecords}});
+    QTRY_COMPARE(forecastResults.size(), 1);
+    QTRY_VERIFY_WITH_TIMEOUT(([&page] {
+        const auto *label = page.findChild<QLabel *>(QStringLiteral("forecastLabel_2"));
+        return label != nullptr && label->text() == QStringLiteral("暂无预测");
+    })(), 5'000);
+    reply(peer, thirdStations.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), canonicalStations}});
+    const auto secondForecast = takeRequest(peer);
+    QCOMPARE(secondForecast.action, QStringLiteral("forecast.latest"));
+    page.requestNearbyStations(origin);
+    const auto fourthStations = takeRequest(peer);
+    reply(peer, fourthStations.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), canonicalStations}});
+    const auto thirdForecast = takeRequest(peer);
+    QCOMPARE(thirdForecast.action, QStringLiteral("forecast.latest"));
+    reply(peer, thirdForecast.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), forecastRunObject()},
+                      {QStringLiteral("records"), currentForecastRecords}});
+    QTRY_VERIFY_WITH_TIMEOUT(([&page] {
+        const auto *label = page.findChild<QLabel *>(QStringLiteral("forecastLabel_2"));
+        return label != nullptr && label->text().contains(QStringLiteral("1小时预测"));
+    })(), 5'000);
+    reply(peer, secondForecast.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), QJsonValue(QJsonValue::Null)},
+                      {QStringLiteral("records"), QJsonArray{}}});
+    QTRY_VERIFY_WITH_TIMEOUT(([&page] {
+        const auto *label = page.findChild<QLabel *>(QStringLiteral("forecastLabel_2"));
+        return label != nullptr && label->text().contains(QStringLiteral("1小时预测"));
+    })(), 5'000);
+    reply(peer, firstStations.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), QJsonArray{stationObject(1, 0.1)}}});
+    QTRY_VERIFY(page.findChild<QLabel *>(QStringLiteral("stationName_2")) != nullptr);
+    QVERIFY(page.findChild<QLabel *>(QStringLiteral("stationName_1")) == nullptr);
+
+    ev::user::Station detailStation;
+    detailStation.stationId = 3;
+    detailStation.name = QStringLiteral("详情站");
+    detailStation.address = QStringLiteral("北京市海淀区详情路");
+    detailStation.latitude = 39.96;
+    detailStation.longitude = 116.32;
+    detailStation.priceFenPerKwh = 135;
+    detailStation.forecastEnabled = false;
+    detailStation.chargerCount = 4;
+    detailStation.idleCount = 2;
+    page.requestStationDetail(detailStation);
+    const auto firstDetail = takeRequest(peer);
+    page.requestStationDetail(detailStation);
+    const auto secondDetail = takeRequest(peer);
+    reply(peer, secondDetail.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                      {QStringLiteral("chargers"), QJsonArray{
+                           chargerObject(30, 3), chargerObject(31, 3),
+                           chargerObject(32, 3, QStringLiteral("charging")),
+                           chargerObject(33, 3, QStringLiteral("charging"))}}});
+    QTRY_VERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_30")) != nullptr);
+    reply(peer, firstDetail.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                      {QStringLiteral("chargers"), QJsonArray{
+                           chargerObject(40, 3), chargerObject(41, 3),
+                           chargerObject(42, 3, QStringLiteral("charging")),
+                           chargerObject(43, 3, QStringLiteral("charging"))}}});
+    QTRY_VERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_30")) != nullptr);
+    QVERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_40")) == nullptr);
+
+    const ev::user::GeoPoint newerOrigin{40.0, 116.4};
+    page.origin_ = newerOrigin;
+    ++page.originGeneration_;
+    page.findChild<QPushButton *>(QStringLiteral("chargerButton_30"))->click();
+    QCOMPARE(selections.size(), 1);
+    const auto selection = qvariant_cast<ev::user::StationSelection>(selections.takeFirst().at(0));
+    QCOMPARE(selection.origin.latitude, origin.latitude);
+    QCOMPARE(selection.origin.longitude, origin.longitude);
+}
+
+void UserApiTest::nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    UserApi api(&client);
+    NearbyPage page(&api, nullptr);
+
+    auto *connectionBanner = page.findChild<QLabel *>(QStringLiteral("nearbyConnectionBanner"));
+    QVERIFY(connectionBanner != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(&page, "setConnectionAvailable", Q_ARG(bool, false)));
+    QCOMPARE(connectionBanner->text(), QStringLiteral("服务器连接不可用"));
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("state-token")},
+                      {QStringLiteral("user"), userObject()}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    page.origin_ = origin;
+    page.originGeneration_ = 1;
+    ev::user::Station retained;
+    retained.stationId = 7;
+    retained.name = QStringLiteral("保留站");
+    retained.address = QStringLiteral("北京市海淀区保留路");
+    retained.latitude = 39.97;
+    retained.longitude = 116.33;
+    retained.priceFenPerKwh = 120;
+    retained.chargerCount = 0;
+    retained.idleCount = 0;
+    retained.distanceKm = 0.7;
+    page.displayStations({origin, {retained}});
+    auto *search = page.findChild<QPushButton *>(QStringLiteral("nearbySearchButton"));
+    auto *status = page.findChild<QLabel *>(QStringLiteral("nearbyStatus"));
+    QVERIFY(search != nullptr);
+    QVERIFY(status != nullptr);
+
+    page.requestNearbyStations(origin);
+    const auto stale = takeRequest(peer);
+    page.requestNearbyStations(origin);
+    const auto active = takeRequest(peer);
+    QVERIFY(!search->isEnabled());
+    reply(peer, stale.requestId, false, QStringLiteral("TRANSPORT_ERROR"),
+          QStringLiteral("connection lost before response"), QJsonObject{});
+    QTRY_VERIFY(!search->isEnabled());
+    QVERIFY(!status->text().contains(QStringLiteral("connection"), Qt::CaseInsensitive));
+    reply(peer, active.requestId, false, QStringLiteral("TIMEOUT"),
+          QStringLiteral("response timed out"), QJsonObject{});
+    QTRY_VERIFY(search->isEnabled());
+    QCOMPARE(status->text(), QStringLiteral("服务器响应超时，请重试"));
+    QVERIFY(page.findChild<QLabel *>(QStringLiteral("stationName_7")) != nullptr);
+
+    page.requestNearbyStations(origin);
+    const auto empty = takeRequest(peer);
+    reply(peer, empty.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), QJsonArray{}}});
+    QTRY_VERIFY(search->isEnabled());
+    QCOMPARE(status->text(), QStringLiteral("附近暂无充电站"));
+
+    ev::user::Station detailStation = retained;
+    detailStation.stationId = 8;
+    detailStation.name = QStringLiteral("详情保留站");
+    detailStation.chargerCount = 4;
+    detailStation.idleCount = 2;
+    page.displayStations({origin, {detailStation}});
+    ev::user::StationDetailResult retainedDetail;
+    retainedDetail.station = detailStation;
+    retainedDetail.chargers = {
+        {80, 8, QStringLiteral("T-80"), QStringLiteral("fast"), 60.0,
+         QStringLiteral("idle"), 12, 3600, QString::fromLatin1(kTimestamp)},
+        {81, 8, QStringLiteral("T-81"), QStringLiteral("fast"), 60.0,
+         QStringLiteral("idle"), 12, 3600, QString::fromLatin1(kTimestamp)},
+        {82, 8, QStringLiteral("T-82"), QStringLiteral("fast"), 60.0,
+         QStringLiteral("charging"), 12, 3600, QString::fromLatin1(kTimestamp)},
+        {83, 8, QStringLiteral("T-83"), QStringLiteral("fast"), 60.0,
+         QStringLiteral("charging"), 12, 3600, QString::fromLatin1(kTimestamp)},
+    };
+    page.displayStationDetail(retainedDetail);
+    auto *detailStatus = page.findChild<QLabel *>(QStringLiteral("detailStatus"));
+    auto *stationButton = page.findChild<QPushButton *>(QStringLiteral("stationButton_8"));
+    auto *retainedCharger = page.findChild<QPushButton *>(QStringLiteral("chargerButton_80"));
+    QVERIFY(detailStatus != nullptr);
+    QVERIFY(stationButton != nullptr);
+    QVERIFY(retainedCharger != nullptr);
+
+    page.requestStationDetail(detailStation);
+    const auto staleDetailRequest = takeRequest(peer);
+    page.requestStationDetail(detailStation);
+    const auto activeDetailRequest = takeRequest(peer);
+    QVERIFY(!stationButton->isEnabled());
+    QVERIFY(!retainedCharger->isEnabled());
+    QCOMPARE(detailStatus->text(), QStringLiteral("正在加载充电桩…"));
+    reply(peer, staleDetailRequest.requestId, false, QStringLiteral("TIMEOUT"),
+          QStringLiteral("stale raw timeout"), QJsonObject{});
+    QTRY_VERIFY(!stationButton->isEnabled());
+    QVERIFY(!retainedCharger->isEnabled());
+    QCOMPARE(detailStatus->text(), QStringLiteral("正在加载充电桩…"));
+    reply(peer, activeDetailRequest.requestId, false, QStringLiteral("TRANSPORT_ERROR"),
+          QStringLiteral("raw socket failure"), QJsonObject{});
+    QTRY_VERIFY(stationButton->isEnabled());
+    QVERIFY(retainedCharger->isEnabled());
+    QCOMPARE(detailStatus->text(), QStringLiteral("服务器连接中断，请重试"));
+    QVERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_80")) != nullptr);
 }
 
 QTEST_MAIN(UserApiTest)

@@ -49,6 +49,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     connect(loginPage_, &LoginPage::loginRequested, userApi_, &UserApi::loginByPhone);
     connect(userApi_, &UserApi::loginPendingChanged, loginPage_, &LoginPage::setPending);
     connect(userApi_, &UserApi::connectionChanged, loginPage_, &LoginPage::setConnectionAvailable);
+    connect(userApi_, &UserApi::connectionChanged, nearbyPage_, &NearbyPage::setConnectionAvailable);
     connect(userApi_, &UserApi::requestFailed, this, [this](const ev::user::ApiError &error) {
         loginPage_->setError(error.message);
     });

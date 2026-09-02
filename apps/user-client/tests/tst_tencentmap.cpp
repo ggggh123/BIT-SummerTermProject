@@ -1,21 +1,31 @@
+#include "app/WebEngineRuntime.h"
 #include "domain/Models.h"
 #include "net/TencentMapClient.h"
 #include "services/UserApi.h"
 #include "ui/NavigationPage.h"
 #include "ui/NearbyPage.h"
 
+#include <QApplication>
+#include <QComboBox>
+#include <QEventLoop>
 #include <QFile>
 #include <QJsonDocument>
 #include <QLabel>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QPointer>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QTimer>
 #include <QUrlQuery>
+#include <QVariant>
+#include <QWebEnginePage>
+#include <QWebEngineSettings>
+#include <QWebEngineView>
 #include <QtTest>
 
 #include <cstring>
+#include <memory>
 #include <utility>
 
 namespace {
@@ -135,6 +145,31 @@ ev::user::Charger charger(qint64 chargerId, qint64 stationId)
     return value;
 }
 
+QVariant runJavaScriptAndWait(QWebEnginePage *page, const QString &script, bool *completed)
+{
+    struct Result final {
+        QVariant value;
+        bool completed = false;
+    };
+    const auto result = std::make_shared<Result>();
+    QEventLoop loop;
+    const QPointer<QEventLoop> guardedLoop(&loop);
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    page->runJavaScript(script, [result, guardedLoop](const QVariant &value) {
+        result->value = value;
+        result->completed = true;
+        if (guardedLoop != nullptr) {
+            guardedLoop->quit();
+        }
+    });
+    timeout.start(5'000);
+    loop.exec();
+    *completed = result->completed;
+    return result->value;
+}
+
 } // namespace
 
 class TencentMapClientTest final : public QObject {
@@ -145,6 +180,7 @@ private slots:
     void asyncGeocoderHandlesSuccessTencentNetworkMalformedAndTimeoutOnce();
     void navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState();
     void routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess();
+    void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
     void resourceAndPageContractsRemainFixedAndDisplayPredictionStates();
     void nearbySelectionCarriesOriginStationAndChargerWithoutMutation();
 };
@@ -292,6 +328,88 @@ void TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAnd
     QCOMPARE(tracker.retryRoute()->stationName, QStringLiteral("第二站"));
 }
 
+void TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOffline()
+{
+    const QString bootstrap = QStringLiteral(R"JS(
+        window.__offlineNavigation = {configureCalls: 0, routes: [], failNext: false};
+        window.configureMap = function(config) {
+            window.__offlineNavigation.configureCalls += 1;
+            return Promise.resolve();
+        };
+        window.renderRoute = function(route) {
+            window.__offlineNavigation.routes.push(route);
+            if (window.__offlineNavigation.failNext) {
+                window.__offlineNavigation.failNext = false;
+                return Promise.reject(new Error('offline planned failure'));
+            }
+            return Promise.resolve();
+        };
+    )JS");
+    NavigationPage page(QStringLiteral("offline map test value +&="), bootstrap, nullptr);
+    page.resize(640, 480);
+    page.show();
+
+    auto *view = page.findChild<QWebEngineView *>(QStringLiteral("navigationWebView"));
+    auto *status = page.findChild<QLabel *>(QStringLiteral("navigationStatus"));
+    auto *cache = page.findChild<QLabel *>(QStringLiteral("lastRouteLabel"));
+    auto *retry = page.findChild<QPushButton *>(QStringLiteral("navigationRetryButton"));
+    QVERIFY(view != nullptr);
+    QVERIFY(status != nullptr);
+    QVERIFY(cache != nullptr);
+    QVERIFY(retry != nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(view->url(), NavigationPage::pageUrl(), 5'000);
+    QVERIFY(view->settings()->testAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls));
+    QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("地图已加载"), 5'000);
+
+    bool completed = false;
+    QCOMPARE(runJavaScriptAndWait(
+                 view->page(), QStringLiteral("window.__offlineNavigation.configureCalls"), &completed)
+                 .toInt(),
+             1);
+    QVERIFY(completed);
+
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    ev::user::Station destination = station(9, false, 1.0);
+    destination.name = QStringLiteral("离线测试站");
+    destination.latitude = 39.968;
+    destination.longitude = 116.327;
+    page.showRoute(origin, destination, QStringLiteral("driving"));
+    QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("路线规划成功"), 5'000);
+    QVERIFY(page.lastSuccessfulRoute().has_value());
+    QCOMPARE(page.lastSuccessfulRoute()->mode, QStringLiteral("driving"));
+    QVERIFY(cache->text().contains(QStringLiteral("上次成功路线")));
+
+    runJavaScriptAndWait(
+        view->page(), QStringLiteral("window.__offlineNavigation.failNext = true"), &completed);
+    QVERIFY(completed);
+    page.showRoute(origin, destination, QStringLiteral("walking"));
+    QTRY_COMPARE_WITH_TIMEOUT(status->text(),
+                              QStringLiteral("路线规划失败，请检查网络后重试"), 5'000);
+    QVERIFY(retry->isVisible());
+    QVERIFY(page.lastSuccessfulRoute().has_value());
+    QCOMPARE(page.lastSuccessfulRoute()->mode, QStringLiteral("driving"));
+    QVERIFY(cache->text().contains(QStringLiteral("上次成功路线")));
+
+    retry->click();
+    QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("路线规划成功"), 5'000);
+    QVERIFY(page.lastSuccessfulRoute().has_value());
+    QCOMPARE(page.lastSuccessfulRoute()->mode, QStringLiteral("walking"));
+    QCOMPARE(runJavaScriptAndWait(
+                 view->page(), QStringLiteral("window.__offlineNavigation.configureCalls"), &completed)
+                 .toInt(),
+             1);
+    QVERIFY(completed);
+    QCOMPARE(runJavaScriptAndWait(
+                 view->page(), QStringLiteral("window.__offlineNavigation.routes.length"), &completed)
+                 .toInt(),
+             3);
+    QVERIFY(completed);
+    const QString completionState = runJavaScriptAndWait(
+        view->page(), QStringLiteral("JSON.stringify(window.__qtOperations)"), &completed).toString();
+    QVERIFY(completed);
+    QVERIFY(!completionState.contains(QStringLiteral("offline map test value")));
+}
+
 void TencentMapClientTest::resourceAndPageContractsRemainFixedAndDisplayPredictionStates()
 {
     QCOMPARE(NavigationPage::pageUrl(), QUrl(QStringLiteral("qrc:/map/navigation.html")));
@@ -354,5 +472,11 @@ void TencentMapClientTest::nearbySelectionCarriesOriginStationAndChargerWithoutM
     QCOMPARE(qvariant_cast<ev::user::Station>(navigation.first().at(1)).stationId, qint64{2});
 }
 
-QTEST_MAIN(TencentMapClientTest)
+int main(int argc, char *argv[])
+{
+    WebEngineRuntime::applySystemCompatibility();
+    QApplication application(argc, argv);
+    TencentMapClientTest test;
+    return QTest::qExec(&test, argc, argv);
+}
 #include "tst_tencentmap.moc"

@@ -83,8 +83,15 @@ std::optional<LastRoute> RouteOperationTracker::retryRoute() const
 }
 
 NavigationPage::NavigationPage(QString mapKey, QWidget *parent)
+    : NavigationPage(std::move(mapKey), {}, parent)
+{
+}
+
+NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScript,
+                               QWidget *parent)
     : QWidget(parent)
     , mapKey_(std::move(mapKey))
+    , documentReadyBootstrapScript_(std::move(documentReadyBootstrapScript))
     , view_(new QWebEngineView(this))
     , statusLabel_(new QLabel(QStringLiteral("正在加载导航页面…"), this))
     , cacheLabel_(new QLabel(QStringLiteral("暂无成功路线"), this))
@@ -97,6 +104,7 @@ NavigationPage::NavigationPage(QString mapKey, QWidget *parent)
     cacheLabel_->setWordWrap(true);
     retryButton_->setObjectName(QStringLiteral("navigationRetryButton"));
     retryButton_->hide();
+    view_->setObjectName(QStringLiteral("navigationWebView"));
     modeBox_->setObjectName(QStringLiteral("routeModeBox"));
     modeBox_->addItem(QStringLiteral("驾车"), QStringLiteral("driving"));
     modeBox_->addItem(QStringLiteral("步行"), QStringLiteral("walking"));
@@ -124,7 +132,13 @@ NavigationPage::NavigationPage(QString mapKey, QWidget *parent)
             showFailure(QStringLiteral("导航页面加载失败，请重试"));
             return;
         }
-        configureForCurrentLoad();
+        if (documentReadyBootstrapScript_.isEmpty()) {
+            configureForCurrentLoad();
+            return;
+        }
+        view_->page()->runJavaScript(documentReadyBootstrapScript_, [this](const QVariant &) {
+            configureForCurrentLoad();
+        });
     });
     connect(retryButton_, &QPushButton::clicked, this, [this] {
         if (!configured_) {

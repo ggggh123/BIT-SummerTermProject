@@ -56,8 +56,11 @@ signals:
     void backRequested();
 
 private:
+    friend class TencentMapClientTest;
+
     enum class OperationKind { Configure, Route };
 
+    NavigationPage(QString mapKey, QString documentReadyBootstrapScript, QWidget *parent);
     void configureForCurrentLoad();
     void executePendingRoute();
     void pollOperation(const QString &operationId, OperationKind kind, int attemptsRemaining = 300);
@@ -66,6 +69,7 @@ private:
     void updateLastSuccessLabel();
 
     QString mapKey_;
+    QString documentReadyBootstrapScript_;
     class QWebEngineView *view_;
     class QLabel *statusLabel_;
     class QLabel *cacheLabel_;
