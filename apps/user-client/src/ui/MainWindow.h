@@ -19,7 +19,9 @@ private:
     class NavigationPage *navigationPage_ = nullptr;
     QWidget *authenticatedNavigation_;
     class QPushButton *nearbyNavigationButton_;
+    class QPushButton *currentOrderNavigationButton_;
     class QPushButton *profileNavigationButton_;
     QWidget *chargePage_;
     QString mapKey_;
+    bool hasActiveOrder_ = false;
 };

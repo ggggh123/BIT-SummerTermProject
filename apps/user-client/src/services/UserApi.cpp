@@ -468,7 +468,28 @@ bool parseCurrentOrder(const QJsonValue &value, ev::user::CurrentOrderResult *re
 
 bool validFailure(const ev::protocol::ResponseEnvelope &response)
 {
-    return !response.code.isEmpty() && response.data.isObject() && response.data.toObject().isEmpty();
+    static const QSet<QString> failureCodes{
+        QStringLiteral("INVALID_REQUEST"),
+        QStringLiteral("UNSUPPORTED_VERSION"),
+        QStringLiteral("AUTH_REQUIRED"),
+        QStringLiteral("FORBIDDEN"),
+        QStringLiteral("INVALID_PHONE"),
+        QStringLiteral("INVALID_CREDENTIALS"),
+        QStringLiteral("ENTITY_NOT_FOUND"),
+        QStringLiteral("USER_FROZEN"),
+        QStringLiteral("ACTIVE_ORDER_EXISTS"),
+        QStringLiteral("CHARGER_NOT_AVAILABLE"),
+        QStringLiteral("ORDER_STATE_CONFLICT"),
+        QStringLiteral("INSUFFICIENT_BALANCE"),
+        QStringLiteral("MAP_API_ERROR"),
+        QStringLiteral("FORECAST_INVALID"),
+        QStringLiteral("FORECAST_STALE"),
+        QStringLiteral("SERVER_BUSY"),
+        QStringLiteral("DB_BUSY"),
+        QStringLiteral("INTERNAL_ERROR"),
+    };
+    return failureCodes.contains(response.code) && response.data.isObject()
+        && response.data.toObject().isEmpty();
 }
 
 } // namespace

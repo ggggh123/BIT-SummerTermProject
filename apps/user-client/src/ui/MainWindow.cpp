@@ -43,9 +43,13 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     navigationLayout->setContentsMargins(0, 0, 0, 0);
     nearbyNavigationButton_ = new QPushButton(QStringLiteral("附近充电站"), authenticatedNavigation_);
     nearbyNavigationButton_->setObjectName(QStringLiteral("nearbyNavigationButton"));
+    currentOrderNavigationButton_ = new QPushButton(QStringLiteral("当前订单"), authenticatedNavigation_);
+    currentOrderNavigationButton_->setObjectName(QStringLiteral("currentOrderNavigationButton"));
+    currentOrderNavigationButton_->setVisible(false);
     profileNavigationButton_ = new QPushButton(QStringLiteral("我的账户"), authenticatedNavigation_);
     profileNavigationButton_->setObjectName(QStringLiteral("profileNavigationButton"));
     navigationLayout->addWidget(nearbyNavigationButton_);
+    navigationLayout->addWidget(currentOrderNavigationButton_);
     navigationLayout->addWidget(profileNavigationButton_);
     navigationLayout->addStretch();
     authenticatedNavigation_->setVisible(false);
@@ -78,11 +82,21 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         userApi_->loadCurrentOrder();
     });
     connect(userApi_, &UserApi::currentOrderLoaded, this, [this](const ev::user::CurrentOrderResult &result) {
+        hasActiveOrder_ = result.order.has_value();
+        nearbyNavigationButton_->setEnabled(!hasActiveOrder_);
+        currentOrderNavigationButton_->setVisible(hasActiveOrder_);
         authenticatedNavigation_->setVisible(true);
-        pages_->setCurrentWidget(result.order.has_value() ? chargePage_ : nearbyPage_);
+        pages_->setCurrentWidget(hasActiveOrder_ ? chargePage_ : nearbyPage_);
     });
     connect(nearbyNavigationButton_, &QPushButton::clicked, this, [this] {
-        pages_->setCurrentWidget(nearbyPage_);
+        if (!hasActiveOrder_) {
+            pages_->setCurrentWidget(nearbyPage_);
+        }
+    });
+    connect(currentOrderNavigationButton_, &QPushButton::clicked, this, [this] {
+        if (hasActiveOrder_) {
+            pages_->setCurrentWidget(chargePage_);
+        }
     });
     connect(profileNavigationButton_, &QPushButton::clicked, this, [this] {
         pages_->setCurrentWidget(profilePage_);

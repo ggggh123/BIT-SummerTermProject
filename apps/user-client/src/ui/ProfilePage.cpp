@@ -9,11 +9,30 @@
 #include <QLineEdit>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSet>
 #include <QVBoxLayout>
 
 namespace {
 
 const QString kUncertainMessage = QStringLiteral("结果未确认，请重新连接后刷新账户信息");
+
+bool isKnownInlineFailureCode(const QString &code)
+{
+    static const QSet<QString> knownCodes{
+        QStringLiteral("INVALID_REQUEST"), QStringLiteral("UNSUPPORTED_VERSION"),
+        QStringLiteral("AUTH_REQUIRED"), QStringLiteral("FORBIDDEN"),
+        QStringLiteral("INVALID_PHONE"), QStringLiteral("INVALID_CREDENTIALS"),
+        QStringLiteral("ENTITY_NOT_FOUND"), QStringLiteral("USER_FROZEN"),
+        QStringLiteral("ACTIVE_ORDER_EXISTS"), QStringLiteral("CHARGER_NOT_AVAILABLE"),
+        QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("INSUFFICIENT_BALANCE"),
+        QStringLiteral("MAP_API_ERROR"), QStringLiteral("FORECAST_INVALID"),
+        QStringLiteral("FORECAST_STALE"), QStringLiteral("SERVER_BUSY"),
+        QStringLiteral("DB_BUSY"), QStringLiteral("INTERNAL_ERROR"),
+        QStringLiteral("INVALID_NICKNAME"), QStringLiteral("INVALID_AMOUNT"),
+        QStringLiteral("PROFILE_BUSY"), QStringLiteral("RECONCILIATION_REQUIRED"),
+    };
+    return knownCodes.contains(code);
+}
 
 } // namespace
 
@@ -198,8 +217,10 @@ void ProfilePage::showProfileFailure(const ev::user::ApiError &failure)
         status_->setText(QStringLiteral("账户操作失败"));
         retryButton_->setVisible(failure.code == QStringLiteral("NOT_CONNECTED")
                                  || failure.code == QStringLiteral("TRANSPORT_ERROR")
+                                 || failure.code == QStringLiteral("PROTOCOL_ERROR")
                                  || failure.code == QStringLiteral("TIMEOUT")
-                                 || failure.code == QStringLiteral("INVALID_RESPONSE"));
+                                 || failure.code == QStringLiteral("INVALID_RESPONSE")
+                                 || !isKnownInlineFailureCode(failure.code));
     }
     updateControls();
 }
@@ -215,8 +236,14 @@ QString ProfilePage::localizedError(const ev::user::ApiError &failure)
     if (failure.code == QStringLiteral("TIMEOUT")) {
         return QStringLiteral("服务器响应超时，请重试");
     }
+    if (failure.code == QStringLiteral("PROTOCOL_ERROR")) {
+        return QStringLiteral("通信协议异常，请重试");
+    }
     if (failure.code == QStringLiteral("INVALID_RESPONSE")) {
         return QStringLiteral("服务器返回的账户信息无效");
     }
-    return failure.message.isEmpty() ? QStringLiteral("账户操作失败") : failure.message;
+    if (!isKnownInlineFailureCode(failure.code)) {
+        return QStringLiteral("账户操作失败，请重试");
+    }
+    return failure.message.isEmpty() ? QStringLiteral("账户操作失败，请重试") : failure.message;
 }

@@ -11,7 +11,7 @@ bool isValidPhone(const QString &phone) {
 std::optional<qint64> parsePositiveFen(const QString &amount) {
     constexpr qint64 maxSafeInteger = 9'007'199'254'740'991LL;
     static const QRegularExpression pattern(
-        QStringLiteral("^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$"));
+        QStringLiteral("\\A(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?\\z"));
     if (!pattern.match(amount).hasMatch()) {
         return std::nullopt;
     }

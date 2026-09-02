@@ -33,6 +33,7 @@ private slots:
     void phoneAndMoney();
     void moneyUsesCheckedSafeIntegerArithmetic();
     void moneyRejectsNonCanonicalOrNonAsciiText();
+    void moneyRejectsTrailingLineBreaks();
     void distanceIsStable();
     void environmentOverridesLocalIni();
     void missingConfigurationIsVisibleInChinese();
@@ -71,6 +72,12 @@ void FormattersTest::moneyRejectsNonCanonicalOrNonAsciiText() {
     QVERIFY(!parsePositiveFen(QStringLiteral("1e2")).has_value());
     QVERIFY(!parsePositiveFen(QStringLiteral("１.００")).has_value());
     QVERIFY(!parsePositiveFen(QStringLiteral("0.001")).has_value());
+}
+
+void FormattersTest::moneyRejectsTrailingLineBreaks() {
+    QVERIFY(!parsePositiveFen(QStringLiteral("12\n")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("12.34\n")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("12\r\n")).has_value());
 }
 
 void FormattersTest::distanceIsStable() {

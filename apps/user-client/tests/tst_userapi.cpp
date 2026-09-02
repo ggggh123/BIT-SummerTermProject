@@ -207,6 +207,8 @@ private slots:
     void nullableOrderTimestampsDecodeAsEmptyStrings();
     void loginPageDisablesWhilePendingAndShowsConnectionFailure();
     void currentOrderGuardRoutesChargingAndNullToStablePages();
+    void activeOrderGuardSurvivesProfileNavigation();
+    void noOrderNavigationKeepsNearbyAvailable();
     void nearbyStationsUseOwnedSessionValidateDistanceAndSortTies();
     void stationDetailDecodesCompleteAuthoritativeObjects();
     void latestForecastDecodesCompleteRunAndExactNoPrediction();
@@ -216,10 +218,12 @@ private slots:
     void nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates();
     void profileActionsUseOwnedSessionAndAuthoritativeResponses();
     void profileValidationAndFailuresPreserveCachedUser();
+    void profileRejectsInvalidFailureCodesAndPreservesLegalCodes();
     void profileCorrelationDropsUnknownResponseIds();
     void uncertainRechargeReconcilesAfterReconnectWithoutReplay();
     void authenticatedProfilePageIsReachableWithStableControls();
     void profilePageKeepsUncertainStateUntilAuthoritativeReconciliation();
+    void profilePageLocalizesProtocolAndUnknownErrors();
 };
 
 void UserApiTest::loginSendsOnlyPhoneAndDecodesCompleteSession()
@@ -487,6 +491,106 @@ void UserApiTest::currentOrderGuardRoutesChargingAndNullToStablePages()
 
     exerciseGuard(orderObject(), QStringLiteral("chargePage"));
     exerciseGuard(QJsonValue(QJsonValue::Null), QStringLiteral("nearbyPage"));
+}
+
+void UserApiTest::activeOrderGuardSurvivesProfileNavigation()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    auto *loginButton = window.findChild<QPushButton *>(QStringLiteral("loginButton"));
+    QVERIFY(phone != nullptr);
+    QVERIFY(loginButton != nullptr);
+    phone->setText(QString::fromLatin1(kMobile));
+    loginButton->click();
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("active-nav-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto current = takeRequest(peer);
+    reply(peer, current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderObject()}});
+
+    auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
+    auto *nearbyNavigation =
+        window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"));
+    auto *profileNavigation =
+        window.findChild<QPushButton *>(QStringLiteral("profileNavigationButton"));
+    auto *currentOrderNavigation =
+        window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"));
+    QVERIFY(pages != nullptr);
+    QVERIFY(nearbyNavigation != nullptr);
+    QVERIFY(profileNavigation != nullptr);
+    QVERIFY(currentOrderNavigation != nullptr);
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("chargePage"));
+    QVERIFY(!nearbyNavigation->isEnabled());
+    QVERIFY(currentOrderNavigation->isVisible());
+    QVERIFY(currentOrderNavigation->isEnabled());
+
+    profileNavigation->click();
+    const auto profileGet = takeRequest(peer);
+    QCOMPARE(profileGet.action, QStringLiteral("user.get"));
+    reply(peer, profileGet.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("user"), userObject()}});
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("profilePage"));
+    nearbyNavigation->click();
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("profilePage"));
+    currentOrderNavigation->click();
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("chargePage"));
+}
+
+void UserApiTest::noOrderNavigationKeepsNearbyAvailable()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    auto *loginButton = window.findChild<QPushButton *>(QStringLiteral("loginButton"));
+    QVERIFY(phone != nullptr);
+    QVERIFY(loginButton != nullptr);
+    phone->setText(QString::fromLatin1(kMobile));
+    loginButton->click();
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("no-order-nav-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto current = takeRequest(peer);
+    reply(peer, current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+
+    auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
+    auto *nearbyNavigation =
+        window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"));
+    auto *profileNavigation =
+        window.findChild<QPushButton *>(QStringLiteral("profileNavigationButton"));
+    auto *currentOrderNavigation =
+        window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"));
+    QVERIFY(pages != nullptr);
+    QVERIFY(nearbyNavigation != nullptr);
+    QVERIFY(profileNavigation != nullptr);
+    QVERIFY(currentOrderNavigation != nullptr);
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+    QVERIFY(nearbyNavigation->isEnabled());
+    QVERIFY(!currentOrderNavigation->isVisible());
+
+    profileNavigation->click();
+    const auto profileGet = takeRequest(peer);
+    reply(peer, profileGet.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("user"), userObject()}});
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("profilePage"));
+    nearbyNavigation->click();
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
 }
 
 void UserApiTest::nearbyStationsUseOwnedSessionValidateDistanceAndSortTies()
@@ -985,14 +1089,14 @@ void UserApiTest::nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates()
     page.requestNearbyStations(origin);
     const auto active = takeRequest(peer);
     QVERIFY(!search->isEnabled());
-    reply(peer, stale.requestId, false, QStringLiteral("TRANSPORT_ERROR"),
-          QStringLiteral("connection lost before response"), QJsonObject{});
+    reply(peer, stale.requestId, false, QStringLiteral("UNKNOWN_STALE_CODE"),
+          QStringLiteral("stale response must stay scoped"), QJsonObject{});
     QTRY_VERIFY(!search->isEnabled());
     QVERIFY(!status->text().contains(QStringLiteral("connection"), Qt::CaseInsensitive));
-    reply(peer, active.requestId, false, QStringLiteral("TIMEOUT"),
-          QStringLiteral("response timed out"), QJsonObject{});
+    reply(peer, active.requestId, false, QStringLiteral("UNKNOWN_ACTIVE_CODE"),
+          QStringLiteral("invalid response code"), QJsonObject{});
     QTRY_VERIFY(search->isEnabled());
-    QCOMPARE(status->text(), QStringLiteral("服务器响应超时，请重试"));
+    QCOMPARE(status->text(), QStringLiteral("服务器响应无效，请重试"));
     QVERIFY(page.findChild<QLabel *>(QStringLiteral("stationName_7")) != nullptr);
 
     page.requestNearbyStations(origin);
@@ -1035,16 +1139,16 @@ void UserApiTest::nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates()
     QVERIFY(!stationButton->isEnabled());
     QVERIFY(!retainedCharger->isEnabled());
     QCOMPARE(detailStatus->text(), QStringLiteral("正在加载充电桩…"));
-    reply(peer, staleDetailRequest.requestId, false, QStringLiteral("TIMEOUT"),
-          QStringLiteral("stale raw timeout"), QJsonObject{});
+    reply(peer, staleDetailRequest.requestId, false, QStringLiteral("UNKNOWN_STALE_CODE"),
+          QStringLiteral("stale invalid response"), QJsonObject{});
     QTRY_VERIFY(!stationButton->isEnabled());
     QVERIFY(!retainedCharger->isEnabled());
     QCOMPARE(detailStatus->text(), QStringLiteral("正在加载充电桩…"));
-    reply(peer, activeDetailRequest.requestId, false, QStringLiteral("TRANSPORT_ERROR"),
-          QStringLiteral("raw socket failure"), QJsonObject{});
+    reply(peer, activeDetailRequest.requestId, false, QStringLiteral("UNKNOWN_ACTIVE_CODE"),
+          QStringLiteral("invalid response code"), QJsonObject{});
     QTRY_VERIFY(stationButton->isEnabled());
     QVERIFY(retainedCharger->isEnabled());
-    QCOMPARE(detailStatus->text(), QStringLiteral("服务器连接中断，请重试"));
+    QCOMPARE(detailStatus->text(), QStringLiteral("服务器响应无效，请重试"));
     QVERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_80")) != nullptr);
 }
 
@@ -1204,6 +1308,79 @@ void UserApiTest::profileValidationAndFailuresPreserveCachedUser()
     QTRY_COMPARE(failures.size(), 1);
     QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().first()).code,
              QStringLiteral("INVALID_RESPONSE"));
+    QCOMPARE(api.sessionUser()->nickname, original.nickname);
+    QCOMPARE(api.sessionUser()->balanceFen, original.balanceFen);
+}
+
+void UserApiTest::profileRejectsInvalidFailureCodesAndPreservesLegalCodes()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+    UserApi api(&client);
+    QSignalSpy failures(&api, &UserApi::profileRequestFailed);
+    QSignalSpy uncertain(&api, &UserApi::profileReconciliationRequired);
+    QSignalSpy reconciled(&api, &UserApi::profileReconciled);
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("failure-code-token")},
+                      {QStringLiteral("user"), userObject()}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+    const ev::user::User original = *api.sessionUser();
+
+    const QString legalFailureId = api.loadProfile();
+    QVERIFY(!legalFailureId.isEmpty());
+    const auto legalFailureRequest = takeRequest(peer);
+    reply(peer, legalFailureRequest.requestId, false, QStringLiteral("AUTH_REQUIRED"),
+          QString(), QJsonObject{});
+    QTRY_COMPARE(failures.size(), 1);
+    auto failure = qvariant_cast<ev::user::ApiError>(failures.takeFirst().first());
+    QCOMPARE(failure.code, QStringLiteral("AUTH_REQUIRED"));
+    QCOMPARE(failure.message, QString());
+    QCOMPARE(uncertain.size(), 0);
+
+    const QString invalidOkId = api.updateNickname(QStringLiteral("不会生效"));
+    QVERIFY(!invalidOkId.isEmpty());
+    const auto invalidOkRequest = takeRequest(peer);
+    reply(peer, invalidOkRequest.requestId, false, QStringLiteral("OK"), QString(),
+          QJsonObject{});
+    QTRY_COMPARE(failures.size(), 1);
+    failure = qvariant_cast<ev::user::ApiError>(failures.takeFirst().first());
+    QCOMPARE(failure.code, QStringLiteral("INVALID_RESPONSE"));
+    QTRY_COMPARE(uncertain.size(), 1);
+    QCOMPARE(api.sessionUser()->nickname, original.nickname);
+    QCOMPARE(api.sessionUser()->balanceFen, original.balanceFen);
+    QCOMPARE(api.sessionUser()->mobile, original.mobile);
+    QCOMPARE(api.sessionUser()->avatarPath, original.avatarPath);
+    QCOMPARE(api.sessionUser()->status, original.status);
+    QCOMPARE(api.sessionUser()->registeredAt, original.registeredAt);
+
+    QVERIFY(api.rechargeWallet(QStringLiteral("1.00")).isEmpty());
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().first()).code,
+             QStringLiteral("RECONCILIATION_REQUIRED"));
+    const QString reconcileId = api.loadProfile();
+    QVERIFY(!reconcileId.isEmpty());
+    const auto reconcileRequest = takeRequest(peer);
+    reply(peer, reconcileRequest.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("user"), userObject()}});
+    QTRY_COMPARE(reconciled.size(), 1);
+
+    const QString unknownFailureId = api.rechargeWallet(QStringLiteral("1.00"));
+    QVERIFY(!unknownFailureId.isEmpty());
+    const auto unknownFailureRequest = takeRequest(peer);
+    reply(peer, unknownFailureRequest.requestId, false, QStringLiteral("NEW_SERVER_CODE"),
+          QStringLiteral("raw english server failure"), QJsonObject{});
+    QTRY_COMPARE(failures.size(), 1);
+    failure = qvariant_cast<ev::user::ApiError>(failures.takeFirst().first());
+    QCOMPARE(failure.code, QStringLiteral("INVALID_RESPONSE"));
+    QTRY_COMPARE(uncertain.size(), 2);
     QCOMPARE(api.sessionUser()->nickname, original.nickname);
     QCOMPARE(api.sessionUser()->balanceFen, original.balanceFen);
 }
@@ -1469,6 +1646,59 @@ void UserApiTest::profilePageKeepsUncertainStateUntilAuthoritativeReconciliation
     QCOMPARE(error->text(), QString());
     QVERIFY(rechargeButton->isEnabled());
     QVERIFY(nicknameButton->isEnabled());
+}
+
+void UserApiTest::profilePageLocalizesProtocolAndUnknownErrors()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    UserApi api(&client);
+    ProfilePage page(&api);
+    page.show();
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("localized-error-token")},
+                      {QStringLiteral("user"), userObject()}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+    page.refresh();
+    const auto initialGet = takeRequest(peer);
+    reply(peer, initialGet.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("user"), userObject()}});
+
+    auto *error = page.findChild<QLabel *>(QStringLiteral("profileError"));
+    auto *retry = page.findChild<QPushButton *>(QStringLiteral("profileRetryButton"));
+    QVERIFY(error != nullptr);
+    QVERIFY(retry != nullptr);
+    QTRY_VERIFY(page.findChild<QPushButton *>(QStringLiteral("rechargeButton"))->isEnabled());
+
+    page.refresh();
+    const auto protocolRequest = takeRequest(peer);
+    QVERIFY(!protocolRequest.requestId.isEmpty());
+    const QByteArray malformedEnvelope = ev::protocol::encodeFrame(QByteArrayLiteral("{}"));
+    QCOMPARE(peer->write(malformedEnvelope), qint64{malformedEnvelope.size()});
+    QVERIFY(peer->flush());
+    QTRY_COMPARE(error->text(), QStringLiteral("通信协议异常，请重试"));
+    QVERIFY(!error->text().contains(QRegularExpression(QStringLiteral("[A-Za-z]"))));
+    QVERIFY(retry->isVisible());
+
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QTcpSocket *reconnectedPeer = server.nextPendingConnection();
+    QVERIFY(reconnectedPeer != nullptr);
+    page.refresh();
+    const auto unknownRequest = takeRequest(reconnectedPeer);
+    QCOMPARE(unknownRequest.action, QStringLiteral("user.get"));
+    reply(reconnectedPeer, unknownRequest.requestId, false,
+          QStringLiteral("NEW_SERVER_CODE"),
+          QStringLiteral("raw english external message"), QJsonObject{});
+    QTRY_COMPARE(error->text(), QStringLiteral("服务器返回的账户信息无效"));
+    QVERIFY(!error->text().contains(QStringLiteral("raw english external message")));
 }
 
 QTEST_MAIN(UserApiTest)
