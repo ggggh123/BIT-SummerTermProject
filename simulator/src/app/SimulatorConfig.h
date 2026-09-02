@@ -3,6 +3,8 @@
 #include <QString>
 #include <QtGlobal>
 
+class QCoreApplication;
+
 namespace ev::simulator {
 
 struct SimulatorConfig
@@ -16,4 +18,8 @@ struct SimulatorConfig
     int maxQueueSamples = 200;
 };
 
+// 从命令行解析 --host/--port/--seed/--interval-ms/--token 等参数。
+SimulatorConfig configFromCommandLine(const QCoreApplication &app);
+
 } // namespace ev::simulator
+
