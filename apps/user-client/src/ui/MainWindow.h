@@ -11,8 +11,11 @@ public:
 private:
     class TcpJsonClient *client_;
     class UserApi *userApi_;
+    class TencentMapClient *mapClient_;
     class LoginPage *loginPage_;
     class QStackedWidget *pages_;
-    QWidget *nearbyPage_;
+    class NearbyPage *nearbyPage_;
+    class NavigationPage *navigationPage_ = nullptr;
     QWidget *chargePage_;
+    QString mapKey_;
 };

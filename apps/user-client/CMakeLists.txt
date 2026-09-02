@@ -9,9 +9,12 @@ add_library(ev_user_client_core STATIC
     src/app/WebEngineRuntime.cpp
     src/domain/Formatters.cpp
     src/net/TcpJsonClient.cpp
+    src/net/TencentMapClient.cpp
     src/services/UserApi.cpp
     src/ui/LoginPage.cpp
     src/ui/MainWindow.cpp
+    src/ui/NavigationPage.cpp
+    src/ui/NearbyPage.cpp
 )
 target_include_directories(ev_user_client_core PUBLIC src)
 target_link_libraries(ev_user_client_core
@@ -24,7 +27,7 @@ target_link_libraries(ev_user_client_core
         ev_protocol
 )
 
-add_executable(ev_user_client src/main.cpp)
+add_executable(ev_user_client src/main.cpp resources/resources.qrc)
 target_link_libraries(ev_user_client PRIVATE ev_user_client_core)
 
 add_executable(tst_user_formatters tests/tst_formatters.cpp)
@@ -44,3 +47,9 @@ add_executable(tst_user_api tests/tst_userapi.cpp)
 target_link_libraries(tst_user_api PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_api COMMAND tst_user_api)
 set_tests_properties(user_api PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_executable(tst_user_tencentmap tests/tst_tencentmap.cpp resources/resources.qrc)
+target_link_libraries(tst_user_tencentmap PRIVATE ev_user_client_core Qt6::Test)
+add_test(NAME user_tencentmap COMMAND tst_user_tencentmap)
+set_tests_properties(user_tencentmap PROPERTIES ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_DISABLE_SANDBOX=1")

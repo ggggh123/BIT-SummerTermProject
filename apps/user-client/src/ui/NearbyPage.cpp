@@ -1,0 +1,250 @@
+#include "ui/NearbyPage.h"
+
+#include "net/TencentMapClient.h"
+#include "services/UserApi.h"
+
+#include <QComboBox>
+#include <QFrame>
+#include <QLabel>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QVBoxLayout>
+
+#include <utility>
+
+namespace {
+
+void clearLayout(QLayout *layout)
+{
+    while (QLayoutItem *item = layout->takeAt(0)) {
+        if (QWidget *widget = item->widget()) {
+            widget->deleteLater();
+        }
+        delete item;
+    }
+}
+
+QString congestionText(const QString &level)
+{
+    if (level == QStringLiteral("high")) {
+        return QStringLiteral("高");
+    }
+    if (level == QStringLiteral("medium")) {
+        return QStringLiteral("中");
+    }
+    return QStringLiteral("低");
+}
+
+} // namespace
+
+NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *parent)
+    : QWidget(parent)
+    , userApi_(userApi)
+    , mapClient_(mapClient)
+    , addressBox_(new QComboBox(this))
+    , searchButton_(new QPushButton(QStringLiteral("查找附近充电站"), this))
+    , statusLabel_(new QLabel(QStringLiteral("请选择预设地点或输入地址"), this))
+{
+    setObjectName(QStringLiteral("nearbyPage"));
+    qRegisterMetaType<ev::user::StationSelection>();
+    qRegisterMetaType<ev::user::Station>();
+    qRegisterMetaType<ev::user::GeoPoint>();
+
+    addressBox_->setObjectName(QStringLiteral("addressBox"));
+    addressBox_->setEditable(true);
+    addressBox_->addItems(presetAddresses());
+    searchButton_->setObjectName(QStringLiteral("nearbySearchButton"));
+    statusLabel_->setObjectName(QStringLiteral("nearbyStatus"));
+    statusLabel_->setWordWrap(true);
+
+    auto *stationContainer = new QWidget(this);
+    stationLayout_ = new QVBoxLayout(stationContainer);
+    stationLayout_->setContentsMargins(0, 0, 0, 0);
+    auto *stationScroll = new QScrollArea(this);
+    stationScroll->setWidgetResizable(true);
+    stationScroll->setWidget(stationContainer);
+    auto *detailContainer = new QWidget(this);
+    detailLayout_ = new QVBoxLayout(detailContainer);
+    detailLayout_->setContentsMargins(0, 0, 0, 0);
+
+    auto *layout = new QVBoxLayout(this);
+    layout->addWidget(new QLabel(QStringLiteral("起点地址"), this));
+    layout->addWidget(addressBox_);
+    layout->addWidget(searchButton_);
+    layout->addWidget(statusLabel_);
+    layout->addWidget(stationScroll, 1);
+    layout->addWidget(detailContainer);
+
+    connect(searchButton_, &QPushButton::clicked, this, &NearbyPage::searchCurrentAddress);
+    if (mapClient_ != nullptr) {
+        connect(mapClient_, &TencentMapClient::geocodeSucceeded, this,
+                [this](const QString &requestId, ev::user::GeoPoint origin) {
+            if (requestId != pendingGeocodeId_) {
+                return;
+            }
+            origin_ = origin;
+            statusLabel_->setText(QStringLiteral("定位成功：%1, %2，正在加载附近站点…")
+                                      .arg(origin.latitude, 0, 'f', 6)
+                                      .arg(origin.longitude, 0, 'f', 6));
+            if (userApi_ != nullptr) {
+                userApi_->loadNearbyStations(origin);
+                userApi_->loadLatestForecast();
+            }
+        });
+        connect(mapClient_, &TencentMapClient::geocodeFailed, this,
+                [this](const ev::user::ApiError &error) {
+            if (error.requestId == pendingGeocodeId_) {
+                showError(error.message);
+            }
+        });
+    }
+    if (userApi_ != nullptr) {
+        connect(userApi_, &UserApi::nearbyStationsLoaded, this,
+                [this](ev::user::StationListResult result) {
+            if (origin_.has_value()
+                && (result.origin.latitude != origin_->latitude
+                    || result.origin.longitude != origin_->longitude)) {
+                return;
+            }
+            displayStations(std::move(result));
+        });
+        connect(userApi_, &UserApi::latestForecastLoaded, this, &NearbyPage::displayForecast);
+        connect(userApi_, &UserApi::stationDetailLoaded, this,
+                [this](ev::user::StationDetailResult result) {
+            if (requestedStationId_.has_value()
+                && result.station.stationId != *requestedStationId_) {
+                return;
+            }
+            displayStationDetail(std::move(result));
+        });
+        connect(userApi_, &UserApi::requestFailed, this, [this](const ev::user::ApiError &error) {
+            showError(error.message);
+        });
+    }
+}
+
+QStringList NearbyPage::presetAddresses()
+{
+    return {
+        QStringLiteral("北京理工大学中关村校区"),
+        QStringLiteral("北京航空航天大学学院路校区"),
+        QStringLiteral("北京市海淀区西二旗"),
+    };
+}
+
+QString NearbyPage::forecastText(const ev::user::Station &station,
+                                 const ev::user::ForecastLatestResult &forecast)
+{
+    if (!station.forecastEnabled || !forecast.forecastRun.has_value()) {
+        return QStringLiteral("暂无预测");
+    }
+    for (const auto &record : forecast.records) {
+        if (record.stationId == station.stationId && record.horizonH == 1) {
+            QString text = QStringLiteral("1小时预测：繁忙 %1 / 空闲 %2，拥堵%3")
+                               .arg(record.predictedBusyCount)
+                               .arg(record.predictedIdleCount)
+                               .arg(congestionText(record.congestionLevel));
+            if (forecast.forecastRun->stale) {
+                text += QStringLiteral("（预测已过期）");
+            }
+            return text;
+        }
+    }
+    return QStringLiteral("暂无预测");
+}
+
+void NearbyPage::displayStations(ev::user::StationListResult result)
+{
+    origin_ = result.origin;
+    stations_ = std::move(result.stations);
+    statusLabel_->setText(QStringLiteral("已加载 %1 个附近充电站").arg(stations_.size()));
+    rebuildStationCards();
+}
+
+void NearbyPage::displayForecast(ev::user::ForecastLatestResult result)
+{
+    forecast_ = std::move(result);
+    rebuildStationCards();
+}
+
+void NearbyPage::displayStationDetail(ev::user::StationDetailResult result)
+{
+    clearLayout(detailLayout_);
+    auto *title = new QLabel(QStringLiteral("%1 · 充电桩").arg(result.station.name), this);
+    title->setObjectName(QStringLiteral("detailTitle"));
+    detailLayout_->addWidget(title);
+    for (const auto &charger : result.chargers) {
+        auto *button = new QPushButton(
+            QStringLiteral("%1 · %2 · %3 kW · %4")
+                .arg(charger.code,
+                     charger.type == QStringLiteral("fast") ? QStringLiteral("快充") : QStringLiteral("慢充"))
+                .arg(charger.powerKw, 0, 'f', 1)
+                .arg(charger.status), this);
+        button->setObjectName(QStringLiteral("chargerButton_%1").arg(charger.chargerId));
+        connect(button, &QPushButton::clicked, this, [this, station = result.station, charger] {
+            if (origin_.has_value()) {
+                emit chargerSelected({*origin_, station, charger});
+            }
+        });
+        detailLayout_->addWidget(button);
+    }
+    auto *navigate = new QPushButton(QStringLiteral("导航到该站"), this);
+    navigate->setObjectName(QStringLiteral("navigateButton"));
+    connect(navigate, &QPushButton::clicked, this, [this, station = result.station] {
+        if (origin_.has_value()) {
+            emit navigationRequested(*origin_, station);
+        }
+    });
+    detailLayout_->addWidget(navigate);
+}
+
+void NearbyPage::searchCurrentAddress()
+{
+    const QString address = addressBox_->currentText().trimmed();
+    if (mapClient_ == nullptr) {
+        showError(QStringLiteral("地图服务不可用"));
+        return;
+    }
+    searchButton_->setEnabled(false);
+    statusLabel_->setText(QStringLiteral("正在定位地址…"));
+    pendingGeocodeId_ = mapClient_->geocode(address);
+    searchButton_->setEnabled(true);
+}
+
+void NearbyPage::rebuildStationCards()
+{
+    clearLayout(stationLayout_);
+    for (const auto &station : stations_) {
+        auto *card = new QFrame(this);
+        card->setFrameShape(QFrame::StyledPanel);
+        auto *layout = new QVBoxLayout(card);
+        auto *name = new QLabel(station.name, card);
+        name->setObjectName(QStringLiteral("stationName_%1").arg(station.stationId));
+        layout->addWidget(name);
+        layout->addWidget(new QLabel(
+            QStringLiteral("%1 元/度 · 共 %2 桩 / 空闲 %3 · %4 km")
+                .arg(station.priceFenPerKwh / 100.0, 0, 'f', 2)
+                .arg(station.chargerCount)
+                .arg(station.idleCount)
+                .arg(station.distanceKm.value_or(0.0), 0, 'f', 2), card));
+        auto *prediction = new QLabel(forecastText(station, forecast_), card);
+        prediction->setObjectName(QStringLiteral("forecastLabel_%1").arg(station.stationId));
+        layout->addWidget(prediction);
+        auto *open = new QPushButton(QStringLiteral("查看充电桩"), card);
+        open->setObjectName(QStringLiteral("stationButton_%1").arg(station.stationId));
+        connect(open, &QPushButton::clicked, this, [this, station] {
+            if (userApi_ != nullptr) {
+                requestedStationId_ = station.stationId;
+                userApi_->loadStationDetail(station.stationId);
+            }
+        });
+        layout->addWidget(open);
+        stationLayout_->addWidget(card);
+    }
+    stationLayout_->addStretch();
+}
+
+void NearbyPage::showError(const QString &message)
+{
+    statusLabel_->setText(message.isEmpty() ? QStringLiteral("请求失败，请重试") : message);
+}

@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QMetaType>
+#include <QVector>
 #include <QtGlobal>
 
 #include <optional>
@@ -19,19 +20,20 @@ struct User final {
 };
 
 struct Station final {
-    qint64 id = 0;
+    qint64 stationId = 0;
     QString name;
     QString address;
     double latitude = 0.0;
     double longitude = 0.0;
     qint64 priceFenPerKwh = 0;
     bool forecastEnabled = false;
-    double distanceKm = 0.0;
-    QString createdAt;
+    qint64 chargerCount = 0;
+    qint64 idleCount = 0;
+    std::optional<double> distanceKm;
 };
 
 struct Charger final {
-    qint64 id = 0;
+    qint64 chargerId = 0;
     qint64 stationId = 0;
     QString code;
     QString type;
@@ -40,6 +42,53 @@ struct Charger final {
     qint64 chargeCount = 0;
     qint64 totalDurationSec = 0;
     QString updatedAt;
+};
+
+struct GeoPoint final {
+    double latitude = 0.0;
+    double longitude = 0.0;
+};
+
+struct StationListResult final {
+    GeoPoint origin;
+    QVector<Station> stations;
+};
+
+struct StationDetailResult final {
+    Station station;
+    QVector<Charger> chargers;
+};
+
+struct ForecastRun final {
+    QString runId;
+    QString generatedAt;
+    QString dataCutoff;
+    QString activatedAt;
+    QString modelVersion;
+    QString payloadHash;
+    bool stale = false;
+};
+
+struct ForecastRecord final {
+    qint64 stationId = 0;
+    QString forecastAt;
+    qint64 horizonH = 0;
+    double predictedLoadKw = 0.0;
+    qint64 predictedBusyCount = 0;
+    qint64 predictedIdleCount = 0;
+    QString congestionLevel;
+    bool isPeak = false;
+};
+
+struct ForecastLatestResult final {
+    std::optional<ForecastRun> forecastRun;
+    QVector<ForecastRecord> records;
+};
+
+struct StationSelection final {
+    GeoPoint origin;
+    Station station;
+    Charger charger;
 };
 
 struct CurrentOrder final {
@@ -88,3 +137,12 @@ Q_DECLARE_METATYPE(ev::user::User)
 Q_DECLARE_METATYPE(ev::user::CurrentOrder)
 Q_DECLARE_METATYPE(ev::user::CurrentOrderResult)
 Q_DECLARE_METATYPE(ev::user::ApiError)
+Q_DECLARE_METATYPE(ev::user::GeoPoint)
+Q_DECLARE_METATYPE(ev::user::Station)
+Q_DECLARE_METATYPE(ev::user::Charger)
+Q_DECLARE_METATYPE(ev::user::StationListResult)
+Q_DECLARE_METATYPE(ev::user::StationDetailResult)
+Q_DECLARE_METATYPE(ev::user::ForecastRun)
+Q_DECLARE_METATYPE(ev::user::ForecastRecord)
+Q_DECLARE_METATYPE(ev::user::ForecastLatestResult)
+Q_DECLARE_METATYPE(ev::user::StationSelection)

@@ -20,11 +20,17 @@ public:
 
     void loginByPhone(const QString &mobile);
     void loadCurrentOrder();
+    void loadNearbyStations(const ev::user::GeoPoint &origin);
+    void loadStationDetail(qint64 stationId);
+    void loadLatestForecast();
     [[nodiscard]] std::optional<ev::user::User> sessionUser() const;
 
 signals:
     void loginSucceeded(ev::user::User user);
     void currentOrderLoaded(ev::user::CurrentOrderResult result);
+    void nearbyStationsLoaded(ev::user::StationListResult result);
+    void stationDetailLoaded(ev::user::StationDetailResult result);
+    void latestForecastLoaded(ev::user::ForecastLatestResult result);
     void requestFailed(ev::user::ApiError error);
     void loginPendingChanged(bool pending);
     void connectionChanged(bool connected);
@@ -33,11 +39,16 @@ private:
     enum class Operation {
         Login,
         CurrentOrder,
+        NearbyStations,
+        StationDetail,
+        LatestForecast,
     };
 
     struct PendingOperation {
         Operation operation;
         quint64 sessionGeneration = 0;
+        std::optional<ev::user::GeoPoint> origin;
+        qint64 stationId = 0;
     };
 
     void handleResponse(const ev::protocol::ResponseEnvelope &response);

@@ -4,10 +4,14 @@
 #include "protocol/Envelope.h"
 
 #include <QDateTime>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSet>
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -18,6 +22,7 @@ const QString kInvalidResponseMessage = QStringLiteral("服务器响应无效");
 const QRegularExpression kMobilePattern(QStringLiteral("^1[3-9][0-9]{9}$"));
 const QRegularExpression kTimestampPattern(
     QStringLiteral("^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.\\d+)?\\+08:00$"));
+const QRegularExpression kPayloadHashPattern(QStringLiteral("^[0-9a-f]{64}$"));
 
 bool hasExactlyKeys(const QJsonObject &object, std::initializer_list<const char *> keys)
 {
@@ -93,6 +98,285 @@ bool nullableTimestamp(const QJsonObject &object, const char *field, QString *re
         return true;
     }
     return validTimestamp(value, result);
+}
+
+bool finiteNumber(const QJsonObject &object, const char *field, double minimum, double maximum,
+                  double *result)
+{
+    const QJsonValue value = object.value(QLatin1String(field));
+    if (!value.isDouble()) {
+        return false;
+    }
+    const double number = value.toDouble();
+    if (!std::isfinite(number) || number < minimum || number > maximum) {
+        return false;
+    }
+    *result = number;
+    return true;
+}
+
+bool parseStation(const QJsonValue &value, bool requireDistance, ev::user::Station *station)
+{
+    if (!value.isObject()) {
+        return false;
+    }
+    const QJsonObject object = value.toObject();
+    const bool exact = requireDistance
+        ? hasExactlyKeys(object, {"stationId", "name", "address", "latitude", "longitude",
+                                  "priceFenPerKwh", "forecastEnabled", "chargerCount", "idleCount",
+                                  "distanceKm"})
+        : hasExactlyKeys(object, {"stationId", "name", "address", "latitude", "longitude",
+                                  "priceFenPerKwh", "forecastEnabled", "chargerCount", "idleCount"});
+    if (!exact) {
+        return false;
+    }
+    ev::user::Station decoded;
+    if (!positiveInteger(object, "stationId", &decoded.stationId)
+        || !nonblankString(object, "name", &decoded.name)
+        || !nonblankString(object, "address", &decoded.address)
+        || !finiteNumber(object, "latitude", -90.0, 90.0, &decoded.latitude)
+        || !finiteNumber(object, "longitude", -180.0, 180.0, &decoded.longitude)
+        || !positiveInteger(object, "priceFenPerKwh", &decoded.priceFenPerKwh)
+        || !nonnegativeInteger(object, "chargerCount", &decoded.chargerCount)
+        || !nonnegativeInteger(object, "idleCount", &decoded.idleCount)
+        || decoded.idleCount > decoded.chargerCount
+        || !object.value(QStringLiteral("forecastEnabled")).isBool()) {
+        return false;
+    }
+    decoded.forecastEnabled = object.value(QStringLiteral("forecastEnabled")).toBool();
+    if (requireDistance) {
+        double distance = 0.0;
+        if (!finiteNumber(object, "distanceKm", 0.0, std::numeric_limits<double>::max(), &distance)) {
+            return false;
+        }
+        decoded.distanceKm = distance;
+    }
+    *station = std::move(decoded);
+    return true;
+}
+
+bool parseCharger(const QJsonValue &value, ev::user::Charger *charger)
+{
+    if (!value.isObject()) {
+        return false;
+    }
+    const QJsonObject object = value.toObject();
+    if (!hasExactlyKeys(object, {"chargerId", "stationId", "code", "type", "powerKw", "status",
+                                 "chargeCount", "totalDurationSec", "updatedAt"})) {
+        return false;
+    }
+    ev::user::Charger decoded;
+    if (!positiveInteger(object, "chargerId", &decoded.chargerId)
+        || !positiveInteger(object, "stationId", &decoded.stationId)
+        || !nonblankString(object, "code", &decoded.code)
+        || !finiteNumber(object, "powerKw", 0.0, std::numeric_limits<double>::max(), &decoded.powerKw)
+        || !nonnegativeInteger(object, "chargeCount", &decoded.chargeCount)
+        || !nonnegativeInteger(object, "totalDurationSec", &decoded.totalDurationSec)
+        || !validTimestamp(object.value(QStringLiteral("updatedAt")), &decoded.updatedAt)) {
+        return false;
+    }
+    const QJsonValue type = object.value(QStringLiteral("type"));
+    const QJsonValue status = object.value(QStringLiteral("status"));
+    static const QSet<QString> statuses{
+        QStringLiteral("idle"), QStringLiteral("reserved"), QStringLiteral("charging"),
+        QStringLiteral("fault"), QStringLiteral("restarting")};
+    if (!type.isString() || (type.toString() != QStringLiteral("fast") && type.toString() != QStringLiteral("slow"))
+        || !status.isString() || !statuses.contains(status.toString())) {
+        return false;
+    }
+    decoded.type = type.toString();
+    decoded.status = status.toString();
+    *charger = std::move(decoded);
+    return true;
+}
+
+bool parseForecastRun(const QJsonValue &value, ev::user::ForecastRun *run)
+{
+    if (!value.isObject()) {
+        return false;
+    }
+    const QJsonObject object = value.toObject();
+    if (!hasExactlyKeys(object, {"runId", "generatedAt", "dataCutoff", "activatedAt", "modelVersion",
+                                 "payloadHash", "stale"})) {
+        return false;
+    }
+    ev::user::ForecastRun decoded;
+    if (!nonblankString(object, "runId", &decoded.runId)
+        || !validTimestamp(object.value(QStringLiteral("generatedAt")), &decoded.generatedAt)
+        || !validTimestamp(object.value(QStringLiteral("dataCutoff")), &decoded.dataCutoff)
+        || !validTimestamp(object.value(QStringLiteral("activatedAt")), &decoded.activatedAt)
+        || !nonblankString(object, "modelVersion", &decoded.modelVersion)
+        || !object.value(QStringLiteral("payloadHash")).isString()
+        || !kPayloadHashPattern.match(object.value(QStringLiteral("payloadHash")).toString()).hasMatch()
+        || !object.value(QStringLiteral("stale")).isBool()) {
+        return false;
+    }
+    if (QDateTime::fromString(decoded.dataCutoff, Qt::ISODate)
+        > QDateTime::fromString(decoded.generatedAt, Qt::ISODate)) {
+        return false;
+    }
+    decoded.payloadHash = object.value(QStringLiteral("payloadHash")).toString();
+    decoded.stale = object.value(QStringLiteral("stale")).toBool();
+    *run = std::move(decoded);
+    return true;
+}
+
+bool parseForecastRecord(const QJsonValue &value, ev::user::ForecastRecord *record)
+{
+    if (!value.isObject()) {
+        return false;
+    }
+    const QJsonObject object = value.toObject();
+    if (!hasExactlyKeys(object, {"stationId", "forecastAt", "horizonH", "predictedLoadKw",
+                                 "predictedBusyCount", "predictedIdleCount", "congestionLevel", "isPeak"})) {
+        return false;
+    }
+    ev::user::ForecastRecord decoded;
+    if (!positiveInteger(object, "stationId", &decoded.stationId)
+        || !validTimestamp(object.value(QStringLiteral("forecastAt")), &decoded.forecastAt)
+        || !positiveInteger(object, "horizonH", &decoded.horizonH) || decoded.horizonH > 24
+        || !finiteNumber(object, "predictedLoadKw", 0.0, std::numeric_limits<double>::max(), &decoded.predictedLoadKw)
+        || !nonnegativeInteger(object, "predictedBusyCount", &decoded.predictedBusyCount)
+        || !nonnegativeInteger(object, "predictedIdleCount", &decoded.predictedIdleCount)
+        || !object.value(QStringLiteral("congestionLevel")).isString()
+        || !object.value(QStringLiteral("isPeak")).isBool()) {
+        return false;
+    }
+    decoded.congestionLevel = object.value(QStringLiteral("congestionLevel")).toString();
+    const qint64 chargerCount = decoded.predictedBusyCount + decoded.predictedIdleCount;
+    if (chargerCount <= 0) {
+        return false;
+    }
+    const long double busyRatio = static_cast<long double>(decoded.predictedBusyCount)
+        / static_cast<long double>(chargerCount);
+    const QString expectedCongestion = busyRatio < 0.5L
+        ? QStringLiteral("low")
+        : (busyRatio < 0.8L ? QStringLiteral("medium") : QStringLiteral("high"));
+    if (decoded.congestionLevel != expectedCongestion) {
+        return false;
+    }
+    decoded.isPeak = object.value(QStringLiteral("isPeak")).toBool();
+    *record = std::move(decoded);
+    return true;
+}
+
+bool parseNearbyStations(const QJsonObject &data, const ev::user::GeoPoint &origin,
+                         ev::user::StationListResult *result)
+{
+    if (!hasExactlyKeys(data, {"stations"}) || !data.value(QStringLiteral("stations")).isArray()) {
+        return false;
+    }
+    ev::user::StationListResult decoded;
+    decoded.origin = origin;
+    QSet<qint64> stationIds;
+    for (const QJsonValue &value : data.value(QStringLiteral("stations")).toArray()) {
+        ev::user::Station station;
+        if (!parseStation(value, true, &station) || stationIds.contains(station.stationId)) {
+            return false;
+        }
+        stationIds.insert(station.stationId);
+        decoded.stations.append(std::move(station));
+    }
+    std::sort(decoded.stations.begin(), decoded.stations.end(), [](const auto &left, const auto &right) {
+        if (*left.distanceKm != *right.distanceKm) {
+            return *left.distanceKm < *right.distanceKm;
+        }
+        return left.stationId < right.stationId;
+    });
+    *result = std::move(decoded);
+    return true;
+}
+
+bool parseStationDetail(const QJsonObject &data, qint64 requestedStationId,
+                        ev::user::StationDetailResult *result)
+{
+    if (!hasExactlyKeys(data, {"station", "chargers"})
+        || !data.value(QStringLiteral("chargers")).isArray()) {
+        return false;
+    }
+    ev::user::StationDetailResult decoded;
+    if (!parseStation(data.value(QStringLiteral("station")), false, &decoded.station)
+        || decoded.station.stationId != requestedStationId) {
+        return false;
+    }
+    QSet<qint64> chargerIds;
+    QSet<QString> chargerCodes;
+    qint64 idleCount = 0;
+    for (const QJsonValue &value : data.value(QStringLiteral("chargers")).toArray()) {
+        ev::user::Charger charger;
+        if (!parseCharger(value, &charger) || charger.stationId != decoded.station.stationId
+            || chargerIds.contains(charger.chargerId) || chargerCodes.contains(charger.code)) {
+            return false;
+        }
+        chargerIds.insert(charger.chargerId);
+        chargerCodes.insert(charger.code);
+        if (charger.status == QStringLiteral("idle")) {
+            ++idleCount;
+        }
+        decoded.chargers.append(std::move(charger));
+    }
+    if (decoded.chargers.size() != decoded.station.chargerCount
+        || idleCount != decoded.station.idleCount) {
+        return false;
+    }
+    *result = std::move(decoded);
+    return true;
+}
+
+bool parseLatestForecast(const QJsonObject &data, ev::user::ForecastLatestResult *result)
+{
+    if (!hasExactlyKeys(data, {"forecastRun", "records"})
+        || !data.value(QStringLiteral("records")).isArray()) {
+        return false;
+    }
+    const QJsonValue runValue = data.value(QStringLiteral("forecastRun"));
+    const QJsonArray records = data.value(QStringLiteral("records")).toArray();
+    ev::user::ForecastLatestResult decoded;
+    if (runValue.isNull()) {
+        if (!records.isEmpty()) {
+            return false;
+        }
+        *result = std::move(decoded);
+        return true;
+    }
+    ev::user::ForecastRun run;
+    if (!parseForecastRun(runValue, &run) || records.size() != 144) {
+        return false;
+    }
+    qint64 previousStationId = 0;
+    qint64 previousHorizon = 0;
+    QSet<QString> unique;
+    QHash<qint64, int> stationCounts;
+    const QDateTime cutoff = QDateTime::fromString(run.dataCutoff, Qt::ISODate);
+    for (const QJsonValue &value : records) {
+        ev::user::ForecastRecord record;
+        if (!parseForecastRecord(value, &record)) {
+            return false;
+        }
+        const QString key = QStringLiteral("%1:%2").arg(record.stationId).arg(record.horizonH);
+        if (unique.contains(key)
+            || (record.stationId < previousStationId)
+            || (record.stationId == previousStationId && record.horizonH <= previousHorizon)
+            || QDateTime::fromString(record.forecastAt, Qt::ISODate) != cutoff.addSecs(record.horizonH * 3600)) {
+            return false;
+        }
+        unique.insert(key);
+        previousStationId = record.stationId;
+        previousHorizon = record.horizonH;
+        ++stationCounts[record.stationId];
+        decoded.records.append(std::move(record));
+    }
+    if (stationCounts.size() != 6) {
+        return false;
+    }
+    for (auto it = stationCounts.cbegin(); it != stationCounts.cend(); ++it) {
+        if (it.value() != 24) {
+            return false;
+        }
+    }
+    decoded.forecastRun = std::move(run);
+    *result = std::move(decoded);
+    return true;
 }
 
 bool parseUser(const QJsonValue &value, ev::user::User *user)
@@ -192,6 +476,12 @@ UserApi::UserApi(TcpJsonClient *client, QObject *parent)
     qRegisterMetaType<ev::user::CurrentOrder>();
     qRegisterMetaType<ev::user::CurrentOrderResult>();
     qRegisterMetaType<ev::user::ApiError>();
+    qRegisterMetaType<ev::user::GeoPoint>();
+    qRegisterMetaType<ev::user::Station>();
+    qRegisterMetaType<ev::user::Charger>();
+    qRegisterMetaType<ev::user::StationListResult>();
+    qRegisterMetaType<ev::user::StationDetailResult>();
+    qRegisterMetaType<ev::user::ForecastLatestResult>();
     connect(client_, &TcpJsonClient::responseReceived, this, &UserApi::handleResponse);
     connect(client_, &TcpJsonClient::transportFailed, this, &UserApi::handleTransportFailure);
     connect(client_, &TcpJsonClient::connectionChanged, this, &UserApi::connectionChanged);
@@ -221,6 +511,49 @@ void UserApi::loadCurrentOrder()
     }
     const QString requestId = client_->send(QStringLiteral("order.current"), {}, token_);
     pendingOperations_.insert(requestId, {Operation::CurrentOrder, sessionGeneration_});
+}
+
+void UserApi::loadNearbyStations(const ev::user::GeoPoint &origin)
+{
+    if (!user_.has_value() || token_.isEmpty()) {
+        emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
+        return;
+    }
+    if (!std::isfinite(origin.latitude) || origin.latitude < -90.0 || origin.latitude > 90.0
+        || !std::isfinite(origin.longitude) || origin.longitude < -180.0 || origin.longitude > 180.0) {
+        emitFailure(QString(), QStringLiteral("INVALID_COORDINATE"), QStringLiteral("坐标无效"));
+        return;
+    }
+    const QString requestId = client_->send(
+        QStringLiteral("station.list"),
+        QJsonObject{{QStringLiteral("latitude"), origin.latitude},
+                    {QStringLiteral("longitude"), origin.longitude}}, token_);
+    pendingOperations_.insert(requestId, {Operation::NearbyStations, sessionGeneration_, origin});
+}
+
+void UserApi::loadStationDetail(qint64 stationId)
+{
+    if (!user_.has_value() || token_.isEmpty()) {
+        emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
+        return;
+    }
+    if (stationId <= 0 || stationId > kMaxSafeInteger) {
+        emitFailure(QString(), QStringLiteral("INVALID_STATION"), QStringLiteral("充电站无效"));
+        return;
+    }
+    const QString requestId = client_->send(
+        QStringLiteral("station.detail"), QJsonObject{{QStringLiteral("stationId"), stationId}}, token_);
+    pendingOperations_.insert(requestId, {Operation::StationDetail, sessionGeneration_, {}, stationId});
+}
+
+void UserApi::loadLatestForecast()
+{
+    if (!user_.has_value() || token_.isEmpty()) {
+        emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
+        return;
+    }
+    const QString requestId = client_->send(QStringLiteral("forecast.latest"), {}, token_);
+    pendingOperations_.insert(requestId, {Operation::LatestForecast, sessionGeneration_});
 }
 
 std::optional<ev::user::User> UserApi::sessionUser() const
@@ -271,16 +604,43 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
         emit loginSucceeded(user);
         return;
     }
-    if (!hasExactlyKeys(data, {"order"})) {
+    if (pending.operation == Operation::CurrentOrder) {
+        if (!hasExactlyKeys(data, {"order"})) {
+            emitInvalidResponse(response.requestId);
+            return;
+        }
+        ev::user::CurrentOrderResult result;
+        if (!parseCurrentOrder(data.value(QStringLiteral("order")), &result)) {
+            emitInvalidResponse(response.requestId);
+            return;
+        }
+        emit currentOrderLoaded(result);
+        return;
+    }
+    if (pending.operation == Operation::NearbyStations) {
+        ev::user::StationListResult result;
+        if (!pending.origin.has_value() || !parseNearbyStations(data, *pending.origin, &result)) {
+            emitInvalidResponse(response.requestId);
+            return;
+        }
+        emit nearbyStationsLoaded(result);
+        return;
+    }
+    if (pending.operation == Operation::StationDetail) {
+        ev::user::StationDetailResult result;
+        if (!parseStationDetail(data, pending.stationId, &result)) {
+            emitInvalidResponse(response.requestId);
+            return;
+        }
+        emit stationDetailLoaded(result);
+        return;
+    }
+    ev::user::ForecastLatestResult result;
+    if (!parseLatestForecast(data, &result)) {
         emitInvalidResponse(response.requestId);
         return;
     }
-    ev::user::CurrentOrderResult result;
-    if (!parseCurrentOrder(data.value(QStringLiteral("order")), &result)) {
-        emitInvalidResponse(response.requestId);
-        return;
-    }
-    emit currentOrderLoaded(result);
+    emit latestForecastLoaded(result);
 }
 
 void UserApi::handleTransportFailure(const QString &requestId, const QString &code, const QString &message)

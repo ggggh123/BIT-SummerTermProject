@@ -1,8 +1,11 @@
 #include "ui/MainWindow.h"
 
 #include "net/TcpJsonClient.h"
+#include "net/TencentMapClient.h"
 #include "services/UserApi.h"
 #include "ui/LoginPage.h"
+#include "ui/NavigationPage.h"
+#include "ui/NearbyPage.h"
 
 #include <QLabel>
 #include <QStackedWidget>
@@ -12,7 +15,10 @@
 MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     : QMainWindow(parent)
     , client_(new TcpJsonClient(this))
-    , userApi_(new UserApi(client_, this)) {
+    , userApi_(new UserApi(client_, this))
+    , mapClient_(new TencentMapClient(config.tencentMapKey, nullptr,
+                                      TencentMapClient::productionEndpoint(), 5'000, this))
+    , mapKey_(config.tencentMapKey) {
     setWindowTitle(QStringLiteral("电动汽车充电"));
 
     auto *centralWidget = new QWidget(this);
@@ -31,8 +37,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     pages_ = new QStackedWidget(centralWidget);
     pages_->setObjectName(QStringLiteral("mainPages"));
     loginPage_ = new LoginPage(pages_);
-    nearbyPage_ = new QLabel(QStringLiteral("附近充电站"), pages_);
-    nearbyPage_->setObjectName(QStringLiteral("nearbyPage"));
+    nearbyPage_ = new NearbyPage(userApi_, mapClient_, pages_);
     chargePage_ = new QLabel(QStringLiteral("当前充电订单"), pages_);
     chargePage_->setObjectName(QStringLiteral("chargePage"));
     pages_->addWidget(loginPage_);
@@ -52,6 +57,18 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     });
     connect(userApi_, &UserApi::currentOrderLoaded, this, [this](const ev::user::CurrentOrderResult &result) {
         pages_->setCurrentWidget(result.order.has_value() ? chargePage_ : nearbyPage_);
+    });
+    connect(nearbyPage_, &NearbyPage::navigationRequested, this,
+            [this](ev::user::GeoPoint origin, ev::user::Station station) {
+        if (navigationPage_ == nullptr) {
+            navigationPage_ = new NavigationPage(mapKey_, pages_);
+            pages_->addWidget(navigationPage_);
+            connect(navigationPage_, &NavigationPage::backRequested, this, [this] {
+                pages_->setCurrentWidget(nearbyPage_);
+            });
+        }
+        navigationPage_->showRoute(origin, station);
+        pages_->setCurrentWidget(navigationPage_);
     });
 
     if (!config.serverHost.isEmpty() && config.serverPort != 0) {
