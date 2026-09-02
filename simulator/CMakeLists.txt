@@ -27,7 +27,10 @@ add_executable(tst_simulator_client tests/tst_simulatorclient.cpp)
 target_link_libraries(tst_simulator_client PRIVATE simulator_core Qt6::Test)
 add_test(NAME simulator_client COMMAND tst_simulator_client)
 
-add_executable(tst_simulator_window tests/tst_simulatorwindow.cpp)
+add_executable(tst_simulator_window
+    tests/tst_simulatorwindow.cpp
+    src/ui/SimulatorWindow.cpp
+)
 target_link_libraries(tst_simulator_window PRIVATE simulator_core Qt6::Widgets Qt6::Test)
 add_test(NAME simulator_window COMMAND tst_simulator_window)
 set_tests_properties(simulator_window PROPERTIES
