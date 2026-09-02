@@ -8,6 +8,7 @@ add_library(ev_user_client_core STATIC
     src/app/UserAppConfig.cpp
     src/app/WebEngineRuntime.cpp
     src/domain/Formatters.cpp
+    src/net/TcpJsonClient.cpp
     src/ui/MainWindow.cpp
 )
 target_include_directories(ev_user_client_core PUBLIC src)
@@ -32,3 +33,7 @@ set_tests_properties(user_formatters PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=off
 add_executable(tst_user_webengine_runtime tests/tst_webengine_runtime.cpp)
 target_link_libraries(tst_user_webengine_runtime PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_webengine_runtime COMMAND tst_user_webengine_runtime)
+
+add_executable(tst_user_tcpjsonclient tests/tst_tcpjsonclient.cpp)
+target_link_libraries(tst_user_tcpjsonclient PRIVATE ev_user_client_core Qt6::Test)
+add_test(NAME user_tcpjsonclient COMMAND tst_user_tcpjsonclient)
