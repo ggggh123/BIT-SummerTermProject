@@ -12,6 +12,8 @@ public:
     explicit MainWindow(UserAppConfig config, QWidget *parent = nullptr);
 
 private:
+    void updateAuthenticatedNavigation();
+
     class TcpJsonClient *client_;
     class UserApi *userApi_;
     class TencentMapClient *mapClient_;
@@ -27,6 +29,7 @@ private:
     class ChargePage *chargePage_;
     QString mapKey_;
     bool hasActiveOrder_ = false;
+    bool chargeMutationPending_ = false;
     std::optional<ev::user::StationSelection> rememberedSelection_;
     std::optional<ev::user::RequestContext> guardContext_;
 };

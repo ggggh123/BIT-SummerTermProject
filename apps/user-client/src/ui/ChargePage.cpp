@@ -95,6 +95,11 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
             && pageActive_) {
             leavePage();
         }
+        if (sessionGeneration_ != 0 && sessionGeneration_ != sessionGeneration
+            && pendingMutation_.has_value()) {
+            pendingMutation_.reset();
+            emit mutationPendingChanged(false);
+        }
         sessionGeneration_ = sessionGeneration;
     });
     connect(api_, &UserApi::currentOrderLoaded, this, &ChargePage::handleCurrentOrder);
@@ -116,6 +121,7 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
             return;
         }
         pendingFactsRequestId_.clear();
+        factsPending_ = false;
         std::optional<ev::user::Charger> matched;
         for (const auto &charger : result.chargers) {
             if (charger.chargerId == pendingFactsChargerId_) {
@@ -132,6 +138,16 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
         }
         if (!matched.has_value()) {
             error_->setText(QStringLiteral("服务器返回的充电桩信息不匹配"));
+            factsFailed_ = true;
+            factsGateRequired_ = true;
+            reconciliationRequired_ = true;
+        } else {
+            factsFailed_ = false;
+            if (factsGateRequired_) {
+                reconciliationRequired_ = false;
+            }
+            factsGateRequired_ = false;
+            error_->clear();
         }
         render();
     });
@@ -143,13 +159,12 @@ void ChargePage::beginPage(quint64 selectionGeneration)
 {
     ++pageGeneration_;
     selectionGeneration_ = selectionGeneration;
-    readEpoch_ = api_->invalidateChargeReads();
+    invalidateSafeReads();
     pageActive_ = true;
     reconciliationRequired_ = false;
+    factsFailed_ = false;
+    factsGateRequired_ = false;
     reconciledNoOrder_ = false;
-    pendingMutation_.reset();
-    pendingRead_.reset();
-    pendingFactsRequestId_.clear();
     pollTimer_->stop();
     error_->clear();
 }
@@ -205,11 +220,28 @@ void ChargePage::leavePage()
     }
     pageActive_ = false;
     ++pageGeneration_;
-    readEpoch_ = api_->invalidateChargeReads();
+    invalidateSafeReads();
     pollTimer_->stop();
-    pendingMutation_.reset();
-    pendingRead_.reset();
-    pendingFactsRequestId_.clear();
+    render();
+}
+
+void ChargePage::invalidateSelection(quint64 selectionGeneration)
+{
+    if (!selection_.has_value()
+        || selection_->selectionGeneration >= selectionGeneration) {
+        return;
+    }
+    selection_.reset();
+    if (!order_.has_value()) {
+        selectionGeneration_ = selectionGeneration;
+        associatedCharger_.reset();
+        invalidateSafeReads();
+        reconciledNoOrder_ = true;
+        reconciliationRequired_ = false;
+        factsFailed_ = false;
+    } else {
+        selectionGeneration_ = 0;
+    }
     render();
 }
 
@@ -219,7 +251,13 @@ void ChargePage::setConnectionAvailable(bool available)
     connected_ = available;
     if (!connected_) {
         pollTimer_->stop();
-    } else if (reconnected && reconciliationRequired_ && pageActive_) {
+        if (pageActive_) {
+            invalidateSafeReads();
+            reconciliationRequired_ = true;
+            factsFailed_ = false;
+            error_->setText(QStringLiteral("服务器连接不可用，请连接后刷新订单"));
+        }
+    } else if (reconnected && pageActive_) {
         requestReconciliation();
     }
     render();
@@ -235,28 +273,27 @@ void ChargePage::render()
     stopButton_->setEnabled(false);
     settleButton_->setEnabled(false);
     backButton_->setEnabled(false);
-    retryButton_->setVisible(reconciliationRequired_ || !connected_);
-    retryButton_->setEnabled(connected_ && pageActive_ && !pendingRead_.has_value());
+    retryButton_->setVisible(reconciliationRequired_ || factsFailed_ || !connected_);
+    retryButton_->setEnabled(connected_ && pageActive_ && !pendingRead_.has_value()
+                             && !factsPending_ && !pendingMutation_.has_value());
 
     if (!pageActive_) {
         status_->setText(QStringLiteral("充电页面已离开"));
         return;
     }
     const bool mutableNow = connected_ && !pendingMutation_.has_value()
-        && !reconciliationRequired_;
+        && !reconciliationRequired_ && !factsFailed_
+        && !(factsPending_ && factsGateRequired_);
     if (!order_.has_value()) {
-        if (reconciledNoOrder_) {
-            status_->setText(QStringLiteral("当前无未完成订单"));
-            backButton_->setEnabled(true);
-            updatePolling();
-            return;
-        }
         status_->setText(QStringLiteral("尚未预约"));
         if (selection_.has_value()) {
             status_->setText(QStringLiteral("已选择 %1 · %2")
                                  .arg(selection_->station.name, selection_->charger.code));
             reserveButton_->setEnabled(
                 mutableNow && selection_->charger.status == QStringLiteral("idle"));
+        } else if (reconciledNoOrder_) {
+            status_->setText(QStringLiteral("当前无未完成订单"));
+            backButton_->setEnabled(true);
         }
         updatePolling();
         return;
@@ -328,6 +365,8 @@ void ChargePage::requestReconciliation()
         return;
     }
     pollTimer_->stop();
+    reconciliationRequired_ = true;
+    factsFailed_ = false;
     pendingRead_ = api_->loadCurrentOrder(
         pageGeneration_, selectionGeneration_, ev::user::ChargeOperation::Reconcile);
     if (pendingRead_->requestId.isEmpty()) {
@@ -336,7 +375,7 @@ void ChargePage::requestReconciliation()
     render();
 }
 
-void ChargePage::requestFacts()
+void ChargePage::requestFacts(bool gateActions)
 {
     if (!pageActive_ || (!order_.has_value() && !selection_.has_value())) {
         return;
@@ -345,11 +384,24 @@ void ChargePage::requestFacts()
         ? order_->stationId : selection_->station.stationId;
     const qint64 chargerId = order_.has_value()
         ? order_->chargerId : selection_->charger.chargerId;
+    if (!pendingFactsRequestId_.isEmpty()) {
+        api_->cancelSafeRead(pendingFactsRequestId_);
+    }
+    factsPending_ = true;
+    factsFailed_ = false;
+    factsGateRequired_ = gateActions;
     pendingFactsPageGeneration_ = pageGeneration_;
     pendingFactsReadEpoch_ = readEpoch_;
     pendingFactsStationId_ = stationId;
     pendingFactsChargerId_ = chargerId;
     pendingFactsRequestId_ = api_->loadStationDetail(stationId);
+    if (pendingFactsRequestId_.isEmpty()) {
+        factsPending_ = false;
+        factsFailed_ = true;
+        factsGateRequired_ = true;
+        reconciliationRequired_ = true;
+        error_->setText(QStringLiteral("充电站信息加载失败，请刷新订单"));
+    }
     const bool originMatches = selection_.has_value()
         && ((!order_.has_value())
             || matchingSelection(*selection_, *order_));
@@ -357,6 +409,19 @@ void ChargePage::requestFacts()
         emit nearbyRefreshRequested(selection_->origin, stationId,
                                     selection_->selectionGeneration);
     }
+    render();
+}
+
+void ChargePage::invalidateSafeReads()
+{
+    readEpoch_ = api_->invalidateChargeReads();
+    pendingRead_.reset();
+    if (!pendingFactsRequestId_.isEmpty()) {
+        api_->cancelSafeRead(pendingFactsRequestId_);
+    }
+    pendingFactsRequestId_.clear();
+    factsPending_ = false;
+    factsGateRequired_ = false;
 }
 
 void ChargePage::beginMutation(ev::user::ChargeOperation operation)
@@ -385,6 +450,8 @@ void ChargePage::beginMutation(ev::user::ChargeOperation operation)
     }
     if (pendingMutation_.has_value() && pendingMutation_->requestId.isEmpty()) {
         pendingMutation_.reset();
+    } else if (pendingMutation_.has_value()) {
+        emit mutationPendingChanged(true);
     }
     render();
 }
@@ -392,12 +459,16 @@ void ChargePage::beginMutation(ev::user::ChargeOperation operation)
 void ChargePage::acceptMutation(const ev::user::RequestContext &context,
                                 const ev::user::Order &order)
 {
-    if (!pendingMutation_.has_value() || context != *pendingMutation_
-        || !matchesPage(context)) {
+    if (!pendingMutation_.has_value() || context != *pendingMutation_) {
         return;
     }
     pendingMutation_.reset();
-    pendingRead_.reset();
+    emit mutationPendingChanged(false);
+    if (!matchesPage(context)) {
+        render();
+        return;
+    }
+    invalidateSafeReads();
     pollTimer_->stop();
     readEpoch_ = api_->currentChargeReadEpoch();
     reconciliationRequired_ = false;
@@ -407,7 +478,7 @@ void ChargePage::acceptMutation(const ev::user::RequestContext &context,
     selectionGeneration_ = 0;
     associatedCharger_.reset();
     render();
-    requestFacts();
+    requestFacts(false);
 }
 
 void ChargePage::handleCurrentOrder(const ev::user::RequestContext &context,
@@ -429,12 +500,16 @@ void ChargePage::handleCurrentOrder(const ev::user::RequestContext &context,
         selectionGeneration_ = 0;
     }
     associatedCharger_.reset();
-    reconciliationRequired_ = false;
+    const bool factsRequired = (order_.has_value()
+                                && order_->status == QStringLiteral("reserved"))
+        || (!order_.has_value() && selection_.has_value());
+    reconciliationRequired_ = factsRequired;
+    factsFailed_ = false;
     error_->clear();
     render();
     emit activeOrderResolved(order_.has_value());
     if (!poll && (order_.has_value() || selection_.has_value())) {
-        requestFacts();
+        requestFacts(factsRequired);
     }
 }
 
@@ -448,16 +523,21 @@ void ChargePage::handleChargeFailure(const ev::user::RequestContext &context,
             return;
         }
         pendingRead_.reset();
+        reconciliationRequired_ = true;
         error_->setText(localizedError(failure));
         render();
         return;
     }
-    if (!pendingMutation_.has_value() || context != *pendingMutation_
-        || !matchesPage(context)) {
+    if (!pendingMutation_.has_value() || context != *pendingMutation_) {
         return;
     }
     pendingMutation_.reset();
-    pendingRead_.reset();
+    emit mutationPendingChanged(false);
+    if (!matchesPage(context)) {
+        render();
+        return;
+    }
+    invalidateSafeReads();
     pollTimer_->stop();
     readEpoch_ = api_->currentChargeReadEpoch();
     reconciliationRequired_ = true;
@@ -474,6 +554,10 @@ void ChargePage::handleGeneralFailure(const ev::user::ApiError &failure)
         return;
     }
     pendingFactsRequestId_.clear();
+    factsPending_ = false;
+    factsFailed_ = true;
+    factsGateRequired_ = true;
+    reconciliationRequired_ = true;
     error_->setText(localizedError(failure));
     render();
 }

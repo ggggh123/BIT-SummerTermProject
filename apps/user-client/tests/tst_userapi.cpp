@@ -209,12 +209,15 @@ private slots:
     void currentOrderGuardRoutesChargingAndNullToStablePages();
     void activeOrderGuardSurvivesProfileNavigation();
     void noOrderNavigationKeepsNearbyAvailable();
+    void chargeMutationDisablesAuthenticatedNavigationUntilOutcome();
     void nearbyStationsUseOwnedSessionValidateDistanceAndSortTies();
     void stationDetailDecodesCompleteAuthoritativeObjects();
     void latestForecastDecodesCompleteRunAndExactNoPrediction();
     void latestForecastRejectsRecordsOutsideMatchingStationSnapshot();
     void task4ResultSignalsCarryIdsAcrossIdenticalArgumentRaces();
     void nearbyPageRejectsReversedSameOriginAndStationResults();
+    void chargeRefreshRejectsStaleSelectionAndCannotOverwriteNewDetail();
+    void nearbyReplacementInvalidatesRememberedChargeSelection();
     void nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates();
     void profileActionsUseOwnedSessionAndAuthoritativeResponses();
     void profileValidationAndFailuresPreserveCachedUser();
@@ -600,6 +603,62 @@ void UserApiTest::noOrderNavigationKeepsNearbyAvailable()
     QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("profilePage"));
     nearbyNavigation->click();
     QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+}
+
+void UserApiTest::chargeMutationDisablesAuthenticatedNavigationUntilOutcome()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    auto *loginButton = window.findChild<QPushButton *>(QStringLiteral("loginButton"));
+    phone->setText(QString::fromLatin1(kMobile));
+    loginButton->click();
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("pending-nav-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto current = takeRequest(peer);
+    reply(peer, current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
+    const auto facts = takeRequest(peer);
+    QCOMPARE(facts.action, QStringLiteral("station.detail"));
+    reply(peer, facts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(7, 3, QStringLiteral("reserved")),
+                                  chargerObject(8, 3), chargerObject(9, 3),
+                                  chargerObject(10, 3, QStringLiteral("fault"))}}});
+
+    auto *start = window.findChild<QPushButton *>(QStringLiteral("chargeStartButton"));
+    auto *nearby = window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"));
+    auto *currentNavigation =
+        window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"));
+    auto *profile = window.findChild<QPushButton *>(QStringLiteral("profileNavigationButton"));
+    QVERIFY(start != nullptr);
+    QVERIFY(nearby != nullptr);
+    QVERIFY(currentNavigation != nullptr);
+    QVERIFY(profile != nullptr);
+    QTRY_VERIFY(start->isEnabled());
+    start->click();
+    const auto mutation = takeRequest(peer);
+    QCOMPARE(mutation.action, QStringLiteral("charge.start"));
+    QVERIFY(!nearby->isEnabled());
+    QVERIFY(!currentNavigation->isEnabled());
+    QVERIFY(!profile->isEnabled());
+
+    reply(peer, mutation.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("charging"))}});
+    QTRY_VERIFY(currentNavigation->isEnabled());
+    QTRY_VERIFY(profile->isEnabled());
+    QVERIFY(!nearby->isEnabled());
+    const auto refreshedFacts = takeRequest(peer);
+    QCOMPARE(refreshedFacts.action, QStringLiteral("station.detail"));
 }
 
 void UserApiTest::nearbyStationsUseOwnedSessionValidateDistanceAndSortTies()
@@ -1049,6 +1108,122 @@ void UserApiTest::nearbyPageRejectsReversedSameOriginAndStationResults()
     const auto selection = qvariant_cast<ev::user::StationSelection>(selections.takeFirst().at(0));
     QCOMPARE(selection.origin.latitude, origin.latitude);
     QCOMPARE(selection.origin.longitude, origin.longitude);
+}
+
+void UserApiTest::chargeRefreshRejectsStaleSelectionAndCannotOverwriteNewDetail()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    UserApi api(&client);
+    NearbyPage page(&api, nullptr);
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("refresh-generation-token")},
+                      {QStringLiteral("user"), userObject()}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    ev::user::Station station;
+    station.stationId = 3;
+    station.name = QStringLiteral("测试充电站3");
+    station.address = QStringLiteral("北京市海淀区测试路3号");
+    station.latitude = 39.953;
+    station.longitude = 116.313;
+    station.priceFenPerKwh = 135;
+    station.chargerCount = 4;
+    station.idleCount = 2;
+    page.origin_ = origin;
+    page.stations_ = {station};
+    page.selectionGeneration_ = 20;
+
+    page.refreshAfterCharge(origin, 3, 19);
+    QTest::qWait(30);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+    page.refreshAfterCharge(origin, 3, 20);
+    const auto backgroundRefresh = takeRequest(peer);
+    QCOMPARE(backgroundRefresh.action, QStringLiteral("station.list"));
+
+    page.requestStationDetail(station);
+    const auto newDetail = takeRequest(peer);
+    QCOMPARE(newDetail.action, QStringLiteral("station.detail"));
+    reply(peer, backgroundRefresh.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), QJsonArray{stationObject(8, 0.2)}}});
+    QTest::qWait(50);
+    QVERIFY(page.findChild<QLabel *>(QStringLiteral("stationName_8")) == nullptr);
+    QVERIFY(page.findChild<QPushButton *>(QStringLiteral("nearbySearchButton"))->isEnabled());
+
+    reply(peer, newDetail.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(7, 3), chargerObject(8, 3),
+                                  chargerObject(9, 3, QStringLiteral("charging")),
+                                  chargerObject(10, 3, QStringLiteral("fault"))}}});
+    QTRY_VERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_7")) != nullptr);
+}
+
+void UserApiTest::nearbyReplacementInvalidatesRememberedChargeSelection()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    auto *loginButton = window.findChild<QPushButton *>(QStringLiteral("loginButton"));
+    phone->setText(QString::fromLatin1(kMobile));
+    loginButton->click();
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("selection-invalidation-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto current = takeRequest(peer);
+    reply(peer, current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+
+    auto *nearby = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
+    QVERIFY(nearby != nullptr);
+    ev::user::Station station;
+    station.stationId = 3;
+    station.name = QStringLiteral("测试充电站3");
+    station.address = QStringLiteral("北京市海淀区测试路3号");
+    station.latitude = 39.953;
+    station.longitude = 116.313;
+    station.priceFenPerKwh = 135;
+    station.chargerCount = 1;
+    station.idleCount = 1;
+    ev::user::Charger charger;
+    charger.chargerId = 7;
+    charger.stationId = 3;
+    charger.code = QStringLiteral("T-7");
+    charger.type = QStringLiteral("fast");
+    charger.powerKw = 60.0;
+    charger.status = QStringLiteral("idle");
+    charger.updatedAt = QString::fromLatin1(kTimestamp);
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    nearby->displayStations({origin, {station}});
+    nearby->displayStationDetail({station, {charger}});
+    auto *chargerButton =
+        nearby->findChild<QPushButton *>(QStringLiteral("chargerButton_7"));
+    QVERIFY(chargerButton != nullptr);
+    chargerButton->click();
+    auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
+    auto *reserve = window.findChild<QPushButton *>(QStringLiteral("chargeReserveButton"));
+    auto *chargeStatus = window.findChild<QLabel *>(QStringLiteral("chargeStatus"));
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("chargePage"));
+    QTRY_VERIFY(reserve->isEnabled());
+
+    nearby->displayStations({origin, {station}});
+    QTRY_VERIFY(!reserve->isEnabled());
+    QVERIFY(!chargeStatus->text().contains(QStringLiteral("已选择")));
 }
 
 void UserApiTest::nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates()

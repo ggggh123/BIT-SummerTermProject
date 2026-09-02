@@ -245,9 +245,13 @@ private slots:
     void pollIsTwoSecondsSingleFlightAndStopsOnTerminalOrLeave();
     void uncertainMutationNeverReplaysAndReconcilesCurrentFirst();
     void businessErrorsUseFixedChineseMappingsAndSafeRefresh();
-    void stalePageMutationCannotApplyAndLateProfileCannotOverwriteSettle();
+    void stalePageMutationAppliesGloballyWithoutRepaintingAndOrdersUserRevision();
     void notConnectedBeforeWriteIsDefiniteAndMalformedMutationIsUncertain();
     void terminalMutationRejectsOlderOutstandingPoll();
+    void ordinaryReconnectReconcilesCurrentAndFactsBeforeActions();
+    void ordinaryReconnectRejectsOutstandingPollReplayAfterFreshCurrent();
+    void factsFailureRetryReconcilesCurrentBeforeRestoringReservedActions();
+    void nullReconciliationRetainsIdleSelectionUntilFactsRestoreReserve();
 };
 
 void ChargePageTest::exactStateTableUsesOnlyAuthoritativeFields()
@@ -464,10 +468,18 @@ void ChargePageTest::frozenUserCanCancelStopAndSettle()
     page.enterOrder(decodedOrder(QStringLiteral("charging")));
     QVERIFY(button(page, "chargeStopButton")->isEnabled());
     button(page, "chargeStopButton")->click();
-    QCOMPARE(takeRequest(peer.data()).action, QStringLiteral("charge.stop"));
-
-    page.enterOrder(decodedOrder(QStringLiteral("charging"), true), selection(32, QStringLiteral("idle")));
-    QVERIFY(button(page, "chargeSettleButton")->isEnabled());
+    const auto stop = takeRequest(peer.data());
+    QCOMPARE(stop.action, QStringLiteral("charge.stop"));
+    reply(peer.data(), stop.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"),
+                       orderObject(QStringLiteral("charging"), true)}});
+    QTRY_VERIFY(button(page, "chargeSettleButton")->isEnabled());
+    const auto stoppedFacts = takeRequest(peer.data());
+    QCOMPARE(stoppedFacts.action, QStringLiteral("station.detail"));
+    reply(peer.data(), stoppedFacts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(1)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(QStringLiteral("idle"))}}});
     button(page, "chargeSettleButton")->click();
     QCOMPARE(takeRequest(peer.data()).action, QStringLiteral("charge.settle"));
 }
@@ -582,7 +594,7 @@ void ChargePageTest::businessErrorsUseFixedChineseMappingsAndSafeRefresh()
     }
 }
 
-void ChargePageTest::stalePageMutationCannotApplyAndLateProfileCannotOverwriteSettle()
+void ChargePageTest::stalePageMutationAppliesGloballyWithoutRepaintingAndOrdersUserRevision()
 {
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
@@ -594,6 +606,10 @@ void ChargePageTest::stalePageMutationCannotApplyAndLateProfileCannotOverwriteSe
     login(api, peer.data());
     ChargePage page(&api);
     page.setConnectionAvailable(true);
+    QSignalSpy changed(&api, &UserApi::chargeOrderChanged);
+    QSignalSpy settled(&api, &UserApi::chargeSettled);
+    QSignalSpy globalFailures(&api, &UserApi::chargeRequestFailed);
+    QSignalSpy userApplied(&api, &UserApi::sessionUserApplied);
 
     page.enterSelection(selection(61));
     button(page, "chargeReserveButton")->click();
@@ -601,11 +617,10 @@ void ChargePageTest::stalePageMutationCannotApplyAndLateProfileCannotOverwriteSe
     page.enterSelection(selection(62));
     reply(peer.data(), staleSelectionReserve.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
-    QTest::qWait(50);
+    QTRY_COMPARE(changed.size(), 1);
     QVERIFY(button(page, "chargeReserveButton")->isEnabled());
     QVERIFY(label(page, "chargeStatus")->text().contains(QStringLiteral("已选择")));
 
-    const qint64 originalBalance = api.sessionUser()->balanceFen;
     page.enterOrder(decodedOrder(QStringLiteral("charging"), true));
     button(page, "chargeSettleButton")->click();
     const auto staleSettle = takeRequest(peer.data());
@@ -613,21 +628,30 @@ void ChargePageTest::stalePageMutationCannotApplyAndLateProfileCannotOverwriteSe
     reply(peer.data(), staleSettle.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("completed"))},
                       {QStringLiteral("balanceFen"), 10'000}});
-    QTest::qWait(50);
-    QCOMPARE(api.sessionUser()->balanceFen, originalBalance);
+    QTRY_COMPARE(api.sessionUser()->balanceFen, qint64{10'000});
+    QTRY_COMPARE(settled.size(), 1);
+    QTRY_COMPARE(userApplied.size(), 1);
+    QCOMPARE(userApplied.at(0).at(0).value<ev::user::User>().balanceFen, qint64{10'000});
+    QCOMPARE(label(page, "chargeStatus")->text(), QStringLiteral("充电页面已离开"));
 
+    const qint64 originalBalance = api.sessionUser()->balanceFen;
     const QString oldProfileId = api.loadProfile();
     const auto oldProfile = takeRequest(peer.data());
     QCOMPARE(oldProfile.requestId, oldProfileId);
     page.enterOrder(decodedOrder(QStringLiteral("charging"), true));
-    QSignalSpy userApplied(&api, &UserApi::sessionUserApplied);
     button(page, "chargeSettleButton")->click();
     const auto settle = takeRequest(peer.data());
     reply(peer.data(), settle.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("completed"))},
                       {QStringLiteral("balanceFen"), 9'000}});
     QTRY_COMPARE(api.sessionUser()->balanceFen, qint64{9'000});
-    QTRY_COMPARE(userApplied.size(), 1);
+    QTRY_COMPARE(userApplied.size(), 2);
+    const auto settledFacts = takeRequest(peer.data());
+    QCOMPARE(settledFacts.action, QStringLiteral("station.detail"));
+    reply(peer.data(), settledFacts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(0)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(QStringLiteral("idle"))}}});
 
     QJsonObject staleProfile = userObject(QStringLiteral("active"), originalBalance);
     staleProfile.insert(QStringLiteral("nickname"), QStringLiteral("旧响应昵称"));
@@ -636,7 +660,20 @@ void ChargePageTest::stalePageMutationCannotApplyAndLateProfileCannotOverwriteSe
     QTest::qWait(50);
     QCOMPARE(api.sessionUser()->balanceFen, qint64{9'000});
     QCOMPARE(api.sessionUser()->nickname, QStringLiteral("测试用户"));
-    QCOMPARE(userApplied.size(), 1);
+    QCOMPARE(userApplied.size(), 2);
+
+    const auto stoppedAfterLeave = api.stopCharging(99, 99, 99);
+    const auto stopRequest = takeRequest(peer.data());
+    QCOMPARE(stopRequest.requestId, stoppedAfterLeave.requestId);
+    page.leavePage();
+    peer->abort();
+    QTRY_COMPARE_WITH_TIMEOUT(globalFailures.size(), 1, 5'000);
+    const auto transportFailure = globalFailures.takeFirst();
+    QCOMPARE(transportFailure.at(0).value<ev::user::RequestContext>().requestId,
+             stopRequest.requestId);
+    QCOMPARE(transportFailure.at(1).value<ev::user::ApiError>().code,
+             QStringLiteral("TRANSPORT_ERROR"));
+    QVERIFY(transportFailure.at(2).toBool());
 }
 
 void ChargePageTest::notConnectedBeforeWriteIsDefiniteAndMalformedMutationIsUncertain()
@@ -721,6 +758,159 @@ void ChargePageTest::terminalMutationRejectsOlderOutstandingPoll()
     QTest::qWait(50);
     QCOMPARE(label(page, "chargeSummary")->text(), frozenSummary);
     QVERIFY(button(page, "chargeSettleButton")->isEnabled());
+}
+
+void ChargePageTest::ordinaryReconnectReconcilesCurrentAndFactsBeforeActions()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> firstPeer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, firstPeer.data());
+    ChargePage page(&api);
+    page.setConnectionAvailable(true);
+    page.enterOrder(decodedOrder(QStringLiteral("reserved")),
+                    selection(81, QStringLiteral("reserved")));
+    QVERIFY(button(page, "chargeStartButton")->isEnabled());
+    QVERIFY(button(page, "chargeCancelButton")->isEnabled());
+
+    firstPeer->abort();
+    QTRY_VERIFY(!button(page, "chargeStartButton")->isEnabled());
+    QTRY_VERIFY(button(page, "chargeRetryButton")->isVisibleTo(&page));
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> secondPeer(server.nextPendingConnection());
+    const auto current = takeRequest(secondPeer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+    QVERIFY(!button(page, "chargeStartButton")->isEnabled());
+    reply(secondPeer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
+    const auto facts = takeRequest(secondPeer.data());
+    QCOMPARE(facts.action, QStringLiteral("station.detail"));
+    QVERIFY(!button(page, "chargeStartButton")->isEnabled());
+    QVERIFY(!button(page, "chargeCancelButton")->isEnabled());
+    reply(secondPeer.data(), facts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(0)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(QStringLiteral("reserved"))}}});
+    QTRY_VERIFY(button(page, "chargeStartButton")->isEnabled());
+    QTRY_VERIFY(button(page, "chargeCancelButton")->isEnabled());
+}
+
+void ChargePageTest::ordinaryReconnectRejectsOutstandingPollReplayAfterFreshCurrent()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> firstPeer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, firstPeer.data());
+    ChargePage page(&api);
+    page.setConnectionAvailable(true);
+    page.enterOrder(decodedOrder(QStringLiteral("charging")));
+
+    QTest::qWait(2'100);
+    const auto oldPoll = takeRequest(firstPeer.data());
+    QCOMPARE(oldPoll.action, QStringLiteral("order.current"));
+    firstPeer->abort();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> secondPeer(server.nextPendingConnection());
+    const auto freshCurrent = takeRequest(secondPeer.data());
+    QCOMPARE(freshCurrent.action, QStringLiteral("order.current"));
+    QVERIFY(freshCurrent.requestId != oldPoll.requestId);
+    const auto staleReplay = takeRequest(secondPeer.data());
+    QCOMPARE(staleReplay.action, QStringLiteral("order.current"));
+    QCOMPARE(staleReplay.requestId, oldPoll.requestId);
+    reply(secondPeer.data(), freshCurrent.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"),
+                       orderObject(QStringLiteral("charging"), false, 3.0, 405, 180)}});
+    QTRY_VERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("3.000")));
+    reply(secondPeer.data(), staleReplay.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"),
+                       orderObject(QStringLiteral("charging"), true, 9.0, 1'215, 999)}});
+    QTest::qWait(50);
+    QVERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("3.000")));
+    QVERIFY(button(page, "chargeStopButton")->isEnabled());
+}
+
+void ChargePageTest::factsFailureRetryReconcilesCurrentBeforeRestoringReservedActions()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    ChargePage page(&api);
+    page.setConnectionAvailable(true);
+    page.enterGuardOrder(decodedOrder(QStringLiteral("reserved")));
+    const auto failedFacts = takeRequest(peer.data());
+    QCOMPARE(failedFacts.action, QStringLiteral("station.detail"));
+    reply(peer.data(), failedFacts.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("busy"), QJsonObject{});
+    QTRY_VERIFY(button(page, "chargeRetryButton")->isVisibleTo(&page));
+    QVERIFY(!button(page, "chargeStartButton")->isEnabled());
+    QVERIFY(label(page, "chargeError")->text().contains(QStringLiteral("服务繁忙")));
+
+    button(page, "chargeRetryButton")->click();
+    const auto current = takeRequest(peer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+    reply(peer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
+    const auto recoveredFacts = takeRequest(peer.data());
+    QCOMPARE(recoveredFacts.action, QStringLiteral("station.detail"));
+    QVERIFY(!button(page, "chargeStartButton")->isEnabled());
+    reply(peer.data(), recoveredFacts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(0)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(QStringLiteral("reserved"))}}});
+    QTRY_VERIFY(button(page, "chargeStartButton")->isEnabled());
+    QTRY_VERIFY(button(page, "chargeCancelButton")->isEnabled());
+
+    client.disconnectFromServer();
+    QTRY_VERIFY(!button(page, "chargeStartButton")->isEnabled());
+    page.enterGuardOrder(decodedOrder(QStringLiteral("reserved")));
+    QTRY_VERIFY(label(page, "chargeError")->text().contains(QStringLiteral("服务器连接不可用")));
+    QVERIFY(button(page, "chargeRetryButton")->isVisibleTo(&page));
+}
+
+void ChargePageTest::nullReconciliationRetainsIdleSelectionUntilFactsRestoreReserve()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    ChargePage page(&api);
+    page.setConnectionAvailable(true);
+    page.enterSelection(selection(91));
+    button(page, "chargeReserveButton")->click();
+    const auto reserve = takeRequest(peer.data());
+    reply(peer.data(), reserve.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("busy"), QJsonObject{});
+    const auto current = takeRequest(peer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+    reply(peer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    const auto facts = takeRequest(peer.data());
+    QCOMPARE(facts.action, QStringLiteral("station.detail"));
+    QVERIFY(!button(page, "chargeReserveButton")->isEnabled());
+    QVERIFY(label(page, "chargeStatus")->text().contains(QStringLiteral("已选择")));
+    reply(peer.data(), facts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(1)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(QStringLiteral("idle"))}}});
+    QTRY_VERIFY(button(page, "chargeReserveButton")->isEnabled());
+    QVERIFY(label(page, "chargeStatus")->text().contains(QStringLiteral("已选择")));
 }
 
 QTEST_MAIN(ChargePageTest)

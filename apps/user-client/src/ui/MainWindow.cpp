@@ -92,8 +92,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         }
         guardContext_.reset();
         hasActiveOrder_ = result.order.has_value();
-        nearbyNavigationButton_->setEnabled(!hasActiveOrder_);
-        currentOrderNavigationButton_->setVisible(hasActiveOrder_);
+        updateAuthenticatedNavigation();
         authenticatedNavigation_->setVisible(true);
         if (result.order.has_value()) {
             std::optional<ev::user::StationSelection> matching;
@@ -125,7 +124,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         loginPage_->setError(QStringLiteral("当前订单加载失败，请重新登录"));
     });
     connect(nearbyNavigationButton_, &QPushButton::clicked, this, [this] {
-        if (!hasActiveOrder_) {
+        if (!hasActiveOrder_ && !chargeMutationPending_) {
             if (pages_->currentWidget() == chargePage_) {
                 chargePage_->leavePage();
             }
@@ -133,12 +132,15 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         }
     });
     connect(currentOrderNavigationButton_, &QPushButton::clicked, this, [this] {
-        if (hasActiveOrder_) {
+        if (hasActiveOrder_ && !chargeMutationPending_) {
             chargePage_->resume();
             pages_->setCurrentWidget(chargePage_);
         }
     });
     connect(profileNavigationButton_, &QPushButton::clicked, this, [this] {
+        if (chargeMutationPending_) {
+            return;
+        }
         if (pages_->currentWidget() == chargePage_) {
             chargePage_->leavePage();
         }
@@ -154,34 +156,39 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         chargePage_->enterSelection(selection);
         pages_->setCurrentWidget(chargePage_);
     });
+    connect(nearbyPage_, &NearbyPage::selectionInvalidated, this,
+            [this](quint64 selectionGeneration) {
+        rememberedSelection_.reset();
+        chargePage_->invalidateSelection(selectionGeneration);
+    });
     connect(chargePage_, &ChargePage::nearbyRefreshRequested,
             nearbyPage_, &NearbyPage::refreshAfterCharge);
+    connect(chargePage_, &ChargePage::mutationPendingChanged, this, [this](bool pending) {
+        chargeMutationPending_ = pending;
+        updateAuthenticatedNavigation();
+    });
     connect(chargePage_, &ChargePage::backRequested, this, [this] {
         hasActiveOrder_ = false;
         rememberedSelection_.reset();
         nearbyNavigationButton_->setEnabled(true);
         currentOrderNavigationButton_->setVisible(false);
+        updateAuthenticatedNavigation();
         pages_->setCurrentWidget(nearbyPage_);
     });
     connect(chargePage_, &ChargePage::activeOrderResolved, this, [this](bool active) {
         hasActiveOrder_ = active;
-        nearbyNavigationButton_->setEnabled(!active);
-        currentOrderNavigationButton_->setVisible(active);
+        updateAuthenticatedNavigation();
     });
     connect(userApi_, &UserApi::chargeOrderChanged, this,
             [this](const ev::user::RequestContext &, const ev::user::Order &order) {
-        if (order.status == QStringLiteral("reserved")
-            || order.status == QStringLiteral("charging")) {
-            hasActiveOrder_ = true;
-            nearbyNavigationButton_->setEnabled(false);
-            currentOrderNavigationButton_->setVisible(true);
-        }
+        hasActiveOrder_ = order.status == QStringLiteral("reserved")
+            || order.status == QStringLiteral("charging");
+        updateAuthenticatedNavigation();
     });
     connect(userApi_, &UserApi::chargeSettled, this,
             [this](const ev::user::RequestContext &, const ev::user::Order &, qint64) {
-        hasActiveOrder_ = true;
-        nearbyNavigationButton_->setEnabled(false);
-        currentOrderNavigationButton_->setVisible(true);
+        hasActiveOrder_ = false;
+        updateAuthenticatedNavigation();
     });
     connect(nearbyPage_, &NearbyPage::navigationRequested, this,
             [this](ev::user::GeoPoint origin, ev::user::Station station) {
@@ -202,4 +209,13 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     }
 
     setCentralWidget(centralWidget);
+}
+
+void MainWindow::updateAuthenticatedNavigation()
+{
+    authenticatedNavigation_->setEnabled(!chargeMutationPending_);
+    nearbyNavigationButton_->setEnabled(!chargeMutationPending_ && !hasActiveOrder_);
+    currentOrderNavigationButton_->setVisible(hasActiveOrder_);
+    currentOrderNavigationButton_->setEnabled(!chargeMutationPending_ && hasActiveOrder_);
+    profileNavigationButton_->setEnabled(!chargeMutationPending_);
 }

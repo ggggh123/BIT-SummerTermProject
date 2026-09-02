@@ -25,6 +25,7 @@ public:
                          std::optional<ev::user::StationSelection> rememberedSelection = std::nullopt);
     void resume();
     void leavePage();
+    void invalidateSelection(quint64 selectionGeneration);
 
 public slots:
     void setConnectionAvailable(bool available);
@@ -34,6 +35,7 @@ signals:
     void activeOrderResolved(bool active);
     void nearbyRefreshRequested(ev::user::GeoPoint origin, qint64 stationId,
                                 quint64 selectionGeneration);
+    void mutationPendingChanged(bool pending);
 
 private:
     void beginPage(quint64 selectionGeneration);
@@ -41,7 +43,8 @@ private:
     void updatePolling();
     void requestPoll();
     void requestReconciliation();
-    void requestFacts();
+    void requestFacts(bool gateActions = false);
+    void invalidateSafeReads();
     void beginMutation(ev::user::ChargeOperation operation);
     void acceptMutation(const ev::user::RequestContext &context,
                         const ev::user::Order &order);
@@ -72,6 +75,9 @@ private:
     bool connected_ = false;
     bool pageActive_ = false;
     bool reconciliationRequired_ = false;
+    bool factsPending_ = false;
+    bool factsFailed_ = false;
+    bool factsGateRequired_ = false;
     bool reconciledNoOrder_ = false;
     quint64 pageGeneration_ = 0;
     quint64 sessionGeneration_ = 0;

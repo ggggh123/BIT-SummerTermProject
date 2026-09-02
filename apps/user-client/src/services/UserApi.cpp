@@ -626,12 +626,35 @@ ev::user::RequestContext UserApi::cancelOrder(
 
 quint64 UserApi::invalidateChargeReads()
 {
-    return ++chargeReadEpoch_;
+    ++chargeReadEpoch_;
+    const auto requestIds = pendingOperations_.keys();
+    for (const QString &requestId : requestIds) {
+        const auto it = pendingOperations_.constFind(requestId);
+        if (it != pendingOperations_.cend()
+            && it->sessionGeneration == sessionGeneration_
+            && it->operation == Operation::ChargeCurrent) {
+            pendingOperations_.remove(requestId);
+        }
+    }
+    return chargeReadEpoch_;
 }
 
 quint64 UserApi::currentChargeReadEpoch() const
 {
     return chargeReadEpoch_;
+}
+
+void UserApi::cancelSafeRead(const QString &requestId)
+{
+    const auto it = pendingOperations_.find(requestId);
+    if (it == pendingOperations_.end()) {
+        return;
+    }
+    if (it->operation != Operation::ChargeCurrent
+        && it->operation != Operation::StationDetail) {
+        return;
+    }
+    pendingOperations_.erase(it);
 }
 
 QString UserApi::loadNearbyStations(const ev::user::GeoPoint &origin)
@@ -851,7 +874,7 @@ void UserApi::finishChargeFailure(const PendingOperation &pending, const QString
         return;
     }
     if (isChargeMutation(pending.operation)) {
-        ++chargeReadEpoch_;
+        (void)invalidateChargeReads();
     }
     emit chargeRequestFailed(*pending.chargeContext, {requestId, code, message}, uncertain);
 }
@@ -973,7 +996,8 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
         if (!pending.chargeContext.has_value()) {
             return;
         }
-        if (pending.chargeContext->readEpoch != chargeReadEpoch_) {
+        if (pending.operation == Operation::ChargeCurrent
+            && pending.chargeContext->readEpoch != chargeReadEpoch_) {
             return;
         }
         if (!response.ok) {
@@ -1046,7 +1070,7 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
                                 kInvalidResponseMessage, true);
             return;
         }
-        ++chargeReadEpoch_;
+        (void)invalidateChargeReads();
         if (!settle) {
             emit chargeOrderChanged(*pending.chargeContext, order);
             return;
@@ -1150,7 +1174,8 @@ void UserApi::handleTransportFailure(const QString &requestId, const QString &co
     }
     if (isChargeOperation(pending.operation)) {
         if (!pending.chargeContext.has_value()
-            || pending.chargeContext->readEpoch != chargeReadEpoch_) {
+            || (pending.operation == Operation::ChargeCurrent
+                && pending.chargeContext->readEpoch != chargeReadEpoch_)) {
             return;
         }
         const bool uncertain = isChargeMutation(pending.operation)

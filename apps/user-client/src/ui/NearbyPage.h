@@ -32,13 +32,17 @@ public slots:
 signals:
     void chargerSelected(ev::user::StationSelection selection);
     void navigationRequested(ev::user::GeoPoint origin, ev::user::Station station);
+    void selectionInvalidated(quint64 selectionGeneration);
 
 private:
     friend class UserApiTest;
 
     void searchCurrentAddress();
-    void requestNearbyStations(const ev::user::GeoPoint &origin);
+    void requestNearbyStations(
+        const ev::user::GeoPoint &origin,
+        std::optional<quint64> requiredSelectionGeneration = std::nullopt);
     void requestStationDetail(const ev::user::Station &station);
+    void invalidateSelection();
     void rebuildStationCards();
     void showError(const QString &message);
     void setSearchPending(bool pending);
@@ -65,6 +69,7 @@ private:
     quint64 selectionGeneration_ = 0;
     quint64 pendingStationsOriginGeneration_ = 0;
     quint64 pendingStationsSearchGeneration_ = 0;
+    std::optional<quint64> pendingStationsSelectionGeneration_;
     quint64 pendingForecastOriginGeneration_ = 0;
     quint64 pendingForecastSearchGeneration_ = 0;
     quint64 pendingDetailOriginGeneration_ = 0;

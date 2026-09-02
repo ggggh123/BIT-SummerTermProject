@@ -112,7 +112,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
             }
             pendingGeocodeId_.clear();
             ++originGeneration_;
-            ++selectionGeneration_;
+            invalidateSelection();
             origin_ = origin;
             pendingStationsRequestId_.clear();
             pendingForecastRequestId_.clear();
@@ -145,8 +145,15 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 || pendingStationsSearchGeneration_ != searchGeneration_) {
                 return;
             }
+            if (pendingStationsSelectionGeneration_.has_value()
+                && *pendingStationsSelectionGeneration_ != selectionGeneration_) {
+                pendingStationsRequestId_.clear();
+                pendingStationsSelectionGeneration_.reset();
+                setSearchPending(false);
+                return;
+            }
             pendingStationsRequestId_.clear();
-            ++selectionGeneration_;
+            pendingStationsSelectionGeneration_.reset();
             pendingDetailRequestId_.clear();
             pendingDetailOrigin_.reset();
             displayStations(std::move(result));
@@ -187,7 +194,6 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
             }
             pendingDetailRequestId_.clear();
             displayedDetailOrigin_ = pendingDetailOrigin_;
-            ++selectionGeneration_;
             displayStationDetail(std::move(result));
             setDetailPending(false);
         });
@@ -235,20 +241,21 @@ void NearbyPage::setConnectionAvailable(bool available)
 void NearbyPage::refreshAfterCharge(ev::user::GeoPoint origin, qint64 stationId,
                                     quint64 selectionGeneration)
 {
-    Q_UNUSED(selectionGeneration);
     const bool stationStillKnown = std::any_of(
         stations_.cbegin(), stations_.cend(), [stationId](const ev::user::Station &station) {
             return station.stationId == stationId;
         });
-    if (!origin_.has_value() || !stationStillKnown
+    if (selectionGeneration != selectionGeneration_
+        || !origin_.has_value() || !stationStillKnown
         || origin.latitude != origin_->latitude || origin.longitude != origin_->longitude) {
         return;
     }
-    requestNearbyStations(origin);
+    requestNearbyStations(origin, selectionGeneration);
 }
 
 void NearbyPage::displayStations(ev::user::StationListResult result)
 {
+    invalidateSelection();
     origin_ = result.origin;
     stations_ = std::move(result.stations);
     statusLabel_->setText(stations_.isEmpty()
@@ -265,6 +272,7 @@ void NearbyPage::displayForecast(ev::user::ForecastLatestResult result)
 
 void NearbyPage::displayStationDetail(ev::user::StationDetailResult result)
 {
+    invalidateSelection();
     if (!displayedDetailOrigin_.has_value()) {
         displayedDetailOrigin_ = origin_;
     }
@@ -314,7 +322,9 @@ void NearbyPage::searchCurrentAddress()
     pendingGeocodeId_ = mapClient_->geocode(address);
 }
 
-void NearbyPage::requestNearbyStations(const ev::user::GeoPoint &origin)
+void NearbyPage::requestNearbyStations(
+    const ev::user::GeoPoint &origin,
+    std::optional<quint64> requiredSelectionGeneration)
 {
     if (userApi_ == nullptr) {
         return;
@@ -322,11 +332,12 @@ void NearbyPage::requestNearbyStations(const ev::user::GeoPoint &origin)
     setSearchPending(true);
     statusLabel_->setText(QStringLiteral("正在加载附近充电站…"));
     ++searchGeneration_;
+    pendingStationsSelectionGeneration_ = requiredSelectionGeneration;
     pendingForecastRequestId_.clear();
     forecast_ = {};
     rebuildStationCards();
     if (!pendingDetailRequestId_.isEmpty()) {
-        ++selectionGeneration_;
+        invalidateSelection();
         pendingDetailRequestId_.clear();
         pendingDetailOrigin_.reset();
         setDetailPending(false);
@@ -335,6 +346,7 @@ void NearbyPage::requestNearbyStations(const ev::user::GeoPoint &origin)
     pendingStationsSearchGeneration_ = searchGeneration_;
     pendingStationsRequestId_ = userApi_->loadNearbyStations(origin);
     if (pendingStationsRequestId_.isEmpty()) {
+        pendingStationsSelectionGeneration_.reset();
         setSearchPending(false);
         showError(QStringLiteral("请求失败，请重试"));
     }
@@ -345,7 +357,7 @@ void NearbyPage::requestStationDetail(const ev::user::Station &station)
     if (userApi_ == nullptr || !origin_.has_value()) {
         return;
     }
-    ++selectionGeneration_;
+    invalidateSelection();
     pendingDetailOriginGeneration_ = originGeneration_;
     pendingDetailSearchGeneration_ = searchGeneration_;
     pendingDetailSelectionGeneration_ = selectionGeneration_;
@@ -356,6 +368,12 @@ void NearbyPage::requestStationDetail(const ev::user::Station &station)
         setDetailPending(false);
         detailStatus_->setText(QStringLiteral("请求失败，请重试"));
     }
+}
+
+void NearbyPage::invalidateSelection()
+{
+    ++selectionGeneration_;
+    emit selectionInvalidated(selectionGeneration_);
 }
 
 void NearbyPage::rebuildStationCards()
@@ -427,7 +445,15 @@ void NearbyPage::handleApiFailure(const ev::user::ApiError &error)
         && error.requestId == pendingStationsRequestId_
         && pendingStationsOriginGeneration_ == originGeneration_
         && pendingStationsSearchGeneration_ == searchGeneration_) {
+        if (pendingStationsSelectionGeneration_.has_value()
+            && *pendingStationsSelectionGeneration_ != selectionGeneration_) {
+            pendingStationsRequestId_.clear();
+            pendingStationsSelectionGeneration_.reset();
+            setSearchPending(false);
+            return;
+        }
         pendingStationsRequestId_.clear();
+        pendingStationsSelectionGeneration_.reset();
         setSearchPending(false);
         showError(errorText(error));
         return;

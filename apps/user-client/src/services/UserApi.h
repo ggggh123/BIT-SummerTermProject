@@ -34,6 +34,7 @@ public:
         qint64 orderId, quint64 pageGeneration, quint64 selectionGeneration);
     [[nodiscard]] quint64 invalidateChargeReads();
     [[nodiscard]] quint64 currentChargeReadEpoch() const;
+    void cancelSafeRead(const QString &requestId);
     [[nodiscard]] QString loadNearbyStations(const ev::user::GeoPoint &origin);
     [[nodiscard]] QString loadStationDetail(qint64 stationId);
     [[nodiscard]] QString loadLatestForecast(const QString &stationListRequestId);
