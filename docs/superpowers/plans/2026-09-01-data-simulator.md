@@ -12,6 +12,7 @@
 
 ## Global Constraints
 
+- Run every Python command from the repository root with the globally installed system `python3`; do not create/activate a virtual environment and do not invoke pip. Tests use `python3 -m pytest`, and scripts use `python3 path/to/script.py`.
 - Fixed seed is `20260901`; default cutoff is `2026-09-01T09:00:00+08:00` during development and is passed explicitly.
 - Exactly 6 stations, 48 chargers, 30 users, 30 days of completed orders and 90 days × 24 hours × 6 stations of ML history are generated.
 - Same seed/cutoff/schema must create the same canonical data hash.
@@ -221,7 +222,7 @@ git commit -m "feat(database): build golden database and ML snapshot"
 
 **Interfaces:**
 - Consumes: server-reported charger snapshots and fixed seed.
-- Produces: `TelemetrySample{chargerId,observedAt,powerKw,energyIncrementKwh,status}` and explicit fault/recovery intents.
+- Produces: `TelemetrySample{chargerId,recordedAt,powerKw,energyIncrementKwh,status}` and explicit fault/recovery intents.
 
 - [ ] **Step 1: Write failing deterministic tests**
 
@@ -278,7 +279,7 @@ git commit -m "feat(simulator): add deterministic telemetry state engine"
 Assert one telemetry sample sends:
 
 ```json
-{"version":1,"requestId":"...","action":"telemetry.push","token":"...","payload":{"chargerId":1001,"observedAt":"2026-09-01T09:00:03+08:00","powerKw":60.0,"energyIncrementKwh":0.05,"status":"charging"}}
+{"version":1,"requestId":"...","action":"telemetry.push","token":"...","payload":{"chargerId":1001,"recordedAt":"2026-09-01T09:00:03+08:00","powerKw":60.0,"energyIncrementKwh":0.05,"status":"charging"}}
 ```
 
 Assert fault/recovery sends exact Boolean `fault`, duplicate samples keep request IDs stable for safe idempotent retry, disconnect queues at most 200 samples, and reconnect delays are 1/2/4 seconds.

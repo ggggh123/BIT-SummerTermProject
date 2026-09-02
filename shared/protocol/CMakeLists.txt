@@ -1,4 +1,4 @@
-find_package(Qt6 REQUIRED COMPONENTS Core Network)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Core Network)
 
 add_library(ev_contracts INTERFACE)
 target_include_directories(ev_contracts INTERFACE ${CMAKE_SOURCE_DIR}/shared)

@@ -218,11 +218,11 @@ idle + active user -> reserve => charger reserved, order reserved
 reserved + same user -> start => charger charging, order charging
 TelemetryService telemetry 0.25 kWh -> ChargeService energy += 0.25 and amountFen = rounded energy * price
 stop -> endedAt set and further telemetry ignored
-settle with sufficient balance -> order completed, balance debited, charger idle
+settle with sufficient balance -> order completed and balance debited; charger charging -> idle, while fault/restarting/idle remains unchanged
 cancel reserved -> order cancelled, charger idle
 ```
 
-Also assert unknown charger, non-increasing timestamp, negative/nonfinite energy, and a status mismatch are rejected by the one TelemetryService handler. `USER_FROZEN`, `ACTIVE_ORDER_EXISTS`, `CHARGER_NOT_AVAILABLE`, `ORDER_STATE_CONFLICT`, and `INSUFFICIENT_BALANCE` leave the database unchanged.
+Also assert reserve requires both charger status `idle` and no associated `reserved|charging` order, including after restart reaches idle while a stopped charging order remains unsettled. Assert unknown charger, non-increasing timestamp, negative/nonfinite energy, and a status mismatch are rejected by the one TelemetryService handler. `USER_FROZEN`, `ACTIVE_ORDER_EXISTS`, `CHARGER_NOT_AVAILABLE`, `ORDER_STATE_CONFLICT`, and `INSUFFICIENT_BALANCE` leave the database unchanged.
 
 - [ ] **Step 2: Run and verify failure**
 
@@ -232,7 +232,7 @@ Expected: FAIL because `ChargeService` is absent.
 
 - [ ] **Step 3: Implement each transition as one SQLite transaction**
 
-Use `BEGIN IMMEDIATE`; re-read user/order/charger rows inside the transaction; update only with a matching previous state; require one affected row. `charge.stop` stores `ended_at` while order remains `charging`; `charge.settle` requires non-null `ended_at` and changes status to `completed`. Compute:
+Use `BEGIN IMMEDIATE`; re-read user/order/charger rows inside the transaction; update only with a matching previous state; require one affected row. `charge.stop` stores `ended_at` while order remains `charging`; `charge.settle` requires non-null `ended_at` and changes status to `completed`, changing the charger only from `charging` to `idle` and preserving `fault|restarting|idle`. Compute:
 
 ```cpp
 const qint64 amountFen = qRound64(energyKwh * priceFenPerKwh);
@@ -335,7 +335,9 @@ git commit -m "feat(admin): add operations dashboard and management pages"
 
 - [ ] **Step 1: Write failing telemetry and forecast tests**
 
-Assert fault/recovery requires the simulator role and valid charger state; `simulator.status` validates `running|paused`, timestamp and nonnegative event count, then returns the authoritative charger snapshots needed after reconnect. A forecast batch must contain exactly 144 records: the 6 `forecast_enabled=1` stations × horizons 1–24, one run ID, no duplicate tuple, no NaN, busy/idle counts within station capacity. Invalid batches leave the previous run active.
+Assert fault/recovery requires the simulator role and valid charger state. Cover the coupled matrix: `fault=true` on reserved atomically cancels its reserved order; on an unstopped charging order it writes `endedAt`, freezes the amount and leaves the order `charging` pending settlement; on an already stopped charging order it preserves the earlier `endedAt` and frozen amount. Restart may reach `idle` while the unsettled active order continues to block reservation. Settlement changes charger `charging -> idle` and preserves `fault|restarting|idle`.
+
+Exercise one persisted per-charger device-event cursor shared by `telemetry.push` and `simulator.fault_set`: accept telemetry at t1, accept fault at t3, reject delayed telemetry at t2 and delayed fault at t2 with `ORDER_STATE_CONFLICT`. Replay a previously accepted request ID before the cursor check and assert its response bytes remain stable. `simulator.status` validates `running|paused`, timestamp and nonnegative event count, then returns the authoritative charger snapshots needed after reconnect. A forecast batch must contain exactly 144 records: the 6 `forecast_enabled=1` stations × horizons 1–24, one run ID, no duplicate tuple, no NaN, busy/idle counts within station capacity. Invalid batches leave the previous run active.
 
 - [ ] **Step 2: Write the failing atomic snapshot test**
 
@@ -349,11 +351,13 @@ Expected: FAIL.
 
 - [ ] **Step 4: Implement services and transaction semantics**
 
-Forecast publish validates all records and a canonical payload hash in memory, then executes this exact transaction: `BEGIN IMMEDIATE` → old `active` run to `superseded` → insert the new run as `active` with server-owned `activated_at` → insert 144 records → store the idempotent response → increment `snapshot_meta.version` → `COMMIT`. Any failure rolls back the old run to active. Reusing a run ID with the same hash returns the stored ACK; a different hash returns `FORECAST_INVALID`. Metrics remain ML artifacts and are not accepted in the payload. `forecast.latest` returns `{forecastRun,records}`; it returns stale records with `ok=true`, and returns `{null,[]}` only when no active run exists. Staleness uses `activated_at`. Telemetry applies only to known chargers; for charging orders it increments energy and recomputes server-side amount.
+Forecast publish validates all records and a canonical payload hash in memory, then uses an explicit two-transaction ACK flow. The first transaction is `BEGIN IMMEDIATE` → old `active` run to `superseded` → insert the new run as `active` with server-owned `activated_at` → insert 144 records → increment `snapshot_meta.version` → `COMMIT`; it does not store an ACK. After commit, attempt the corresponding snapshot write. A second serialized DB-worker transaction stores the final ACK with that attempt's actual `snapshotReady`, and only then may the server send it. Failure before the first commit leaves the old run active. If the batch committed but the final ACK was not stored, the same run ID/hash retry recognizes the committed batch, retries/checks the snapshot and stores one final ACK without switching the run again; a different hash returns `FORECAST_INVALID`. Once stored, same-request-ID replay is byte-stable. Metrics remain ML artifacts and are not accepted in the payload. `forecast.latest` returns `{forecastRun,records}`; it returns stale records with `ok=true`, and returns `{null,[]}` only when no active run exists. Staleness uses `activated_at`.
+
+Telemetry/fault handling first checks `request_log`; a hit replays the exact stored response before validating the device-event cursor. For a first-time request, read the one persisted cursor per charger as the maximum accepted `recordedAt` across both telemetry and fault event storage, never from admin-updated `charger.updated_at`; require the new time to be strictly later. In the same `BEGIN IMMEDIATE` transaction, apply the telemetry or coupled fault/order transition, persist the event, advance the shared cursor and store the final response. Telemetry applies only to known chargers; for charging orders it increments energy and recomputes server-side amount. Fault transitions use the coupled matrix from Step 1 and must not detach an active order from an idle-after-restart charger.
 
 - [ ] **Step 5: Implement atomic snapshot replacement**
 
-Serialize compact UTF-8 JSON to a `QSaveFile` in `dashboard/runtime/`; call `commit()` only after the complete document is written. Build snapshots after successful mutations on the DB worker and retry a failed version. A five-second heartbeat atomically refreshes top-level `generatedAt` without changing `snapshotVersion` or business data. Emit `snapshotPublished(snapshotVersion,generatedAt)`. The publish response contains `snapshotReady`; SQLite remains authoritative if it is false.
+Serialize compact UTF-8 JSON to a `QSaveFile` in `dashboard/runtime/`; call `commit()` only after the complete document is written. Build snapshots after successful mutations on the DB worker and retry a failed version. A five-second heartbeat atomically refreshes top-level `generatedAt` without changing `snapshotVersion` or business data. Emit `snapshotPublished(snapshotVersion,generatedAt)`. For `forecast.publish`, report the post-commit write result in `snapshotReady` and persist that final ACK only after the attempt; SQLite remains authoritative if it is false.
 
 - [ ] **Step 6: Run and pass**
 
@@ -396,7 +400,7 @@ Expected before hardening: at least one timeout, cleanup or response consistency
 
 - [ ] **Step 3: Implement the verified in-process reset service**
 
-`DemoResetService` accepts only an admin session, the exact confirmation `RESET_DEMO` and configured golden path. It verifies SHA-256/`PRAGMA integrity_check`, attaches the golden DB read-only, and rejects other mutations while reset is active. In one `BEGIN IMMEDIATE` transaction it deletes child-to-parent and inserts parent-to-child using the explicit table set `admins,users,stations,chargers,orders,telemetry,station_hourly_history,forecast_runs,forecasts,events`; it validates but does not copy `schema_version`, clears `request_log`, reactivates the imported forecast with server time, stores this reset response, and increments `snapshot_meta.version`. It rebuilds the snapshot only after commit. File-level replacement remains a stopped-server operation and is not used by `demo.reset`.
+`DemoResetService` accepts only an admin session, the exact confirmation `RESET_DEMO` and configured golden path. It verifies SHA-256/`PRAGMA integrity_check`, attaches the golden DB read-only, and rejects other mutations while reset is active. Before reset, branch through the shared receipt policy: no receipt starts the core reset, pending resumes snapshot/final-ACK work without resetting again, and final replays its stored response bytes. In one `BEGIN IMMEDIATE` core transaction it deletes child-to-parent and inserts parent-to-child using the explicit table set `admins,users,stations,chargers,orders,telemetry,station_hourly_history,forecast_runs,forecasts,events`; it validates but does not copy `schema_version`, clears old `request_log` rows, reactivates the imported forecast with server time, increments `snapshot_meta.version`, and inserts an internal pending receipt keyed by this request ID with stable `resetAt`, golden hash and snapshot version. Commit and rollback include the pending receipt atomically. The core transaction does not rebuild the snapshot or store a final response. Only after commit does `SnapshotWriter` attempt the pending version. A crash/retry that finds pending resumes this step and never reruns the reset. A failed file write keeps the committed DB and old snapshot, schedules retry and still produces `ok=true/code=OK` with the stable reset data plus a warning message; it never claims rollback. After the attempt, a serialized DB-worker transaction converts pending to final with the complete ACK bytes, then sends it; final replay is byte-stable. File-level replacement remains a stopped-server operation and is not used by `demo.reset`.
 
 On every normal startup, before `system.health` reports `status=ready`, verify the active run, set its `activated_at` to server time in a DB-worker transaction, increment `snapshot_meta.version`, and rebuild the snapshot from the current DB. If no active run exists, return `status=degraded`, `forecastRunId=null`, and a valid snapshot with `forecastRun=null`/`forecast24h=[]`; the release gate rejects that state. Add an admin UI confirmation button for online demo reset; the simulator cannot invoke this privileged action.
 

@@ -6,7 +6,7 @@
 
 **Architecture:** One CMake workspace builds the three Qt/C++ executables and shared libraries. `ev_contracts` owns action/status strings and `ev_protocol` owns request/response envelopes plus the 4-byte big-endian frame codec; no subsystem duplicates these definitions.
 
-**Tech Stack:** Ubuntu 22.04+, Bash, Git, CMake, Ninja, C++17, Qt 6.2+ (`Core`, `Network`, `Test`), Python 3 system packages with `pytest`, Node.js for dependency-free Web unit tests.
+**Tech Stack:** Ubuntu 22.04+, Bash, Git, CMake, Ninja, C++17, Qt 6.2+ (`Core`, `Network`, `Test`), globally installed Ubuntu Python 3 packages (`pytest`, `numpy`, `pandas`, `scikit-learn`, `joblib`), Node.js for dependency-free Web unit tests.
 
 **Spec:** `docs/plans/2026-09-01-ev-charging-platform-design.md`
 
@@ -29,7 +29,8 @@
 - `CMakeLists.txt` — root C++17 project and test entry point.
 - `CMakePresets.json` — repeatable Debug/Release Ninja builds.
 - `scripts/check_env.sh` — read-only prerequisite report.
-- `scripts/bootstrap.sh` — installs the approved development dependencies globally via APT.
+- `scripts/bootstrap.sh` — installs the approved development dependencies globally through Ubuntu APT.
+- `docs/management/environment-matrix.md` — verified global development-environment facts.
 - `shared/contracts/Actions.h` — canonical protocol action constants.
 - `shared/contracts/Statuses.h` — canonical enum strings and validation.
 - `shared/contracts/Permissions.h` — canonical action-to-role authorization matrix.
@@ -49,6 +50,7 @@
 - Create: `CMakePresets.json`
 - Create: `scripts/check_env.sh`
 - Create: `scripts/bootstrap.sh`
+- Create: `docs/management/environment-matrix.md`
 - Create: `apps/user-client/CMakeLists.txt`
 - Create: `apps/admin-server/CMakeLists.txt`
 - Create: `simulator/CMakeLists.txt`
@@ -57,7 +59,7 @@
 
 **Interfaces:**
 - Consumes: Ubuntu APT repositories during bootstrap.
-- Produces: `build/debug`, `build/release`, and a root CMake graph that later plans extend.
+- Produces: globally available development dependencies, `build/debug`, `build/release`, and a root CMake graph that later plans extend. No project virtual environment is created.
 
 - [ ] **Step 1: Write the failing environment check**
 
@@ -66,10 +68,19 @@ Create `scripts/check_env.sh` with executable mode and the exact checks:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+PATH=/usr/bin:/bin
+export PATH
+unset VIRTUAL_ENV PYTHONHOME PYTHONPATH
 missing=0
-for command_name in git cmake ninja qmake6 python3 node npm; do
+for command_name in git cmake ninja qmake6 qtpaths6 python3 node npm pkg-config; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'MISSING %s\n' "$command_name"
+    missing=1
+  fi
+done
+for qt_module in Qt6Core Qt6Network Qt6Widgets Qt6WebEngineWidgets Qt6Charts Qt6Test; do
+  if ! pkg-config --atleast-version=6.2 "$qt_module"; then
+    printf 'MISSING %s >= 6.2\n' "$qt_module"
     missing=1
   fi
 done
@@ -84,7 +95,7 @@ exit "$missing"
 
 Run: `bash scripts/check_env.sh`
 
-Expected on the current VM: non-zero exit with at least `MISSING cmake`, `MISSING qmake6`, `MISSING node`, and `MISSING python-ml-dependencies`.
+Expected before bootstrap: non-zero exit with named `MISSING ...` lines for every unavailable command, Qt pkg-config module, or global Python dependency.
 
 - [ ] **Step 3: Write the bootstrap script**
 
@@ -98,6 +109,8 @@ sudo apt-get install -y git cmake ninja-build pkg-config nodejs npm \
   qt6-base-dev qt6-base-dev-tools qt6-webengine-dev qt6-charts-dev \
   python3-pytest python3-numpy python3-pandas python3-sklearn python3-joblib
 ```
+
+Use Ubuntu's globally installed Python packages; do not create or activate `.venv`/`venv`, invoke pip, use `--break-system-packages`, or create a project-local or temporary dependency prefix. Ubuntu's `python3-sklearn` 1.4.2 package is authoritative on the demonstration host.
 
 - [ ] **Step 4: Create the root build files and empty subsystem targets**
 
@@ -145,13 +158,16 @@ config.local.ini
 Run:
 
 ```bash
+apt-cache policy git cmake ninja-build pkg-config nodejs npm \
+  qt6-base-dev qt6-base-dev-tools qt6-webengine-dev qt6-charts-dev \
+  python3-pytest python3-numpy python3-pandas python3-sklearn python3-joblib
 bash scripts/bootstrap.sh
 bash scripts/check_env.sh
 cmake --preset debug
 cmake --build --preset debug
 ```
 
-Expected: environment check exits 0 and the empty root build configures successfully.
+Expected: every bootstrap package has a nonempty `apt-cache policy` Candidate; APT installs the global toolchain without creating a project virtual environment; the read-only environment check exits 0 against global commands, Qt pkg-config modules, and Python imports; and the empty root build configures successfully. Preserve `/.venv/` in `.gitignore` as protection against accidental local environments.
 
 - [ ] **Step 7: Initialize version control and commit**
 
@@ -160,7 +176,7 @@ Run only if `git rev-parse --is-inside-work-tree` fails:
 ```bash
 git init
 git switch -c main
-git add .gitignore CMakeLists.txt CMakePresets.json scripts apps simulator
+git add .gitignore CMakeLists.txt CMakePresets.json scripts docs/management/environment-matrix.md apps simulator
 git commit -m "build: bootstrap EV charging monorepo"
 git switch -c dev
 ```
@@ -388,10 +404,10 @@ Require `version == 1`, nonblank request ID/action, string token when present, a
 `response-health.json`:
 
 ```json
-{"requestId":"fixture-health","ok":true,"code":"OK","message":"healthy","data":{"status":"ok"}}
+{"requestId":"fixture-health","ok":true,"code":"OK","message":"healthy","data":{"status":"ready","schemaVersion":1,"snapshotVersion":42,"forecastRunId":"forecast-fixture-20260902","serverTime":"2026-09-02T10:30:00+08:00"}}
 ```
 
-Tests load both files and round-trip them without changing field values.
+Tests load both files and round-trip them without changing field values. The response test also asserts every health data field, its JSON type and literal fixture value, membership of `status` in `starting|degraded|ready`, positive `snapshotVersion`, nonempty `forecastRunId`, and a valid `+08:00` Timestamp.
 
 - [ ] **Step 5: Run all shared tests**
 

@@ -12,6 +12,7 @@
 
 ## Global Constraints
 
+- Run every Python command from the repository root with the globally installed system `python3`; do not create/activate a virtual environment and do not invoke pip. Integration tests use `python3 -m pytest`; shell wrappers invoke the operations controller as `python3 -m ops.democtl`.
 - 2026-09-08 12:00 is feature freeze; 2026-09-09 12:00 is code freeze; 2026-09-10 is demo-only.
 - Reset may replace only validated files below workspace `runtime/`; it must never target a directory or path outside the workspace.
 - Golden artifacts are immutable during a run and verified by SHA-256 before copying.
@@ -328,7 +329,7 @@ release_commit="$(git rev-parse HEAD)"
 cmake --build --preset release
 ctest --preset release --output-on-failure
 node --test dashboard/tests/*.test.mjs
-python3 -m pytest database/tests ml/tests tests/e2e -v
+PYTHONPATH=ml/src python3 -m pytest database/tests ml/tests tests/e2e -v
 scripts/rehearse_demo.sh --run-id rehearsal-1 --report runtime/reports/rehearsal-1.json
 scripts/rehearse_demo.sh --run-id rehearsal-2 --report runtime/reports/rehearsal-2.json
 scripts/release_check.sh --commit "$release_commit"
