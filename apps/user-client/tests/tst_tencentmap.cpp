@@ -130,7 +130,8 @@ ev::user::Station station(qint64 stationId, bool forecastEnabled, double distanc
     return value;
 }
 
-ev::user::Charger charger(qint64 chargerId, qint64 stationId)
+ev::user::Charger charger(qint64 chargerId, qint64 stationId,
+                          QString status = QStringLiteral("idle"))
 {
     ev::user::Charger value;
     value.chargerId = chargerId;
@@ -138,7 +139,7 @@ ev::user::Charger charger(qint64 chargerId, qint64 stationId)
     value.code = QStringLiteral("C-%1").arg(chargerId);
     value.type = QStringLiteral("fast");
     value.powerKw = 60.0;
-    value.status = QStringLiteral("idle");
+    value.status = std::move(status);
     value.chargeCount = 1;
     value.totalDurationSec = 120;
     value.updatedAt = QStringLiteral("2026-09-01T08:30:45+08:00");
@@ -182,6 +183,7 @@ private slots:
     void routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess();
     void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
     void resourceAndPageContractsRemainFixedAndDisplayPredictionStates();
+    void nearbyChargerButtonsLocalizeEveryWireStatus();
     void nearbySelectionCarriesOriginStationAndChargerWithoutMutation();
 };
 
@@ -441,6 +443,43 @@ void TencentMapClientTest::resourceAndPageContractsRemainFixedAndDisplayPredicti
     QVERIFY(stale.contains(QStringLiteral("1小时")));
     QVERIFY(stale.contains(QStringLiteral("2")));
     QVERIFY(stale.contains(QStringLiteral("已过期")));
+}
+
+void TencentMapClientTest::nearbyChargerButtonsLocalizeEveryWireStatus()
+{
+    NearbyPage page(nullptr, nullptr);
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    ev::user::Station chosenStation = station(2, false, 1.2);
+    chosenStation.chargerCount = 6;
+    chosenStation.idleCount = 1;
+    page.displayStations({origin, {chosenStation}});
+
+    const QList<QPair<QString, QString>> expectedLabels{
+        {QStringLiteral("idle"), QStringLiteral("空闲")},
+        {QStringLiteral("reserved"), QStringLiteral("已预约")},
+        {QStringLiteral("charging"), QStringLiteral("充电中")},
+        {QStringLiteral("fault"), QStringLiteral("故障")},
+        {QStringLiteral("restarting"), QStringLiteral("重启中")},
+        {QStringLiteral("unexpected"), QStringLiteral("状态未知")},
+    };
+    QVector<ev::user::Charger> chargers;
+    for (qsizetype index = 0; index < expectedLabels.size(); ++index) {
+        chargers.append(charger(30 + index, chosenStation.stationId,
+                                expectedLabels.at(index).first));
+    }
+    page.displayStationDetail({chosenStation, chargers});
+
+    for (qsizetype index = 0; index < expectedLabels.size(); ++index) {
+        const auto *button = page.findChild<QPushButton *>(
+            QStringLiteral("chargerButton_%1").arg(30 + index));
+        QVERIFY(button != nullptr);
+        QVERIFY2(button->text().contains(expectedLabels.at(index).second),
+                 qPrintable(button->text()));
+        for (const auto &wireAndLabel : expectedLabels) {
+            QVERIFY2(!button->text().contains(wireAndLabel.first),
+                     qPrintable(button->text()));
+        }
+    }
 }
 
 void TencentMapClientTest::nearbySelectionCarriesOriginStationAndChargerWithoutMutation()

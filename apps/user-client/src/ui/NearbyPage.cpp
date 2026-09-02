@@ -36,6 +36,26 @@ QString congestionText(const QString &level)
     return QStringLiteral("低");
 }
 
+QString chargerStatusText(const QString &status)
+{
+    if (status == QStringLiteral("idle")) {
+        return QStringLiteral("空闲");
+    }
+    if (status == QStringLiteral("reserved")) {
+        return QStringLiteral("已预约");
+    }
+    if (status == QStringLiteral("charging")) {
+        return QStringLiteral("充电中");
+    }
+    if (status == QStringLiteral("fault")) {
+        return QStringLiteral("故障");
+    }
+    if (status == QStringLiteral("restarting")) {
+        return QStringLiteral("重启中");
+    }
+    return QStringLiteral("状态未知");
+}
+
 } // namespace
 
 NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *parent)
@@ -246,7 +266,7 @@ void NearbyPage::displayStationDetail(ev::user::StationDetailResult result)
                 .arg(charger.code,
                      charger.type == QStringLiteral("fast") ? QStringLiteral("快充") : QStringLiteral("慢充"))
                 .arg(charger.powerKw, 0, 'f', 1)
-                .arg(charger.status), this);
+                .arg(chargerStatusText(charger.status)), this);
         button->setObjectName(QStringLiteral("chargerButton_%1").arg(charger.chargerId));
         connect(button, &QPushButton::clicked, this, [this, selectionOrigin, station = result.station, charger] {
             if (selectionOrigin.has_value()) {
