@@ -3,6 +3,7 @@
 #include "net/TcpJsonClient.h"
 #include "net/TencentMapClient.h"
 #include "services/UserApi.h"
+#include "ui/ChargePage.h"
 #include "ui/LoginPage.h"
 #include "ui/NavigationPage.h"
 #include "ui/NearbyPage.h"
@@ -60,8 +61,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     loginPage_ = new LoginPage(pages_);
     nearbyPage_ = new NearbyPage(userApi_, mapClient_, pages_);
     profilePage_ = new ProfilePage(userApi_, pages_);
-    chargePage_ = new QLabel(QStringLiteral("当前充电订单"), pages_);
-    chargePage_->setObjectName(QStringLiteral("chargePage"));
+    chargePage_ = new ChargePage(userApi_, pages_);
     pages_->addWidget(loginPage_);
     pages_->addWidget(nearbyPage_);
     pages_->addWidget(profilePage_);
@@ -73,34 +73,115 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     connect(userApi_, &UserApi::loginPendingChanged, loginPage_, &LoginPage::setPending);
     connect(userApi_, &UserApi::connectionChanged, loginPage_, &LoginPage::setConnectionAvailable);
     connect(userApi_, &UserApi::connectionChanged, nearbyPage_, &NearbyPage::setConnectionAvailable);
+    connect(userApi_, &UserApi::connectionChanged, chargePage_, &ChargePage::setConnectionAvailable);
     connect(userApi_, &UserApi::requestFailed, this, [this](const ev::user::ApiError &error) {
         if (pages_->currentWidget() == loginPage_) {
             loginPage_->setError(error.message);
         }
     });
     connect(userApi_, &UserApi::loginSucceeded, this, [this](const ev::user::User &) {
-        userApi_->loadCurrentOrder();
+        rememberedSelection_.reset();
+        guardContext_ = userApi_->loadCurrentOrder(
+            0, 0, ev::user::ChargeOperation::Guard);
     });
-    connect(userApi_, &UserApi::currentOrderLoaded, this, [this](const ev::user::CurrentOrderResult &result) {
+    connect(userApi_, &UserApi::currentOrderLoaded, this,
+            [this](const ev::user::RequestContext &context,
+                   const ev::user::CurrentOrderResult &result) {
+        if (!guardContext_.has_value() || context != *guardContext_) {
+            return;
+        }
+        guardContext_.reset();
         hasActiveOrder_ = result.order.has_value();
         nearbyNavigationButton_->setEnabled(!hasActiveOrder_);
         currentOrderNavigationButton_->setVisible(hasActiveOrder_);
         authenticatedNavigation_->setVisible(true);
-        pages_->setCurrentWidget(hasActiveOrder_ ? chargePage_ : nearbyPage_);
+        if (result.order.has_value()) {
+            std::optional<ev::user::StationSelection> matching;
+            if (rememberedSelection_.has_value()
+                && rememberedSelection_->station.stationId == result.order->stationId
+                && rememberedSelection_->charger.chargerId == result.order->chargerId) {
+                matching = rememberedSelection_;
+            } else {
+                rememberedSelection_.reset();
+            }
+            chargePage_->enterGuardOrder(*result.order, matching);
+        }
+        if (hasActiveOrder_) {
+            pages_->setCurrentWidget(chargePage_);
+        } else {
+            pages_->setCurrentWidget(nearbyPage_);
+        }
+    });
+    connect(userApi_, &UserApi::chargeRequestFailed, this,
+            [this](const ev::user::RequestContext &context,
+                   const ev::user::ApiError &, bool) {
+        if (!guardContext_.has_value() || context != *guardContext_) {
+            return;
+        }
+        guardContext_.reset();
+        hasActiveOrder_ = false;
+        authenticatedNavigation_->setVisible(false);
+        pages_->setCurrentWidget(loginPage_);
+        loginPage_->setError(QStringLiteral("当前订单加载失败，请重新登录"));
     });
     connect(nearbyNavigationButton_, &QPushButton::clicked, this, [this] {
         if (!hasActiveOrder_) {
+            if (pages_->currentWidget() == chargePage_) {
+                chargePage_->leavePage();
+            }
             pages_->setCurrentWidget(nearbyPage_);
         }
     });
     connect(currentOrderNavigationButton_, &QPushButton::clicked, this, [this] {
         if (hasActiveOrder_) {
+            chargePage_->resume();
             pages_->setCurrentWidget(chargePage_);
         }
     });
     connect(profileNavigationButton_, &QPushButton::clicked, this, [this] {
+        if (pages_->currentWidget() == chargePage_) {
+            chargePage_->leavePage();
+        }
         pages_->setCurrentWidget(profilePage_);
         profilePage_->refresh();
+    });
+    connect(nearbyPage_, &NearbyPage::chargerSelected, this,
+            [this](const ev::user::StationSelection &selection) {
+        if (hasActiveOrder_) {
+            return;
+        }
+        rememberedSelection_ = selection;
+        chargePage_->enterSelection(selection);
+        pages_->setCurrentWidget(chargePage_);
+    });
+    connect(chargePage_, &ChargePage::nearbyRefreshRequested,
+            nearbyPage_, &NearbyPage::refreshAfterCharge);
+    connect(chargePage_, &ChargePage::backRequested, this, [this] {
+        hasActiveOrder_ = false;
+        rememberedSelection_.reset();
+        nearbyNavigationButton_->setEnabled(true);
+        currentOrderNavigationButton_->setVisible(false);
+        pages_->setCurrentWidget(nearbyPage_);
+    });
+    connect(chargePage_, &ChargePage::activeOrderResolved, this, [this](bool active) {
+        hasActiveOrder_ = active;
+        nearbyNavigationButton_->setEnabled(!active);
+        currentOrderNavigationButton_->setVisible(active);
+    });
+    connect(userApi_, &UserApi::chargeOrderChanged, this,
+            [this](const ev::user::RequestContext &, const ev::user::Order &order) {
+        if (order.status == QStringLiteral("reserved")
+            || order.status == QStringLiteral("charging")) {
+            hasActiveOrder_ = true;
+            nearbyNavigationButton_->setEnabled(false);
+            currentOrderNavigationButton_->setVisible(true);
+        }
+    });
+    connect(userApi_, &UserApi::chargeSettled, this,
+            [this](const ev::user::RequestContext &, const ev::user::Order &, qint64) {
+        hasActiveOrder_ = true;
+        nearbyNavigationButton_->setEnabled(false);
+        currentOrderNavigationButton_->setVisible(true);
     });
     connect(nearbyPage_, &NearbyPage::navigationRequested, this,
             [this](ev::user::GeoPoint origin, ev::user::Station station) {

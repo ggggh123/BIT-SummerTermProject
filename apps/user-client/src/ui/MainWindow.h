@@ -1,8 +1,11 @@
 #pragma once
 
 #include "app/UserAppConfig.h"
+#include "domain/Models.h"
 
 #include <QMainWindow>
+
+#include <optional>
 
 class MainWindow final : public QMainWindow {
 public:
@@ -21,7 +24,9 @@ private:
     class QPushButton *nearbyNavigationButton_;
     class QPushButton *currentOrderNavigationButton_;
     class QPushButton *profileNavigationButton_;
-    QWidget *chargePage_;
+    class ChargePage *chargePage_;
     QString mapKey_;
     bool hasActiveOrder_ = false;
+    std::optional<ev::user::StationSelection> rememberedSelection_;
+    std::optional<ev::user::RequestContext> guardContext_;
 };

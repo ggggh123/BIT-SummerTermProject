@@ -323,14 +323,14 @@ void UserApiTest::currentOrderUsesOwnedTokenAndRequiresActiveOrderShape()
     QTcpSocket *peer = server.nextPendingConnection();
     UserApi api(&client);
     QSignalSpy orders(&api, &UserApi::currentOrderLoaded);
-    QSignalSpy failures(&api, &UserApi::requestFailed);
+    QSignalSpy failures(&api, &UserApi::chargeRequestFailed);
 
     api.loginByPhone(QString::fromLatin1(kMobile));
     const auto login = takeRequest(peer);
     reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("token"), QStringLiteral("owned-token")}, {QStringLiteral("user"), userObject()}});
     QTRY_VERIFY(api.sessionUser().has_value());
-    api.loadCurrentOrder();
+    (void)api.loadCurrentOrder();
     const auto badOrder = takeRequest(peer);
     QCOMPARE(badOrder.action, QStringLiteral("order.current"));
     QCOMPARE(badOrder.token, QStringLiteral("owned-token"));
@@ -338,13 +338,13 @@ void UserApiTest::currentOrderUsesOwnedTokenAndRequiresActiveOrderShape()
     reply(peer, badOrder.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("completed"))}});
     QTRY_COMPARE(failures.size(), 1);
-    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code, QStringLiteral("INVALID_RESPONSE"));
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(1)).code, QStringLiteral("INVALID_RESPONSE"));
 
-    api.loadCurrentOrder();
+    (void)api.loadCurrentOrder();
     const auto nullOrder = takeRequest(peer);
     reply(peer, nullOrder.requestId, true, QStringLiteral("OK"), QString(), QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
     QTRY_COMPARE(orders.size(), 1);
-    QVERIFY(!qvariant_cast<ev::user::CurrentOrderResult>(orders.takeFirst().at(0)).order.has_value());
+    QVERIFY(!qvariant_cast<ev::user::CurrentOrderResult>(orders.takeFirst().at(1)).order.has_value());
 }
 
 void UserApiTest::decoderAcceptsMaxSafeIntegerAndRejectsTwoToThe53()
@@ -363,6 +363,7 @@ void UserApiTest::decoderAcceptsMaxSafeIntegerAndRejectsTwoToThe53()
     QSignalSpy logins(&api, &UserApi::loginSucceeded);
     QSignalSpy orders(&api, &UserApi::currentOrderLoaded);
     QSignalSpy failures(&api, &UserApi::requestFailed);
+    QSignalSpy orderFailures(&api, &UserApi::chargeRequestFailed);
 
     QJsonObject maximumUser = userObject();
     maximumUser.insert(QStringLiteral("userId"), static_cast<double>(maxSafeInteger));
@@ -381,12 +382,12 @@ void UserApiTest::decoderAcceptsMaxSafeIntegerAndRejectsTwoToThe53()
     maximumOrder.insert(QStringLiteral("stationId"), static_cast<double>(maxSafeInteger));
     maximumOrder.insert(QStringLiteral("amountFen"), static_cast<double>(maxSafeInteger));
     maximumOrder.insert(QStringLiteral("elapsedSec"), static_cast<double>(maxSafeInteger));
-    api.loadCurrentOrder();
+    (void)api.loadCurrentOrder();
     const auto maximumOrderRequest = takeRequest(peer);
     reply(peer, maximumOrderRequest.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), maximumOrder}});
     QTRY_COMPARE(orders.size(), 1);
-    const auto maximumResult = qvariant_cast<ev::user::CurrentOrderResult>(orders.takeFirst().at(0));
+    const auto maximumResult = qvariant_cast<ev::user::CurrentOrderResult>(orders.takeFirst().at(1));
     QVERIFY(maximumResult.order.has_value());
     QCOMPARE(maximumResult.order->orderId, maxSafeInteger);
     QCOMPARE(maximumResult.order->amountFen, maxSafeInteger);
@@ -394,12 +395,12 @@ void UserApiTest::decoderAcceptsMaxSafeIntegerAndRejectsTwoToThe53()
 
     QJsonObject oversizedAmountOrder = orderObject();
     oversizedAmountOrder.insert(QStringLiteral("amountFen"), twoToThe53);
-    api.loadCurrentOrder();
+    (void)api.loadCurrentOrder();
     const auto oversizedAmountRequest = takeRequest(peer);
     reply(peer, oversizedAmountRequest.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), oversizedAmountOrder}});
-    QTRY_COMPARE(failures.size(), 1);
-    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code, QStringLiteral("INVALID_RESPONSE"));
+    QTRY_COMPARE(orderFailures.size(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(orderFailures.takeFirst().at(1)).code, QStringLiteral("INVALID_RESPONSE"));
 
     QJsonObject oversizedUser = userObject();
     oversizedUser.insert(QStringLiteral("userId"), twoToThe53);
@@ -428,12 +429,12 @@ void UserApiTest::nullableOrderTimestampsDecodeAsEmptyStrings()
     reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("token"), QStringLiteral("nullable-token")}, {QStringLiteral("user"), userObject()}});
     QTRY_VERIFY(api.sessionUser().has_value());
-    api.loadCurrentOrder();
+    (void)api.loadCurrentOrder();
     const auto currentOrder = takeRequest(peer);
     reply(peer, currentOrder.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
     QTRY_COMPARE(orders.size(), 1);
-    const auto result = qvariant_cast<ev::user::CurrentOrderResult>(orders.takeFirst().at(0));
+    const auto result = qvariant_cast<ev::user::CurrentOrderResult>(orders.takeFirst().at(1));
     QVERIFY(result.order.has_value());
     QVERIFY(result.order->startedAt.isEmpty());
     QVERIFY(result.order->endedAt.isEmpty());
@@ -529,6 +530,14 @@ void UserApiTest::activeOrderGuardSurvivesProfileNavigation()
     QVERIFY(profileNavigation != nullptr);
     QVERIFY(currentOrderNavigation != nullptr);
     QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("chargePage"));
+    const auto associatedFacts = takeRequest(peer);
+    QCOMPARE(associatedFacts.action, QStringLiteral("station.detail"));
+    reply(peer, associatedFacts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                      {QStringLiteral("chargers"), QJsonArray{
+                           chargerObject(7, 3, QStringLiteral("charging")),
+                           chargerObject(8, 3), chargerObject(9, 3),
+                           chargerObject(10, 3, QStringLiteral("fault"))}}});
     QVERIFY(!nearbyNavigation->isEnabled());
     QVERIFY(currentOrderNavigation->isVisible());
     QVERIFY(currentOrderNavigation->isEnabled());
@@ -1162,7 +1171,7 @@ void UserApiTest::profileActionsUseOwnedSessionAndAuthoritativeResponses()
     QTcpSocket *peer = server.nextPendingConnection();
     QVERIFY(peer != nullptr);
     UserApi api(&client);
-    QSignalSpy profileChanged(&api, &UserApi::profileUserChanged);
+    QSignalSpy profileChanged(&api, &UserApi::sessionUserApplied);
     QSignalSpy mutationPending(&api, &UserApi::profileMutationPendingChanged);
 
     api.loginByPhone(QString::fromLatin1(kMobile));
@@ -1171,6 +1180,7 @@ void UserApiTest::profileActionsUseOwnedSessionAndAuthoritativeResponses()
           QJsonObject{{QStringLiteral("token"), QStringLiteral("profile-token")},
                       {QStringLiteral("user"), userObject()}});
     QTRY_VERIFY(api.sessionUser().has_value());
+    profileChanged.clear();
     mutationPending.clear();
 
     const QString getId = api.loadProfile();
@@ -1395,7 +1405,7 @@ void UserApiTest::profileCorrelationDropsUnknownResponseIds()
     QTcpSocket *peer = server.nextPendingConnection();
     QVERIFY(peer != nullptr);
     UserApi api(&client);
-    QSignalSpy changed(&api, &UserApi::profileUserChanged);
+    QSignalSpy changed(&api, &UserApi::sessionUserApplied);
 
     api.loginByPhone(QString::fromLatin1(kMobile));
     const auto login = takeRequest(peer);
@@ -1403,6 +1413,7 @@ void UserApiTest::profileCorrelationDropsUnknownResponseIds()
           QJsonObject{{QStringLiteral("token"), QStringLiteral("correlation-token")},
                       {QStringLiteral("user"), userObject()}});
     QTRY_VERIFY(api.sessionUser().has_value());
+    changed.clear();
 
     const QString profileId = api.loadProfile();
     const auto profile = takeRequest(peer);
@@ -1467,8 +1478,9 @@ void UserApiTest::uncertainRechargeReconcilesAfterReconnectWithoutReplay()
     QJsonObject reconciledUser = userObject();
     reconciledUser.insert(QStringLiteral("balanceFen"), 13579);
     QString rechargeAttemptBeforeReconciledSignal;
-    connect(&api, &UserApi::profileUserChanged, &api,
-            [&api, &rechargeAttemptBeforeReconciledSignal](const ev::user::User &) {
+    connect(&api, &UserApi::sessionUserApplied, &api,
+            [&api, &rechargeAttemptBeforeReconciledSignal](const ev::user::User &,
+                                                            quint64, quint64) {
         rechargeAttemptBeforeReconciledSignal = api.rechargeWallet(QStringLiteral("1.00"));
     });
     reply(reconnectedPeer, reconcile.requestId, true, QStringLiteral("OK"), QString(),

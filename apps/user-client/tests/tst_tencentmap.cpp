@@ -505,6 +505,12 @@ void TencentMapClientTest::nearbySelectionCarriesOriginStationAndChargerWithoutM
     QCOMPARE(selection.origin.latitude, origin.latitude);
     QCOMPARE(selection.station.stationId, qint64{2});
     QCOMPARE(selection.charger.chargerId, qint64{21});
+    QVERIFY(selection.selectionGeneration > 0);
+    chargerButton->click();
+    QCOMPARE(selected.size(), 1);
+    const auto nextSelection =
+        qvariant_cast<ev::user::StationSelection>(selected.takeFirst().at(0));
+    QVERIFY(nextSelection.selectionGeneration > selection.selectionGeneration);
     navigateButton->click();
     QCOMPARE(navigation.size(), 1);
     QCOMPARE(qvariant_cast<ev::user::GeoPoint>(navigation.first().at(0)).longitude, origin.longitude);

@@ -11,6 +11,7 @@ add_library(ev_user_client_core STATIC
     src/net/TcpJsonClient.cpp
     src/net/TencentMapClient.cpp
     src/services/UserApi.cpp
+    src/ui/ChargePage.cpp
     src/ui/LoginPage.cpp
     src/ui/MainWindow.cpp
     src/ui/NavigationPage.cpp
@@ -54,3 +55,8 @@ target_link_libraries(tst_user_tencentmap PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_tencentmap COMMAND tst_user_tencentmap)
 set_tests_properties(user_tencentmap PROPERTIES ENVIRONMENT
     "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_DISABLE_SANDBOX=1")
+
+add_executable(tst_user_chargepage tests/tst_chargepage.cpp resources/resources.qrc)
+target_link_libraries(tst_user_chargepage PRIVATE ev_user_client_core Qt6::Test)
+add_test(NAME user_chargepage COMMAND tst_user_chargepage)
+set_tests_properties(user_chargepage PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

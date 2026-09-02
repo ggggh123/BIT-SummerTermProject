@@ -19,7 +19,21 @@ public:
     explicit UserApi(TcpJsonClient *client, QObject *parent = nullptr);
 
     void loginByPhone(const QString &mobile);
-    void loadCurrentOrder();
+    [[nodiscard]] ev::user::RequestContext loadCurrentOrder(
+        quint64 pageGeneration = 0, quint64 selectionGeneration = 0,
+        ev::user::ChargeOperation operation = ev::user::ChargeOperation::Guard);
+    [[nodiscard]] ev::user::RequestContext reserveCharger(
+        qint64 chargerId, quint64 pageGeneration, quint64 selectionGeneration);
+    [[nodiscard]] ev::user::RequestContext startCharging(
+        qint64 orderId, quint64 pageGeneration, quint64 selectionGeneration);
+    [[nodiscard]] ev::user::RequestContext stopCharging(
+        qint64 orderId, quint64 pageGeneration, quint64 selectionGeneration);
+    [[nodiscard]] ev::user::RequestContext settleCharging(
+        qint64 orderId, quint64 pageGeneration, quint64 selectionGeneration);
+    [[nodiscard]] ev::user::RequestContext cancelOrder(
+        qint64 orderId, quint64 pageGeneration, quint64 selectionGeneration);
+    [[nodiscard]] quint64 invalidateChargeReads();
+    [[nodiscard]] quint64 currentChargeReadEpoch() const;
     [[nodiscard]] QString loadNearbyStations(const ev::user::GeoPoint &origin);
     [[nodiscard]] QString loadStationDetail(qint64 stationId);
     [[nodiscard]] QString loadLatestForecast(const QString &stationListRequestId);
@@ -31,11 +45,17 @@ public:
 
 signals:
     void loginSucceeded(ev::user::User user);
-    void currentOrderLoaded(ev::user::CurrentOrderResult result);
+    void currentOrderLoaded(ev::user::RequestContext context,
+                            ev::user::CurrentOrderResult result);
+    void chargeOrderChanged(ev::user::RequestContext context, ev::user::Order order);
+    void chargeSettled(ev::user::RequestContext context, ev::user::Order order,
+                       qint64 balanceFen);
+    void chargeRequestFailed(ev::user::RequestContext context, ev::user::ApiError error,
+                             bool uncertain);
     void nearbyStationsLoaded(QString requestId, ev::user::StationListResult result);
     void stationDetailLoaded(QString requestId, ev::user::StationDetailResult result);
     void latestForecastLoaded(QString requestId, ev::user::ForecastLatestResult result);
-    void profileUserChanged(ev::user::User user);
+    void sessionUserApplied(ev::user::User user, quint64 sessionGeneration, quint64 revision);
     void profileReadPendingChanged(bool pending);
     void profileMutationPendingChanged(bool pending);
     void profileRequestFailed(ev::user::ApiError error);
@@ -48,13 +68,18 @@ signals:
 private:
     enum class Operation {
         Login,
-        CurrentOrder,
         NearbyStations,
         StationDetail,
         LatestForecast,
         ProfileGet,
         ProfileUpdate,
         ProfileRecharge,
+        ChargeCurrent,
+        ChargeReserve,
+        ChargeStart,
+        ChargeStop,
+        ChargeSettle,
+        ChargeCancel,
     };
 
     struct PendingOperation {
@@ -64,12 +89,24 @@ private:
         qint64 stationId = 0;
         QHash<qint64, qint64> forecastStationCounts;
         bool reconciliation = false;
+        quint64 userRevision = 0;
+        std::optional<ev::user::RequestContext> chargeContext;
+        qint64 expectedEntityId = 0;
     };
 
     [[nodiscard]] QString loadProfile(bool reconciliation);
     [[nodiscard]] bool profileOperationPending() const;
     static bool isProfileOperation(Operation operation);
     static bool isProfileMutation(Operation operation);
+    static bool isChargeOperation(Operation operation);
+    static bool isChargeMutation(Operation operation);
+    [[nodiscard]] ev::user::RequestContext sendChargeRequest(
+        Operation operation, ev::user::ChargeOperation publicOperation, const QString &action,
+        const QJsonObject &payload, qint64 expectedEntityId, quint64 pageGeneration,
+        quint64 selectionGeneration);
+    void finishChargeFailure(const PendingOperation &pending, const QString &requestId,
+                             const QString &code, const QString &message, bool uncertain);
+    void applySessionUser(ev::user::User user);
     void finishProfileOperation(Operation operation);
     void markProfileUncertain();
     void handleConnectionState(bool connected);
@@ -83,6 +120,8 @@ private:
     TcpJsonClient *client_;
     QHash<QString, PendingOperation> pendingOperations_;
     quint64 sessionGeneration_ = 0;
+    quint64 userRevision_ = 0;
+    quint64 chargeReadEpoch_ = 0;
     std::optional<ev::user::User> user_;
     QHash<QString, QHash<qint64, qint64>> stationSnapshots_;
     QString token_;

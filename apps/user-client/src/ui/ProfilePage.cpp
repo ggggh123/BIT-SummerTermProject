@@ -104,7 +104,8 @@ ProfilePage::ProfilePage(UserApi *api, QWidget *parent)
     connect(retryButton_, &QPushButton::clicked, this, [this] {
         refresh();
     });
-    connect(api_, &UserApi::profileUserChanged, this, [this](const ev::user::User &user) {
+    connect(api_, &UserApi::sessionUserApplied, this,
+            [this](const ev::user::User &user, quint64, quint64) {
         displayUser(user);
         hasUser_ = true;
         if (!reconciliationRequired_) {

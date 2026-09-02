@@ -89,9 +89,10 @@ struct StationSelection final {
     GeoPoint origin;
     Station station;
     Charger charger;
+    quint64 selectionGeneration = 0;
 };
 
-struct CurrentOrder final {
+struct Order final {
     qint64 orderId = 0;
     qint64 userId = 0;
     qint64 chargerId = 0;
@@ -107,23 +108,48 @@ struct CurrentOrder final {
     qint64 elapsedSec = 0;
 };
 
+using CurrentOrder = Order;
+
 struct CurrentOrderResult final {
-    std::optional<CurrentOrder> order;
+    std::optional<Order> order;
 };
 
-struct HistoryOrder final {
-    qint64 orderId = 0;
-    qint64 userId = 0;
-    qint64 chargerId = 0;
-    QString stationName;
-    QString chargerCode;
-    QString status; // reserved | charging | completed | cancelled
-    QString reservedAt;
-    QString startedAt;
-    QString endedAt;
-    double energyKwh = 0.0;
-    qint64 amountFen = 0;
+enum class ChargeOperation {
+    Guard,
+    Poll,
+    Reconcile,
+    Reserve,
+    Start,
+    Stop,
+    Settle,
+    Cancel,
 };
+
+struct RequestContext final {
+    QString requestId;
+    quint64 sessionGeneration = 0;
+    quint64 pageGeneration = 0;
+    quint64 selectionGeneration = 0;
+    ChargeOperation operation = ChargeOperation::Guard;
+    quint64 readEpoch = 0;
+};
+
+inline bool operator==(const RequestContext &left, const RequestContext &right)
+{
+    return left.requestId == right.requestId
+        && left.sessionGeneration == right.sessionGeneration
+        && left.pageGeneration == right.pageGeneration
+        && left.selectionGeneration == right.selectionGeneration
+        && left.operation == right.operation
+        && left.readEpoch == right.readEpoch;
+}
+
+inline bool operator!=(const RequestContext &left, const RequestContext &right)
+{
+    return !(left == right);
+}
+
+using HistoryOrder = Order;
 
 struct ApiError final {
     QString requestId;
@@ -134,8 +160,10 @@ struct ApiError final {
 } // namespace ev::user
 
 Q_DECLARE_METATYPE(ev::user::User)
-Q_DECLARE_METATYPE(ev::user::CurrentOrder)
+Q_DECLARE_METATYPE(ev::user::Order)
 Q_DECLARE_METATYPE(ev::user::CurrentOrderResult)
+Q_DECLARE_METATYPE(ev::user::ChargeOperation)
+Q_DECLARE_METATYPE(ev::user::RequestContext)
 Q_DECLARE_METATYPE(ev::user::ApiError)
 Q_DECLARE_METATYPE(ev::user::GeoPoint)
 Q_DECLARE_METATYPE(ev::user::Station)

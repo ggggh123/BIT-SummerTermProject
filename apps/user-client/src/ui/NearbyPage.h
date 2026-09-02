@@ -23,6 +23,8 @@ public:
 
 public slots:
     void setConnectionAvailable(bool available);
+    void refreshAfterCharge(ev::user::GeoPoint origin, qint64 stationId,
+                            quint64 selectionGeneration);
     void displayStations(ev::user::StationListResult result);
     void displayForecast(ev::user::ForecastLatestResult result);
     void displayStationDetail(ev::user::StationDetailResult result);

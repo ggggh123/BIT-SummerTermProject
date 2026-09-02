@@ -82,11 +82,10 @@ bool validTimestamp(const QJsonValue &value, QString *result)
         return false;
     }
     const QString timestamp = value.toString();
-    const QRegularExpressionMatch match = kTimestampPattern.match(timestamp);
-    if (!match.hasMatch()) {
+    if (!kTimestampPattern.match(timestamp).hasMatch()) {
         return false;
     }
-    const QDateTime dateTime = QDateTime::fromString(match.captured(1) + QStringLiteral("+08:00"), Qt::ISODate);
+    const QDateTime dateTime = QDateTime::fromString(timestamp, Qt::ISODateWithMs);
     if (!dateTime.isValid() || dateTime.offsetFromUtc() != 8 * 60 * 60) {
         return false;
     }
@@ -416,12 +415,8 @@ bool parseUser(const QJsonValue &value, ev::user::User *user)
     return true;
 }
 
-bool parseCurrentOrder(const QJsonValue &value, ev::user::CurrentOrderResult *result)
+bool parseOrder(const QJsonValue &value, ev::user::Order *order)
 {
-    if (value.isNull()) {
-        result->order.reset();
-        return true;
-    }
     if (!value.isObject()) {
         return false;
     }
@@ -429,7 +424,7 @@ bool parseCurrentOrder(const QJsonValue &value, ev::user::CurrentOrderResult *re
     if (!hasExactlyKeys(object, {"orderId", "userId", "chargerId", "stationId", "stationName", "chargerCode", "status", "reservedAt", "startedAt", "endedAt", "energyKwh", "amountFen", "elapsedSec"})) {
         return false;
     }
-    ev::user::CurrentOrder decoded;
+    ev::user::Order decoded;
     if (!positiveInteger(object, "orderId", &decoded.orderId)
         || !positiveInteger(object, "userId", &decoded.userId)
         || !positiveInteger(object, "chargerId", &decoded.chargerId)
@@ -451,15 +446,36 @@ bool parseCurrentOrder(const QJsonValue &value, ev::user::CurrentOrderResult *re
     }
     decoded.energyKwh = energy.toDouble();
     decoded.status = status.toString();
-    if (decoded.status == QStringLiteral("reserved")) {
-        if (!decoded.startedAt.isEmpty() || !decoded.endedAt.isEmpty()) {
-            return false;
-        }
-    } else if (decoded.status == QStringLiteral("charging")) {
-        if (decoded.startedAt.isEmpty()) {
-            return false;
-        }
-    } else {
+    if (!ev::status::isOrder(decoded.status)) {
+        return false;
+    }
+    const bool startedMustBeNull = decoded.status == QStringLiteral("reserved")
+        || decoded.status == QStringLiteral("cancelled");
+    if (startedMustBeNull != decoded.startedAt.isEmpty()) {
+        return false;
+    }
+    if (decoded.status == QStringLiteral("reserved") && !decoded.endedAt.isEmpty()) {
+        return false;
+    }
+    if ((decoded.status == QStringLiteral("completed")
+         || decoded.status == QStringLiteral("cancelled"))
+        && decoded.endedAt.isEmpty()) {
+        return false;
+    }
+    *order = std::move(decoded);
+    return true;
+}
+
+bool parseCurrentOrder(const QJsonValue &value, ev::user::CurrentOrderResult *result)
+{
+    if (value.isNull()) {
+        result->order.reset();
+        return true;
+    }
+    ev::user::Order decoded;
+    if (!parseOrder(value, &decoded)
+        || (decoded.status != QStringLiteral("reserved")
+            && decoded.status != QStringLiteral("charging"))) {
         return false;
     }
     result->order = std::move(decoded);
@@ -500,8 +516,10 @@ UserApi::UserApi(TcpJsonClient *client, QObject *parent)
 {
     Q_ASSERT(client_ != nullptr);
     qRegisterMetaType<ev::user::User>();
-    qRegisterMetaType<ev::user::CurrentOrder>();
+    qRegisterMetaType<ev::user::Order>();
     qRegisterMetaType<ev::user::CurrentOrderResult>();
+    qRegisterMetaType<ev::user::ChargeOperation>();
+    qRegisterMetaType<ev::user::RequestContext>();
     qRegisterMetaType<ev::user::ApiError>();
     qRegisterMetaType<ev::user::GeoPoint>();
     qRegisterMetaType<ev::user::Station>();
@@ -517,6 +535,8 @@ UserApi::UserApi(TcpJsonClient *client, QObject *parent)
 void UserApi::loginByPhone(const QString &mobile)
 {
     ++sessionGeneration_;
+    userRevision_ = 0;
+    ++chargeReadEpoch_;
     user_.reset();
     stationSnapshots_.clear();
     token_.clear();
@@ -537,14 +557,81 @@ void UserApi::loginByPhone(const QString &mobile)
     pendingOperations_.insert(requestId, {Operation::Login, sessionGeneration_});
 }
 
-void UserApi::loadCurrentOrder()
+ev::user::RequestContext UserApi::loadCurrentOrder(
+    quint64 pageGeneration, quint64 selectionGeneration,
+    ev::user::ChargeOperation operation)
 {
+    ev::user::RequestContext context;
+    context.sessionGeneration = sessionGeneration_;
+    context.pageGeneration = pageGeneration;
+    context.selectionGeneration = selectionGeneration;
+    context.operation = operation;
+    context.readEpoch = chargeReadEpoch_;
     if (!user_.has_value() || token_.isEmpty()) {
         emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
-        return;
+        return context;
     }
     const QString requestId = client_->send(ev::actions::OrderCurrent, {}, token_);
-    pendingOperations_.insert(requestId, {Operation::CurrentOrder, sessionGeneration_});
+    context.requestId = requestId;
+    PendingOperation pending{Operation::ChargeCurrent, sessionGeneration_};
+    pending.chargeContext = context;
+    pendingOperations_.insert(requestId, std::move(pending));
+    return context;
+}
+
+ev::user::RequestContext UserApi::reserveCharger(
+    qint64 chargerId, quint64 pageGeneration, quint64 selectionGeneration)
+{
+    return sendChargeRequest(
+        Operation::ChargeReserve, ev::user::ChargeOperation::Reserve,
+        ev::actions::ChargeReserve, QJsonObject{{QStringLiteral("chargerId"), chargerId}},
+        chargerId, pageGeneration, selectionGeneration);
+}
+
+ev::user::RequestContext UserApi::startCharging(
+    qint64 orderId, quint64 pageGeneration, quint64 selectionGeneration)
+{
+    return sendChargeRequest(
+        Operation::ChargeStart, ev::user::ChargeOperation::Start,
+        ev::actions::ChargeStart, QJsonObject{{QStringLiteral("orderId"), orderId}},
+        orderId, pageGeneration, selectionGeneration);
+}
+
+ev::user::RequestContext UserApi::stopCharging(
+    qint64 orderId, quint64 pageGeneration, quint64 selectionGeneration)
+{
+    return sendChargeRequest(
+        Operation::ChargeStop, ev::user::ChargeOperation::Stop,
+        ev::actions::ChargeStop, QJsonObject{{QStringLiteral("orderId"), orderId}},
+        orderId, pageGeneration, selectionGeneration);
+}
+
+ev::user::RequestContext UserApi::settleCharging(
+    qint64 orderId, quint64 pageGeneration, quint64 selectionGeneration)
+{
+    return sendChargeRequest(
+        Operation::ChargeSettle, ev::user::ChargeOperation::Settle,
+        ev::actions::ChargeSettle, QJsonObject{{QStringLiteral("orderId"), orderId}},
+        orderId, pageGeneration, selectionGeneration);
+}
+
+ev::user::RequestContext UserApi::cancelOrder(
+    qint64 orderId, quint64 pageGeneration, quint64 selectionGeneration)
+{
+    return sendChargeRequest(
+        Operation::ChargeCancel, ev::user::ChargeOperation::Cancel,
+        ev::actions::OrderCancel, QJsonObject{{QStringLiteral("orderId"), orderId}},
+        orderId, pageGeneration, selectionGeneration);
+}
+
+quint64 UserApi::invalidateChargeReads()
+{
+    return ++chargeReadEpoch_;
+}
+
+quint64 UserApi::currentChargeReadEpoch() const
+{
+    return chargeReadEpoch_;
 }
 
 QString UserApi::loadNearbyStations(const ev::user::GeoPoint &origin)
@@ -619,6 +706,7 @@ QString UserApi::loadProfile(bool reconciliation)
     const QString requestId = client_->send(ev::actions::UserGet, {}, token_);
     PendingOperation pending{Operation::ProfileGet, sessionGeneration_};
     pending.reconciliation = reconciliation;
+    pending.userRevision = userRevision_;
     pendingOperations_.insert(requestId, std::move(pending));
     profileRequestId_ = requestId;
     emit profileReadPendingChanged(true);
@@ -650,7 +738,9 @@ QString UserApi::updateNickname(const QString &nickname)
     const QString requestId = client_->send(
         ev::actions::UserUpdate,
         QJsonObject{{QStringLiteral("nickname"), normalized}}, token_);
-    pendingOperations_.insert(requestId, {Operation::ProfileUpdate, sessionGeneration_});
+    PendingOperation pending{Operation::ProfileUpdate, sessionGeneration_};
+    pending.userRevision = userRevision_;
+    pendingOperations_.insert(requestId, std::move(pending));
     profileRequestId_ = requestId;
     emit profileMutationPendingChanged(true);
     return requestId;
@@ -681,7 +771,9 @@ QString UserApi::rechargeWallet(const QString &amount)
     const QString requestId = client_->send(
         ev::actions::WalletRecharge,
         QJsonObject{{QStringLiteral("amountFen"), *amountFen}}, token_);
-    pendingOperations_.insert(requestId, {Operation::ProfileRecharge, sessionGeneration_});
+    PendingOperation pending{Operation::ProfileRecharge, sessionGeneration_};
+    pending.userRevision = userRevision_;
+    pendingOperations_.insert(requestId, std::move(pending));
     profileRequestId_ = requestId;
     emit profileMutationPendingChanged(true);
     return requestId;
@@ -711,6 +803,64 @@ bool UserApi::isProfileOperation(Operation operation)
 bool UserApi::isProfileMutation(Operation operation)
 {
     return operation == Operation::ProfileUpdate || operation == Operation::ProfileRecharge;
+}
+
+bool UserApi::isChargeOperation(Operation operation)
+{
+    return operation == Operation::ChargeCurrent || operation == Operation::ChargeReserve
+        || operation == Operation::ChargeStart || operation == Operation::ChargeStop
+        || operation == Operation::ChargeSettle || operation == Operation::ChargeCancel;
+}
+
+bool UserApi::isChargeMutation(Operation operation)
+{
+    return isChargeOperation(operation) && operation != Operation::ChargeCurrent;
+}
+
+ev::user::RequestContext UserApi::sendChargeRequest(
+    Operation operation, ev::user::ChargeOperation publicOperation, const QString &action,
+    const QJsonObject &payload, qint64 expectedEntityId, quint64 pageGeneration,
+    quint64 selectionGeneration)
+{
+    ev::user::RequestContext context;
+    context.sessionGeneration = sessionGeneration_;
+    context.pageGeneration = pageGeneration;
+    context.selectionGeneration = selectionGeneration;
+    context.operation = publicOperation;
+    context.readEpoch = chargeReadEpoch_;
+    if (!user_.has_value() || token_.isEmpty()) {
+        emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
+        return context;
+    }
+    if (expectedEntityId <= 0 || expectedEntityId > kMaxSafeInteger) {
+        emitFailure(QString(), QStringLiteral("INVALID_REQUEST"), QStringLiteral("订单或充电桩无效"));
+        return context;
+    }
+    context.requestId = client_->send(action, payload, token_);
+    PendingOperation pending{operation, sessionGeneration_};
+    pending.chargeContext = context;
+    pending.expectedEntityId = expectedEntityId;
+    pendingOperations_.insert(context.requestId, std::move(pending));
+    return context;
+}
+
+void UserApi::finishChargeFailure(const PendingOperation &pending, const QString &requestId,
+                                  const QString &code, const QString &message, bool uncertain)
+{
+    if (!pending.chargeContext.has_value()) {
+        return;
+    }
+    if (isChargeMutation(pending.operation)) {
+        ++chargeReadEpoch_;
+    }
+    emit chargeRequestFailed(*pending.chargeContext, {requestId, code, message}, uncertain);
+}
+
+void UserApi::applySessionUser(ev::user::User user)
+{
+    user_ = std::move(user);
+    ++userRevision_;
+    emit sessionUserApplied(*user_, sessionGeneration_, userRevision_);
 }
 
 void UserApi::finishProfileOperation(Operation operation)
@@ -787,10 +937,13 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
                 invalidProfileResponse();
                 return;
             }
-            user_ = decoded;
+            if (pending.userRevision != userRevision_) {
+                finishProfileOperation(pending.operation);
+                return;
+            }
             const bool reconciled = pending.reconciliation && profileOutcomeUncertain_;
+            applySessionUser(decoded);
             finishProfileOperation(pending.operation);
-            emit profileUserChanged(decoded);
             if (reconciled) {
                 profileOutcomeUncertain_ = false;
                 emit profileReconciled(decoded);
@@ -806,10 +959,109 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
             invalidProfileResponse();
             return;
         }
-        user_->balanceFen = balanceFen;
-        const ev::user::User updated = *user_;
+        if (pending.userRevision != userRevision_) {
+            finishProfileOperation(pending.operation);
+            return;
+        }
+        ev::user::User updated = *user_;
+        updated.balanceFen = balanceFen;
+        applySessionUser(updated);
         finishProfileOperation(pending.operation);
-        emit profileUserChanged(updated);
+        return;
+    }
+    if (isChargeOperation(pending.operation)) {
+        if (!pending.chargeContext.has_value()) {
+            return;
+        }
+        if (pending.chargeContext->readEpoch != chargeReadEpoch_) {
+            return;
+        }
+        if (!response.ok) {
+            if (!validFailure(response)) {
+                finishChargeFailure(pending, response.requestId, kInvalidResponse,
+                                    kInvalidResponseMessage,
+                                    isChargeMutation(pending.operation));
+            } else {
+                finishChargeFailure(pending, response.requestId, response.code,
+                                    response.message, false);
+            }
+            return;
+        }
+        if (response.code != QStringLiteral("OK") || !response.data.isObject()) {
+            finishChargeFailure(pending, response.requestId, kInvalidResponse,
+                                kInvalidResponseMessage,
+                                isChargeMutation(pending.operation));
+            return;
+        }
+        const QJsonObject chargeData = response.data.toObject();
+        if (pending.operation == Operation::ChargeCurrent) {
+            if (!hasExactlyKeys(chargeData, {"order"})) {
+                finishChargeFailure(pending, response.requestId, kInvalidResponse,
+                                    kInvalidResponseMessage, false);
+                return;
+            }
+            ev::user::CurrentOrderResult result;
+            if (!parseCurrentOrder(chargeData.value(QStringLiteral("order")), &result)
+                || (result.order.has_value() && user_.has_value()
+                    && result.order->userId != user_->userId)) {
+                finishChargeFailure(pending, response.requestId, kInvalidResponse,
+                                    kInvalidResponseMessage, false);
+                return;
+            }
+            emit currentOrderLoaded(*pending.chargeContext, result);
+            return;
+        }
+        const bool settle = pending.operation == Operation::ChargeSettle;
+        if ((settle && !hasExactlyKeys(chargeData, {"order", "balanceFen"}))
+            || (!settle && !hasExactlyKeys(chargeData, {"order"}))) {
+            finishChargeFailure(pending, response.requestId, kInvalidResponse,
+                                kInvalidResponseMessage, true);
+            return;
+        }
+        ev::user::Order order;
+        if (!parseOrder(chargeData.value(QStringLiteral("order")), &order)
+            || !user_.has_value() || order.userId != user_->userId) {
+            finishChargeFailure(pending, response.requestId, kInvalidResponse,
+                                kInvalidResponseMessage, true);
+            return;
+        }
+        const bool semanticMatch =
+            (pending.operation == Operation::ChargeReserve
+             && order.chargerId == pending.expectedEntityId
+             && order.status == QStringLiteral("reserved"))
+            || (pending.operation == Operation::ChargeStart
+                && order.orderId == pending.expectedEntityId
+                && order.status == QStringLiteral("charging") && order.endedAt.isEmpty())
+            || (pending.operation == Operation::ChargeStop
+                && order.orderId == pending.expectedEntityId
+                && order.status == QStringLiteral("charging") && !order.endedAt.isEmpty())
+            || (pending.operation == Operation::ChargeSettle
+                && order.orderId == pending.expectedEntityId
+                && order.status == QStringLiteral("completed"))
+            || (pending.operation == Operation::ChargeCancel
+                && order.orderId == pending.expectedEntityId
+                && order.status == QStringLiteral("cancelled"));
+        if (!semanticMatch) {
+            finishChargeFailure(pending, response.requestId, kInvalidResponse,
+                                kInvalidResponseMessage, true);
+            return;
+        }
+        ++chargeReadEpoch_;
+        if (!settle) {
+            emit chargeOrderChanged(*pending.chargeContext, order);
+            return;
+        }
+        qint64 balanceFen = 0;
+        if (!nonnegativeInteger(chargeData, "balanceFen", &balanceFen)) {
+            emit chargeRequestFailed(*pending.chargeContext,
+                                     {response.requestId, kInvalidResponse, kInvalidResponseMessage},
+                                     true);
+            return;
+        }
+        ev::user::User updated = *user_;
+        updated.balanceFen = balanceFen;
+        applySessionUser(updated);
+        emit chargeSettled(*pending.chargeContext, order, balanceFen);
         return;
     }
     if (!response.ok) {
@@ -837,21 +1089,8 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
             return;
         }
         token_ = data.value(QStringLiteral("token")).toString();
-        user_ = user;
+        applySessionUser(user);
         emit loginSucceeded(user);
-        return;
-    }
-    if (pending.operation == Operation::CurrentOrder) {
-        if (!hasExactlyKeys(data, {"order"})) {
-            emitInvalidResponse(response.requestId);
-            return;
-        }
-        ev::user::CurrentOrderResult result;
-        if (!parseCurrentOrder(data.value(QStringLiteral("order")), &result)) {
-            emitInvalidResponse(response.requestId);
-            return;
-        }
-        emit currentOrderLoaded(result);
         return;
     }
     if (pending.operation == Operation::NearbyStations) {
@@ -907,6 +1146,16 @@ void UserApi::handleTransportFailure(const QString &requestId, const QString &co
         }
         finishProfileOperation(pending.operation);
         emitProfileFailure(requestId, code, message);
+        return;
+    }
+    if (isChargeOperation(pending.operation)) {
+        if (!pending.chargeContext.has_value()
+            || pending.chargeContext->readEpoch != chargeReadEpoch_) {
+            return;
+        }
+        const bool uncertain = isChargeMutation(pending.operation)
+            && code != QStringLiteral("NOT_CONNECTED");
+        finishChargeFailure(pending, requestId, code, message, uncertain);
         return;
     }
     emitFailure(requestId, code, message);

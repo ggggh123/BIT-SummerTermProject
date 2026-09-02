@@ -187,6 +187,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
             }
             pendingDetailRequestId_.clear();
             displayedDetailOrigin_ = pendingDetailOrigin_;
+            ++selectionGeneration_;
             displayStationDetail(std::move(result));
             setDetailPending(false);
         });
@@ -231,6 +232,21 @@ void NearbyPage::setConnectionAvailable(bool available)
         : QStringLiteral("服务器连接不可用"));
 }
 
+void NearbyPage::refreshAfterCharge(ev::user::GeoPoint origin, qint64 stationId,
+                                    quint64 selectionGeneration)
+{
+    Q_UNUSED(selectionGeneration);
+    const bool stationStillKnown = std::any_of(
+        stations_.cbegin(), stations_.cend(), [stationId](const ev::user::Station &station) {
+            return station.stationId == stationId;
+        });
+    if (!origin_.has_value() || !stationStillKnown
+        || origin.latitude != origin_->latitude || origin.longitude != origin_->longitude) {
+        return;
+    }
+    requestNearbyStations(origin);
+}
+
 void NearbyPage::displayStations(ev::user::StationListResult result)
 {
     origin_ = result.origin;
@@ -270,7 +286,8 @@ void NearbyPage::displayStationDetail(ev::user::StationDetailResult result)
         button->setObjectName(QStringLiteral("chargerButton_%1").arg(charger.chargerId));
         connect(button, &QPushButton::clicked, this, [this, selectionOrigin, station = result.station, charger] {
             if (selectionOrigin.has_value()) {
-                emit chargerSelected({*selectionOrigin, station, charger});
+                ++selectionGeneration_;
+                emit chargerSelected({*selectionOrigin, station, charger, selectionGeneration_});
             }
         });
         detailLayout_->addWidget(button);
