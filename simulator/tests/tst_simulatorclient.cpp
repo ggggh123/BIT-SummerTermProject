@@ -183,5 +183,5 @@ void SimulatorClientTest::queuesTelemetryWhileDisconnected()
     QCOMPARE(client.queuedSamples(), 200);  // bounded queue, oldest dropped
 }
 
-QTEST_APPLESS_MAIN(SimulatorClientTest)
+QTEST_GUILESS_MAIN(SimulatorClientTest)
 #include "tst_simulatorclient.moc"
