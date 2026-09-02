@@ -1,7 +1,9 @@
-#include "net/TcpJsonClient.h"
 #include "protocol/FrameCodec.h"
 #include "protocol/JsonEnvelope.h"
 
+#include <QHash>
+#include <QObject>
+#include <QString>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QCoreApplication>
@@ -9,6 +11,10 @@
 #include <QTimer>
 #include <QtEndian>
 #include <QtTest>
+
+class TcpJsonClientTest;
+
+#include "net/TcpJsonClient.h"
 
 namespace {
 
@@ -62,6 +68,12 @@ private slots:
     void coalescedResponsesEmitTwoResponses();
     void disconnectMidFrameFailsMutationOnce();
     void oversizedHeaderFailsPendingRequestAsProtocolError();
+    void safeReplayStopsOriginalDeadlineWhileReconnecting();
+    void shortWriteClosesThePoisonedConnection();
+    void disconnectedSendFailsAsynchronouslyWithCorrelationId();
+    void manualDisconnectSuppressesReconnect();
+    void safeReadReplaysAtMostOnce();
+    void reconnectBackoffCapsAndSuccessfulConnectionResetsIt();
 };
 
 void TcpJsonClientTest::requestUsesBigEndianFrameAndV1Envelope()
@@ -185,7 +197,11 @@ void TcpJsonClientTest::disconnectMidFrameFailsMutationOnce()
     QTRY_COMPARE(failures.size(), 1);
     QCOMPARE(failures.front().requestId, requestId);
     QCOMPARE(failures.front().code, QStringLiteral("TRANSPORT_ERROR"));
+    QTRY_VERIFY(server.hasPendingConnections());
+    QTcpSocket *reconnectedPeer = server.nextPendingConnection();
+    QVERIFY(reconnectedPeer != nullptr);
     QTest::qWait(50);
+    QCOMPARE(reconnectedPeer->bytesAvailable(), qint64{0});
     QCOMPARE(failures.size(), 1);
 }
 
@@ -217,6 +233,204 @@ void TcpJsonClientTest::oversizedHeaderFailsPendingRequestAsProtocolError()
     QTRY_COMPARE(failures.size(), 1);
     QCOMPARE(failures.front().requestId, requestId);
     QCOMPARE(failures.front().code, QStringLiteral("PROTOCOL_ERROR"));
+}
+
+void TcpJsonClientTest::safeReplayStopsOriginalDeadlineWhileReconnecting()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::AnyIPv4));
+
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *firstPeer = server.nextPendingConnection();
+    QVERIFY(firstPeer != nullptr);
+
+    struct Failure { QString requestId; QString code; };
+    QList<Failure> failures;
+    connect(&client, &TcpJsonClient::transportFailed, this, [&failures](QString requestId, QString code, QString) {
+        failures.append({std::move(requestId), std::move(code)});
+    });
+
+    const QString requestId = client.send(QStringLiteral("system.health"), {});
+    QTRY_VERIFY(firstPeer->bytesAvailable() > 0);
+    const QByteArray originalFrame = firstPeer->readAll();
+    QVERIFY(!originalFrame.isEmpty());
+
+    auto pending = client.pendingRequests_.find(requestId);
+    QVERIFY(pending != client.pendingRequests_.end());
+    QCOMPARE(pending->timeoutTimer->interval(), 10'000);
+    pending->timeoutTimer->start(30);
+    firstPeer->disconnectFromHost();
+
+    QTest::qWait(100);
+    QCOMPARE(failures.size(), 0);
+
+    QTRY_VERIFY(server.hasPendingConnections());
+    QTcpSocket *replayPeer = server.nextPendingConnection();
+    QVERIFY(replayPeer != nullptr);
+    QTRY_VERIFY(replayPeer->bytesAvailable() == originalFrame.size());
+    QCOMPARE(replayPeer->readAll(), originalFrame);
+
+    pending = client.pendingRequests_.find(requestId);
+    QVERIFY(pending != client.pendingRequests_.end());
+    QVERIFY(pending->timeoutTimer->isActive());
+    QCOMPARE(pending->timeoutTimer->interval(), 10'000);
+    pending->timeoutTimer->start(30);
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(failures.front().requestId, requestId);
+    QCOMPARE(failures.front().code, QStringLiteral("TIMEOUT"));
+}
+
+void TcpJsonClientTest::shortWriteClosesThePoisonedConnection()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::AnyIPv4));
+
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+
+    struct Failure { QString requestId; QString code; };
+    QList<Failure> failures;
+    bool socketClosedWhenFailureWasEmitted = false;
+    connect(&client, &TcpJsonClient::transportFailed, this, [&](QString requestId, QString code, QString) {
+        socketClosedWhenFailureWasEmitted = client.socket_->state() == QAbstractSocket::UnconnectedState;
+        failures.append({std::move(requestId), std::move(code)});
+    });
+
+    client.writeOverrideForTest_ = [](const QByteArray &frame) {
+        return qint64{frame.size() - 1};
+    };
+    const QString requestId = client.send(QStringLiteral("order.create"), QJsonObject{});
+
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(failures.front().requestId, requestId);
+    QCOMPARE(failures.front().code, QStringLiteral("TRANSPORT_ERROR"));
+    QVERIFY(socketClosedWhenFailureWasEmitted);
+    QTRY_COMPARE(client.socket_->state(), QAbstractSocket::UnconnectedState);
+}
+
+void TcpJsonClientTest::disconnectedSendFailsAsynchronouslyWithCorrelationId()
+{
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), 9'999);
+
+    struct Failure { QString requestId; QString code; };
+    QList<Failure> failures;
+    connect(&client, &TcpJsonClient::transportFailed, this, [&failures](QString requestId, QString code, QString) {
+        failures.append({std::move(requestId), std::move(code)});
+    });
+
+    const QString requestId = client.send(QStringLiteral("station.list"), {});
+    QVERIFY(!requestId.isEmpty());
+    QCOMPARE(failures.size(), 0);
+
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(failures.front().requestId, requestId);
+    QCOMPARE(failures.front().code, QStringLiteral("NOT_CONNECTED"));
+}
+
+void TcpJsonClientTest::manualDisconnectSuppressesReconnect()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::AnyIPv4));
+
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+
+    struct Failure { QString requestId; QString code; };
+    QList<Failure> failures;
+    connect(&client, &TcpJsonClient::transportFailed, this, [&failures](QString requestId, QString code, QString) {
+        failures.append({std::move(requestId), std::move(code)});
+    });
+
+    const QString requestId = client.send(QStringLiteral("order.create"), {});
+    QTRY_VERIFY(peer->bytesAvailable() > 0);
+    peer->readAll();
+    client.disconnectFromServer();
+
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(failures.front().requestId, requestId);
+    QCOMPARE(failures.front().code, QStringLiteral("TRANSPORT_ERROR"));
+    QTest::qWait(1'100);
+    QVERIFY(!server.hasPendingConnections());
+}
+
+void TcpJsonClientTest::safeReadReplaysAtMostOnce()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::AnyIPv4));
+
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *firstPeer = server.nextPendingConnection();
+    QVERIFY(firstPeer != nullptr);
+
+    struct Failure { QString requestId; QString code; };
+    QList<Failure> failures;
+    connect(&client, &TcpJsonClient::transportFailed, this, [&failures](QString requestId, QString code, QString) {
+        failures.append({std::move(requestId), std::move(code)});
+    });
+
+    const QString requestId = client.send(QStringLiteral("station.detail"), {});
+    QTRY_VERIFY(firstPeer->bytesAvailable() > 0);
+    const QByteArray initialFrame = firstPeer->readAll();
+    firstPeer->disconnectFromHost();
+
+    QTRY_VERIFY(server.hasPendingConnections());
+    QTcpSocket *replayPeer = server.nextPendingConnection();
+    QVERIFY(replayPeer != nullptr);
+    QTRY_VERIFY(replayPeer->bytesAvailable() == initialFrame.size());
+    QCOMPARE(replayPeer->readAll(), initialFrame);
+    replayPeer->disconnectFromHost();
+
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(failures.front().requestId, requestId);
+    QCOMPARE(failures.front().code, QStringLiteral("TRANSPORT_ERROR"));
+    QTRY_VERIFY(server.hasPendingConnections());
+    QTcpSocket *thirdPeer = server.nextPendingConnection();
+    QVERIFY(thirdPeer != nullptr);
+    QTest::qWait(50);
+    QCOMPARE(thirdPeer->bytesAvailable(), qint64{0});
+}
+
+void TcpJsonClientTest::reconnectBackoffCapsAndSuccessfulConnectionResetsIt()
+{
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), 9'999);
+
+    client.reconnectAttempt_ = 0;
+    client.scheduleReconnect();
+    QCOMPARE(client.reconnectTimer_->interval(), 1'000);
+    QCOMPARE(client.reconnectAttempt_, 1);
+    client.reconnectTimer_->stop();
+
+    client.reconnectAttempt_ = 1;
+    client.scheduleReconnect();
+    QCOMPARE(client.reconnectTimer_->interval(), 2'000);
+    QCOMPARE(client.reconnectAttempt_, 2);
+    client.reconnectTimer_->stop();
+
+    client.reconnectAttempt_ = 2;
+    client.scheduleReconnect();
+    QCOMPARE(client.reconnectTimer_->interval(), 4'000);
+    QCOMPARE(client.reconnectAttempt_, 2);
+    client.reconnectTimer_->stop();
+
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::AnyIPv4));
+    client.reconnectAttempt_ = 2;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QVERIFY(server.nextPendingConnection() != nullptr);
+    QCOMPARE(client.reconnectAttempt_, 0);
 }
 
 int main(int argc, char **argv)

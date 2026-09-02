@@ -7,6 +7,8 @@
 #include <QObject>
 #include <QString>
 
+#include <functional>
+
 class QTcpSocket;
 class QTimer;
 
@@ -28,6 +30,8 @@ signals:
     void connectionChanged(bool connected);
 
 private:
+    friend class TcpJsonClientTest;
+
     struct PendingRequest {
         QString action;
         QByteArray frame;
@@ -57,4 +61,6 @@ private:
     bool manualDisconnect_ = false;
     bool connectionReported_ = false;
     bool lossHandled_ = false;
+    // QTcpSocket normally accepts a complete frame into its write buffer; this seam models a short write.
+    std::function<qint64(const QByteArray &)> writeOverrideForTest_;
 };

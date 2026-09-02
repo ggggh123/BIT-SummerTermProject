@@ -148,8 +148,11 @@ void TcpJsonClient::writeRequest(const QString &requestId)
         return;
     }
 
-    const qint64 bytesWritten = socket_->write(it->frame);
+    const qint64 bytesWritten = writeOverrideForTest_
+        ? writeOverrideForTest_(it->frame)
+        : socket_->write(it->frame);
     if (bytesWritten != it->frame.size()) {
+        socket_->abort();
         failRequest(requestId, kTransportError, QStringLiteral("could not write request frame"));
         return;
     }
@@ -210,6 +213,7 @@ void TcpJsonClient::handleTransportLoss()
             continue;
         }
         if (unexpected && it->written && !it->replayed && isSafeReadAction(it->action)) {
+            it->timeoutTimer->stop();
             it->replayed = true;
             it->written = false;
             it->awaitingReplay = true;
