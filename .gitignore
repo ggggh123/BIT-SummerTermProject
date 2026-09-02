@@ -1,2 +1,22 @@
 # AI 工作数据（未允许勿动工作区）
 .workbuddy/
+
+# 本地临时脚本（一次性工具，永不提交）
+.local-tools/
+
+# Web dashboard local artifacts (generated, never commit)
+dashboard/.vendor-cache/
+dashboard/runtime/
+
+/build/
+/.venv/
+/runtime/
+**/runtime/
+*.user
+*.user.*
+*.db
+*.db-wal
+*.db-shm
+*.log
+config.local.ini
+.env

@@ -1,0 +1,1 @@
+{"requestId":"fixture-health","ok":true,"code":"OK","message":"healthy","data":{"status":"ready","schemaVersion":1,"snapshotVersion":42,"forecastRunId":"forecast-fixture-20260902","serverTime":"2026-09-02T10:30:00+08:00"}}

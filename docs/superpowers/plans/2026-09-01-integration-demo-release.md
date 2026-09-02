@@ -12,6 +12,7 @@
 
 ## Global Constraints
 
+- Run every Python command from the repository root with the globally installed system `python3`; do not create/activate a virtual environment and do not invoke pip. Integration tests use `python3 -m pytest`; shell wrappers invoke the operations controller as `python3 -m ops.democtl`.
 - 2026-09-08 12:00 is feature freeze; 2026-09-09 12:00 is code freeze; 2026-09-10 is demo-only.
 - Reset may replace only validated files below workspace `runtime/`; it must never target a directory or path outside the workspace.
 - Golden artifacts are immutable during a run and verified by SHA-256 before copying.
@@ -64,7 +65,7 @@ def test_bash_syntax(script):
 
 - [ ] **Step 3: Run and verify failure**
 
-Run: `.venv/bin/pytest tests/e2e/test_democtl.py tests/e2e/test_shell_syntax.py -v`
+Run: `python3 -m pytest tests/e2e/test_democtl.py tests/e2e/test_shell_syntax.py -v`
 
 Expected: FAIL because controller/scripts are absent.
 
@@ -83,12 +84,12 @@ Wait for TCP health before simulator/user; wait for HTTP 200 before reporting re
 
 - [ ] **Step 5: Add stable shell wrappers**
 
-Each script resolves workspace root from its own path and executes `.venv/bin/python -m ops.democtl <command>`. No wrapper contains wildcard deletion or unresolved destructive path. `reset_demo.sh` is explicitly labeled **offline reset**; runtime reset is the admin-only `demo.reset` action and uses no file replacement.
+Each script resolves workspace root from its own path and executes `python3 -m ops.democtl <command>`. No wrapper contains wildcard deletion or unresolved destructive path. `reset_demo.sh` is explicitly labeled **offline reset**; runtime reset is the admin-only `demo.reset` action and uses no file replacement.
 
 - [ ] **Step 6: Run and pass, then commit**
 
 ```bash
-.venv/bin/pytest tests/e2e/test_democtl.py tests/e2e/test_shell_syntax.py -v
+python3 -m pytest tests/e2e/test_democtl.py tests/e2e/test_shell_syntax.py -v
 git add ops scripts tests/e2e
 git commit -m "build(demo): add safe reset and process controller"
 ```
@@ -116,7 +117,7 @@ Checks must fail independently for: server TCP unavailable/degraded; simulator/u
 
 - [ ] **Step 3: Run and verify failure**
 
-Run: `.venv/bin/pytest tests/e2e/test_smoke.py tests/e2e/test_snapshot_consistency.py -v`
+Run: `python3 -m pytest tests/e2e/test_smoke.py tests/e2e/test_snapshot_consistency.py -v`
 
 Expected: FAIL.
 
@@ -172,7 +173,7 @@ server disconnect -> user/simulator show disconnected and do not replay mutation
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest tests/e2e/test_degradation.py -v`
+Run: `python3 -m pytest tests/e2e/test_degradation.py -v`
 
 Expected: at least one behavior or test hook is missing.
 
@@ -185,7 +186,7 @@ Support only test/demo configuration flags `DEMO_FORCE_MAP_OFFLINE`, `DEMO_FORCE
 ```bash
 ctest --preset debug -R "user_tencentmap|forecast_snapshot" --output-on-failure
 node --test dashboard/tests/*.test.mjs
-.venv/bin/pytest tests/e2e/test_degradation.py -v
+python3 -m pytest tests/e2e/test_degradation.py -v
 ```
 
 Expected: PASS.
@@ -226,7 +227,7 @@ Assert: charging count increases after start, returns after settlement; balance 
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest tests/e2e/test_rehearsal.py -v`
+Run: `python3 -m pytest tests/e2e/test_rehearsal.py -v`
 
 Expected: FAIL.
 
@@ -311,7 +312,7 @@ Reject: one rehearsal; duplicate run IDs; different commits; any `passed:false`;
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest tests/e2e/test_release_gate.py -v`
+Run: `python3 -m pytest tests/e2e/test_release_gate.py -v`
 
 Expected: FAIL.
 
@@ -328,7 +329,7 @@ release_commit="$(git rev-parse HEAD)"
 cmake --build --preset release
 ctest --preset release --output-on-failure
 node --test dashboard/tests/*.test.mjs
-.venv/bin/pytest database/tests ml/tests tests/e2e -v
+PYTHONPATH=ml/src python3 -m pytest database/tests ml/tests tests/e2e -v
 scripts/rehearse_demo.sh --run-id rehearsal-1 --report runtime/reports/rehearsal-1.json
 scripts/rehearse_demo.sh --run-id rehearsal-2 --report runtime/reports/rehearsal-2.json
 scripts/release_check.sh --commit "$release_commit"
