@@ -12,6 +12,7 @@
 
 ## Global Constraints
 
+- Run every Python command from the repository root with the globally installed system `python3`; do not create/activate a virtual environment, invoke pip, or install the package editable. Every ML test command uses `PYTHONPATH=ml/src python3 -m pytest ...`, and every CLI command uses `PYTHONPATH=ml/src python3 -m evml.cli ...`.
 - Input contains exactly 6 stations × 90 days × 24 hours = 12,960 rows, generated with seed `20260901` and explicit `+08:00` timestamps.
 - The six input station IDs are exactly the database rows with `forecast_enabled=1`; newly created stations are outside v1 model scope and show no forecast.
 - Chronological split is 62 days train, 14 days validation, 14 days test; never randomize rows.
@@ -107,7 +108,7 @@ Also reject duplicate station/hour, timezone-naive timestamp, gaps, nonfinite va
 
 - [ ] **Step 3: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_repository_features.py -v`
+Run: `PYTHONPATH=ml/src python3 -m pytest ml/tests/test_repository_features.py -v`
 
 Expected: `ModuleNotFoundError` or missing functions.
 
@@ -115,13 +116,12 @@ Expected: `ModuleNotFoundError` or missing functions.
 
 CSV columns are `station_id,observed_at,pile_count,rated_power_kw,temperature_c,is_holiday,busy_count,load_kw`. Use timezone-aware pandas timestamps. Build horizons by joining future station/timestamp rows; record `source_max_at` from lag/rolling source timestamps.
 
-- [ ] **Step 5: Install package and pass**
+- [ ] **Step 5: Run through the repository module path and pass**
 
 Run:
 
 ```bash
-.venv/bin/pip install -e ml
-.venv/bin/pytest ml/tests/test_repository_features.py -v
+PYTHONPATH=ml/src python3 -m pytest ml/tests/test_repository_features.py -v
 ```
 
 Expected: PASS with a 62/14/14-day split.
@@ -163,7 +163,7 @@ For a daily repeating fixture, seasonal prediction must equal truth and MAE/WAPE
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_baseline_metrics.py -v`
+Run: `PYTHONPATH=ml/src python3 -m pytest ml/tests/test_baseline_metrics.py -v`
 
 Expected: FAIL.
 
@@ -180,7 +180,7 @@ Use MAE for both targets and WAPE only for load; busy `wape` is `None`.
 
 - [ ] **Step 4: Run and pass**
 
-Run: `.venv/bin/pytest ml/tests/test_baseline_metrics.py -v`
+Run: `PYTHONPATH=ml/src python3 -m pytest ml/tests/test_baseline_metrics.py -v`
 
 Expected: PASS and exactly 6 metric rows per evaluated model.
 
@@ -216,7 +216,7 @@ For an intentionally bad Ridge metric fixture, assert baseline is chosen; for be
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_ridge.py -v`
+Run: `PYTHONPATH=ml/src python3 -m pytest ml/tests/test_ridge.py -v`
 
 Expected: FAIL.
 
@@ -231,7 +231,7 @@ On the fixed generated dataset, require finite metrics and write warnings when l
 - [ ] **Step 5: Run and pass, then commit**
 
 ```bash
-.venv/bin/pytest ml/tests/test_ridge.py -v
+PYTHONPATH=ml/src python3 -m pytest ml/tests/test_ridge.py -v
 git add ml/src/evml/ridge.py ml/tests/test_ridge.py
 git commit -m "feat(ml): train Ridge and select honest champions"
 ```
@@ -265,7 +265,7 @@ Assert one largest consecutive two-hour peak window per station; congestion is l
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_forecast.py -v`
+Run: `PYTHONPATH=ml/src python3 -m pytest ml/tests/test_forecast.py -v`
 
 Expected: FAIL.
 
@@ -280,7 +280,7 @@ Generate horizons in order, using known calendar/simulated temperature and prior
 - [ ] **Step 5: Run and pass, then commit**
 
 ```bash
-.venv/bin/pytest ml/tests/test_forecast.py -v
+PYTHONPATH=ml/src python3 -m pytest ml/tests/test_forecast.py -v
 git add ml/src/evml/forecast.py ml/tests/test_forecast.py
 git commit -m "feat(ml): produce bounded 24-hour station forecasts"
 ```
@@ -302,7 +302,7 @@ git commit -m "feat(ml): produce bounded 24-hour station forecasts"
 Invoke:
 
 ```bash
-.venv/bin/evml run-all \
+PYTHONPATH=ml/src python3 -m evml.cli run-all \
   --history ml/tests/fixtures/station_hourly_history.csv \
   --cutoff 2026-09-01T09:00:00+08:00 \
   --output-dir "$tmp_path"
@@ -312,7 +312,7 @@ Assert exit code 0 and these files exist: `model_load.joblib`, `model_busy.jobli
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_pipeline_cli.py -v`
+Run: `PYTHONPATH=ml/src python3 -m pytest ml/tests/test_pipeline_cli.py -v`
 
 Expected: FAIL because CLI is absent.
 
@@ -325,9 +325,11 @@ run_pipeline(history_path: Path, cutoff: pd.Timestamp,
 
 Write to sibling temp files, flush/fsync and `os.replace`; JSON uses UTF-8, `ensure_ascii=False`, `sort_keys=True`. No call uses current time unless supplied explicitly as `generated_at`. `metrics.json`/`run_summary.json` contain evaluation metrics; `forecast_candidate.json` contains only publishable run metadata and 144 records, not metrics.
 
+`ml/src/evml/cli.py` exposes `main(...)` and ends with a module entry guard equivalent to `if __name__ == "__main__": raise SystemExit(main())`, so the required `python3 -m evml.cli ...` invocation executes the CLI without an installed console script.
+
 - [ ] **Step 4: Run all non-network ML tests**
 
-Run: `.venv/bin/pytest ml/tests -k 'not publisher' -v`
+Run: `PYTHONPATH=ml/src python3 -m pytest ml/tests -k 'not publisher' -v`
 
 Expected: PASS and repeated fixed runs have identical metrics/forecast content.
 
@@ -367,7 +369,7 @@ Fake server returns standard response with `ok:true`, `code:"OK"`, and `data:{ru
 
 - [ ] **Step 3: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_protocol_publisher.py -v`
+Run: `PYTHONPATH=ml/src python3 -m pytest ml/tests/test_protocol_publisher.py -v`
 
 Expected: FAIL.
 
@@ -384,11 +386,11 @@ Use `socket.create_connection`, `sendall`, exact-read loop and three-second time
 - [ ] **Step 5: Run full ML verification and live publish**
 
 ```bash
-.venv/bin/pytest ml/tests -v
-.venv/bin/evml run-all --history runtime/ml/station_hourly_history.csv \
+PYTHONPATH=ml/src python3 -m pytest ml/tests -v
+PYTHONPATH=ml/src python3 -m evml.cli run-all --history runtime/ml/station_hourly_history.csv \
   --cutoff "$DEMO_FORECAST_ORIGIN" --generated-at "$DEMO_MODEL_GENERATED_AT" \
   --output-dir runtime/ml/artifacts
-.venv/bin/evml publish --candidate runtime/ml/artifacts/forecast_candidate.json \
+PYTHONPATH=ml/src python3 -m evml.cli publish --candidate runtime/ml/artifacts/forecast_candidate.json \
   --host 127.0.0.1 --port 9100 --last-good runtime/ml/forecast_last_good.json
 ```
 

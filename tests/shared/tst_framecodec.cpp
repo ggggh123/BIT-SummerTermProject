@@ -19,7 +19,7 @@ void FrameCodecTest::decodesFragmentedAndCoalescedFrames()
     const QByteArray a = ev::protocol::encodeFrame(firstPayload);
     const QByteArray b = ev::protocol::encodeFrame(secondPayload);
 
-    QCOMPARE(decoder.append(QByteArrayView(a).left(2)).size(), 0);
+    QCOMPARE(decoder.append(QByteArrayView(a.constData(), 2)).size(), 0);
     QCOMPARE(decoder.append(a.mid(2) + b),
              QList<QByteArray>({firstPayload, secondPayload}));
 }

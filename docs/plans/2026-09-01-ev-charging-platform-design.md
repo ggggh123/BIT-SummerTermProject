@@ -221,10 +221,11 @@ reserved → cancelled
 - 有活动订单的用户不能创建第二个活动订单。
 - 非 `idle` 桩不能被预约。
 - 只有当前订单用户可以开始、停止和结算。
-- 开始充电将桩设为 `charging`；结算完成后设回 `idle`。
+- 开始充电将桩设为 `charging`；结算完成时仅把当前仍为 `charging` 的桩设回 `idle`，桩已为 `fault|restarting|idle` 时保留原状态。
 - 金额由服务端根据站点单价和累计电量计算，客户端不能提交最终金额。
 - 余额不足时停止继续计费，订单进入待处理显示；用户充值后完成结算。
 - 远程重启用于故障桩，状态依次为 `fault → restarting → idle`。
+- `fault=true` 命中 `reserved` 桩时必须在同一事务取消关联 reserved order；命中 `charging` 桩时必须写入 `endedAt`、冻结金额，order 保持 `charging` 等待结算。重启即使把桩恢复到 `idle`，未结算的 active order 仍阻止新预约；预约必须同时检查桩为 `idle` 且桩上没有 active order。
 
 ## 8. TCP 与数据契约
 

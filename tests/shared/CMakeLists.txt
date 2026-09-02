@@ -1,4 +1,4 @@
-find_package(Qt6 REQUIRED COMPONENTS Test)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Test)
 
 add_executable(tst_contracts tst_contracts.cpp)
 target_link_libraries(tst_contracts PRIVATE Qt6::Test ev_contracts)

@@ -21,10 +21,19 @@ QJsonObject parseObject(QByteArrayView json)
 QString requiredString(const QJsonObject &object, const QString &field)
 {
     const QJsonValue value = object.value(field);
-    if (!value.isString() || value.toString().trimmed().isEmpty()) {
-        throw EnvelopeError(QStringLiteral("INVALID_REQUEST"), field + QStringLiteral(" must be a nonblank string"));
+    if (!value.isString()) {
+        throw EnvelopeError(QStringLiteral("INVALID_REQUEST"), field + QStringLiteral(" must be a string"));
     }
     return value.toString();
+}
+
+QString requiredNonblankString(const QJsonObject &object, const QString &field)
+{
+    const QString value = requiredString(object, field);
+    if (value.trimmed().isEmpty()) {
+        throw EnvelopeError(QStringLiteral("INVALID_REQUEST"), field + QStringLiteral(" must be a nonblank string"));
+    }
+    return value;
 }
 
 } // namespace
@@ -73,7 +82,10 @@ RequestEnvelope parseRequest(QByteArrayView json)
     const QJsonObject object = parseObject(json);
 
     const QJsonValue versionValue = object.value(QStringLiteral("version"));
-    if (!versionValue.isDouble() || versionValue.toInt() != 1) {
+    if (!versionValue.isDouble()) {
+        throw EnvelopeError(QStringLiteral("INVALID_REQUEST"), QStringLiteral("version must be a number"));
+    }
+    if (versionValue.toDouble() != 1.0) {
         throw EnvelopeError(QStringLiteral("UNSUPPORTED_VERSION"), QStringLiteral("version must be 1"));
     }
 
@@ -93,8 +105,8 @@ RequestEnvelope parseRequest(QByteArrayView json)
 
     return {
         versionValue.toInt(),
-        requiredString(object, QStringLiteral("requestId")),
-        requiredString(object, QStringLiteral("action")),
+        requiredNonblankString(object, QStringLiteral("requestId")),
+        requiredNonblankString(object, QStringLiteral("action")),
         token,
         payloadValue.toObject()
     };
