@@ -29,7 +29,8 @@ private:
     class ChargePage *chargePage_;
     QString mapKey_;
     bool hasActiveOrder_ = false;
-    bool chargeMutationPending_ = false;
+    bool chargeFlowBlocked_ = false;
+    std::optional<ev::user::Order> authoritativeActiveOrder_;
     std::optional<ev::user::StationSelection> rememberedSelection_;
     std::optional<ev::user::RequestContext> guardContext_;
 };

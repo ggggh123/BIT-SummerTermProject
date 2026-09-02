@@ -618,8 +618,14 @@ void ChargePageTest::stalePageMutationAppliesGloballyWithoutRepaintingAndOrdersU
     reply(peer.data(), staleSelectionReserve.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
     QTRY_COMPARE(changed.size(), 1);
-    QVERIFY(button(page, "chargeReserveButton")->isEnabled());
-    QVERIFY(label(page, "chargeStatus")->text().contains(QStringLiteral("已选择")));
+    QVERIFY(!button(page, "chargeReserveButton")->isEnabled());
+    QCOMPARE(label(page, "chargeStatus")->text(), QStringLiteral("已预约"));
+    const auto reserveFacts = takeRequest(peer.data());
+    QCOMPARE(reserveFacts.action, QStringLiteral("station.detail"));
+    reply(peer.data(), reserveFacts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(0)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(QStringLiteral("reserved"))}}});
 
     page.enterOrder(decodedOrder(QStringLiteral("charging"), true));
     button(page, "chargeSettleButton")->click();
@@ -822,18 +828,12 @@ void ChargePageTest::ordinaryReconnectRejectsOutstandingPollReplayAfterFreshCurr
     const auto freshCurrent = takeRequest(secondPeer.data());
     QCOMPARE(freshCurrent.action, QStringLiteral("order.current"));
     QVERIFY(freshCurrent.requestId != oldPoll.requestId);
-    const auto staleReplay = takeRequest(secondPeer.data());
-    QCOMPARE(staleReplay.action, QStringLiteral("order.current"));
-    QCOMPARE(staleReplay.requestId, oldPoll.requestId);
+    QTest::qWait(30);
+    QCOMPARE(secondPeer->bytesAvailable(), qint64{0});
     reply(secondPeer.data(), freshCurrent.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"),
                        orderObject(QStringLiteral("charging"), false, 3.0, 405, 180)}});
     QTRY_VERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("3.000")));
-    reply(secondPeer.data(), staleReplay.requestId, true, QStringLiteral("OK"), QString(),
-          QJsonObject{{QStringLiteral("order"),
-                       orderObject(QStringLiteral("charging"), true, 9.0, 1'215, 999)}});
-    QTest::qWait(50);
-    QVERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("3.000")));
     QVERIFY(button(page, "chargeStopButton")->isEnabled());
 }
 

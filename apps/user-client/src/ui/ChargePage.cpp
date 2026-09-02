@@ -91,16 +91,26 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
     connect(api_, &UserApi::connectionChanged, this, &ChargePage::setConnectionAvailable);
     connect(api_, &UserApi::sessionUserApplied, this,
             [this](const ev::user::User &, quint64 sessionGeneration, quint64) {
-        if (sessionGeneration_ != 0 && sessionGeneration_ != sessionGeneration
-            && pageActive_) {
+        const bool sessionChanged = sessionGeneration_ != 0
+            && sessionGeneration_ != sessionGeneration;
+        if (sessionChanged && pageActive_) {
             leavePage();
         }
-        if (sessionGeneration_ != 0 && sessionGeneration_ != sessionGeneration
-            && pendingMutation_.has_value()) {
+        if (sessionChanged && pendingMutation_.has_value()) {
             pendingMutation_.reset();
             emit mutationPendingChanged(false);
         }
+        if (sessionChanged) {
+            reconciliationRequired_ = false;
+            factsPending_ = false;
+            factsFailed_ = false;
+            factsGateRequired_ = false;
+            selection_.reset();
+            order_.reset();
+            associatedCharger_.reset();
+        }
         sessionGeneration_ = sessionGeneration;
+        updateChargeFlowBlock();
     });
     connect(api_, &UserApi::currentOrderLoaded, this, &ChargePage::handleCurrentOrder);
     connect(api_, &UserApi::chargeOrderChanged, this,
@@ -149,6 +159,7 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
             factsGateRequired_ = false;
             error_->clear();
         }
+        updateChargeFlowBlock();
         render();
     });
     connect(api_, &UserApi::requestFailed, this, &ChargePage::handleGeneralFailure);
@@ -171,6 +182,9 @@ void ChargePage::beginPage(quint64 selectionGeneration)
 
 void ChargePage::enterSelection(const ev::user::StationSelection &selection)
 {
+    if (chargeFlowBlocked()) {
+        return;
+    }
     beginPage(selection.selectionGeneration);
     selection_ = selection;
     order_.reset();
@@ -200,7 +214,7 @@ void ChargePage::enterGuardOrder(
     std::optional<ev::user::StationSelection> rememberedSelection)
 {
     enterOrder(order, std::move(rememberedSelection));
-    requestFacts();
+    requestFacts(true);
 }
 
 void ChargePage::resume()
@@ -227,6 +241,9 @@ void ChargePage::leavePage()
 
 void ChargePage::invalidateSelection(quint64 selectionGeneration)
 {
+    if (chargeFlowBlocked()) {
+        return;
+    }
     if (!selection_.has_value()
         || selection_->selectionGeneration >= selectionGeneration) {
         return;
@@ -260,6 +277,7 @@ void ChargePage::setConnectionAvailable(bool available)
     } else if (reconnected && pageActive_) {
         requestReconciliation();
     }
+    updateChargeFlowBlock();
     render();
 }
 
@@ -361,17 +379,20 @@ void ChargePage::requestPoll()
 
 void ChargePage::requestReconciliation()
 {
-    if (!connected_ || !pageActive_ || pendingRead_.has_value()) {
+    if (!connected_ || !pageActive_ || pendingRead_.has_value()
+        || pendingMutation_.has_value()) {
         return;
     }
     pollTimer_->stop();
     reconciliationRequired_ = true;
     factsFailed_ = false;
+    invalidateSafeReads();
     pendingRead_ = api_->loadCurrentOrder(
         pageGeneration_, selectionGeneration_, ev::user::ChargeOperation::Reconcile);
     if (pendingRead_->requestId.isEmpty()) {
         pendingRead_.reset();
     }
+    updateChargeFlowBlock();
     render();
 }
 
@@ -409,6 +430,7 @@ void ChargePage::requestFacts(bool gateActions)
         emit nearbyRefreshRequested(selection_->origin, stationId,
                                     selection_->selectionGeneration);
     }
+    updateChargeFlowBlock();
     render();
 }
 
@@ -422,12 +444,12 @@ void ChargePage::invalidateSafeReads()
     pendingFactsRequestId_.clear();
     factsPending_ = false;
     factsGateRequired_ = false;
+    emit chargeSafeReadsInvalidated();
 }
 
 void ChargePage::beginMutation(ev::user::ChargeOperation operation)
 {
-    if (!pageActive_ || !connected_ || reconciliationRequired_
-        || pendingMutation_.has_value()) {
+    if (!pageActive_ || !connected_ || chargeFlowBlocked()) {
         return;
     }
     if (operation == ev::user::ChargeOperation::Reserve && selection_.has_value()) {
@@ -453,6 +475,7 @@ void ChargePage::beginMutation(ev::user::ChargeOperation operation)
     } else if (pendingMutation_.has_value()) {
         emit mutationPendingChanged(true);
     }
+    updateChargeFlowBlock();
     render();
 }
 
@@ -462,9 +485,11 @@ void ChargePage::acceptMutation(const ev::user::RequestContext &context,
     if (!pendingMutation_.has_value() || context != *pendingMutation_) {
         return;
     }
-    pendingMutation_.reset();
-    emit mutationPendingChanged(false);
-    if (!matchesPage(context)) {
+    const bool updatePage = matchesMutationPage(context);
+    if (!updatePage) {
+        pendingMutation_.reset();
+        emit mutationPendingChanged(false);
+        updateChargeFlowBlock();
         render();
         return;
     }
@@ -477,6 +502,12 @@ void ChargePage::acceptMutation(const ev::user::RequestContext &context,
     reconciledNoOrder_ = false;
     selectionGeneration_ = 0;
     associatedCharger_.reset();
+    const bool active = order.status == QStringLiteral("reserved")
+        || order.status == QStringLiteral("charging");
+    emit activeOrderResolved(active);
+    pendingMutation_.reset();
+    emit mutationPendingChanged(false);
+    updateChargeFlowBlock();
     render();
     requestFacts(false);
 }
@@ -506,8 +537,9 @@ void ChargePage::handleCurrentOrder(const ev::user::RequestContext &context,
     reconciliationRequired_ = factsRequired;
     factsFailed_ = false;
     error_->clear();
-    render();
     emit activeOrderResolved(order_.has_value());
+    updateChargeFlowBlock();
+    render();
     if (!poll && (order_.has_value() || selection_.has_value())) {
         requestFacts(factsRequired);
     }
@@ -525,25 +557,31 @@ void ChargePage::handleChargeFailure(const ev::user::RequestContext &context,
         pendingRead_.reset();
         reconciliationRequired_ = true;
         error_->setText(localizedError(failure));
+        updateChargeFlowBlock();
         render();
         return;
     }
     if (!pendingMutation_.has_value() || context != *pendingMutation_) {
         return;
     }
-    pendingMutation_.reset();
-    emit mutationPendingChanged(false);
-    if (!matchesPage(context)) {
+    const bool updatePage = matchesMutationPage(context);
+    reconciliationRequired_ = true;
+    if (!updatePage) {
+        pendingMutation_.reset();
+        emit mutationPendingChanged(false);
+        updateChargeFlowBlock();
         render();
         return;
     }
     invalidateSafeReads();
     pollTimer_->stop();
     readEpoch_ = api_->currentChargeReadEpoch();
-    reconciliationRequired_ = true;
     error_->setText(uncertain ? kUncertain : localizedError(failure));
+    pendingMutation_.reset();
+    emit mutationPendingChanged(false);
+    updateChargeFlowBlock();
     render();
-    if (connected_ && isBusinessRefreshError(failure.code)) {
+    if (connected_ && (uncertain || isBusinessRefreshError(failure.code))) {
         requestReconciliation();
     }
 }
@@ -559,13 +597,36 @@ void ChargePage::handleGeneralFailure(const ev::user::ApiError &failure)
     factsGateRequired_ = true;
     reconciliationRequired_ = true;
     error_->setText(localizedError(failure));
+    updateChargeFlowBlock();
     render();
+}
+
+bool ChargePage::chargeFlowBlocked() const
+{
+    return pendingMutation_.has_value() || reconciliationRequired_ || factsFailed_
+        || (factsPending_ && factsGateRequired_);
+}
+
+void ChargePage::updateChargeFlowBlock()
+{
+    const bool blocked = chargeFlowBlocked();
+    if (blocked == reportedChargeFlowBlocked_) {
+        return;
+    }
+    reportedChargeFlowBlocked_ = blocked;
+    emit chargeFlowBlockedChanged(blocked);
 }
 
 bool ChargePage::matchesPage(const ev::user::RequestContext &context) const
 {
     return pageActive_ && context.pageGeneration == pageGeneration_
         && context.selectionGeneration == selectionGeneration_
+        && (sessionGeneration_ == 0 || context.sessionGeneration == sessionGeneration_);
+}
+
+bool ChargePage::matchesMutationPage(const ev::user::RequestContext &context) const
+{
+    return pageActive_ && context.pageGeneration == pageGeneration_
         && (sessionGeneration_ == 0 || context.sessionGeneration == sessionGeneration_);
 }
 

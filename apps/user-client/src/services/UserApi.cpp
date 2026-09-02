@@ -633,6 +633,7 @@ quint64 UserApi::invalidateChargeReads()
         if (it != pendingOperations_.cend()
             && it->sessionGeneration == sessionGeneration_
             && it->operation == Operation::ChargeCurrent) {
+            client_->cancelRequest(requestId);
             pendingOperations_.remove(requestId);
         }
     }
@@ -651,9 +652,11 @@ void UserApi::cancelSafeRead(const QString &requestId)
         return;
     }
     if (it->operation != Operation::ChargeCurrent
-        && it->operation != Operation::StationDetail) {
+        && it->operation != Operation::StationDetail
+        && it->operation != Operation::NearbyStations) {
         return;
     }
+    client_->cancelRequest(requestId);
     pendingOperations_.erase(it);
 }
 

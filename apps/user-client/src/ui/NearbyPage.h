@@ -23,6 +23,7 @@ public:
 
 public slots:
     void setConnectionAvailable(bool available);
+    void cancelChargeRefresh();
     void refreshAfterCharge(ev::user::GeoPoint origin, qint64 stationId,
                             quint64 selectionGeneration);
     void displayStations(ev::user::StationListResult result);
@@ -42,6 +43,8 @@ private:
         const ev::user::GeoPoint &origin,
         std::optional<quint64> requiredSelectionGeneration = std::nullopt);
     void requestStationDetail(const ev::user::Station &station);
+    void cancelPendingStationList();
+    void applyStations(ev::user::StationListResult result, bool invalidateCurrentSelection);
     void invalidateSelection();
     void rebuildStationCards();
     void showError(const QString &message);

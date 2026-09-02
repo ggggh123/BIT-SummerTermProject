@@ -21,6 +21,7 @@ public:
 
     void configure(QString host, quint16 port);
     QString send(QString action, QJsonObject payload, QString token = {});
+    void cancelRequest(const QString &requestId);
     void connectToServer();
     void disconnectFromServer();
 

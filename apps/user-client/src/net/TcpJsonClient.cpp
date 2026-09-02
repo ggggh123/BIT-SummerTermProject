@@ -119,6 +119,18 @@ QString TcpJsonClient::send(QString action, QJsonObject payload, QString token)
     return requestId;
 }
 
+void TcpJsonClient::cancelRequest(const QString &requestId)
+{
+    auto it = pendingRequests_.find(requestId);
+    if (it == pendingRequests_.end()) {
+        return;
+    }
+    QTimer *timer = it->timeoutTimer;
+    pendingRequests_.erase(it);
+    timer->stop();
+    timer->deleteLater();
+}
+
 void TcpJsonClient::connectToServer()
 {
     manualDisconnect_ = false;

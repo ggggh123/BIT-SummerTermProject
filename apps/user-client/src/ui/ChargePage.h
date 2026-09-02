@@ -36,6 +36,8 @@ signals:
     void nearbyRefreshRequested(ev::user::GeoPoint origin, qint64 stationId,
                                 quint64 selectionGeneration);
     void mutationPendingChanged(bool pending);
+    void chargeFlowBlockedChanged(bool blocked);
+    void chargeSafeReadsInvalidated();
 
 private:
     void beginPage(quint64 selectionGeneration);
@@ -53,7 +55,10 @@ private:
     void handleChargeFailure(const ev::user::RequestContext &context,
                              const ev::user::ApiError &error, bool uncertain);
     void handleGeneralFailure(const ev::user::ApiError &error);
+    void updateChargeFlowBlock();
+    [[nodiscard]] bool chargeFlowBlocked() const;
     [[nodiscard]] bool matchesPage(const ev::user::RequestContext &context) const;
+    [[nodiscard]] bool matchesMutationPage(const ev::user::RequestContext &context) const;
     [[nodiscard]] bool matchingSelection(const ev::user::StationSelection &selection,
                                          const ev::user::Order &order) const;
     [[nodiscard]] static QString localizedError(const ev::user::ApiError &error);
@@ -79,6 +84,7 @@ private:
     bool factsFailed_ = false;
     bool factsGateRequired_ = false;
     bool reconciledNoOrder_ = false;
+    bool reportedChargeFlowBlocked_ = false;
     quint64 pageGeneration_ = 0;
     quint64 sessionGeneration_ = 0;
     quint64 selectionGeneration_ = 0;
