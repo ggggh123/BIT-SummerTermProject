@@ -12,6 +12,8 @@ private slots:
     void roundTripsRequest();
     void rejectsMissingAndWrongFields();
     void classifiesRequestVersionErrors();
+    void validatesResponseStringFields_data();
+    void validatesResponseStringFields();
     void roundTripsFixtures();
 };
 
@@ -60,6 +62,41 @@ void JsonEnvelopeTest::classifiesRequestVersionErrors()
         QFAIL("Expected non-v1 numeric version to be rejected");
     } catch (const ev::protocol::EnvelopeError &error) {
         QCOMPARE(error.code(), QStringLiteral("UNSUPPORTED_VERSION"));
+    }
+}
+
+void JsonEnvelopeTest::validatesResponseStringFields_data()
+{
+    QTest::addColumn<QByteArray>("json");
+    QTest::addColumn<bool>("isValid");
+
+    QTest::newRow("blank strings") << QByteArray(R"({"requestId":"","ok":true,"code":"","message":"","data":null})") << true;
+    QTest::newRow("missing request id") << QByteArray(R"({"ok":true,"code":"OK","message":"healthy","data":{}})") << false;
+    QTest::newRow("missing code") << QByteArray(R"({"requestId":"x","ok":true,"message":"healthy","data":{}})") << false;
+    QTest::newRow("missing message") << QByteArray(R"({"requestId":"x","ok":true,"code":"OK","data":{}})") << false;
+    QTest::newRow("non-string request id") << QByteArray(R"({"requestId":1,"ok":true,"code":"OK","message":"healthy","data":{}})") << false;
+    QTest::newRow("non-string code") << QByteArray(R"({"requestId":"x","ok":true,"code":1,"message":"healthy","data":{}})") << false;
+    QTest::newRow("non-string message") << QByteArray(R"({"requestId":"x","ok":true,"code":"OK","message":1,"data":{}})") << false;
+}
+
+void JsonEnvelopeTest::validatesResponseStringFields()
+{
+    QFETCH(QByteArray, json);
+    QFETCH(bool, isValid);
+
+    try {
+        const auto response = ev::protocol::parseResponse(json);
+        if (!isValid) {
+            QFAIL("Expected response string field to be rejected");
+        }
+        QCOMPARE(response.requestId, QStringLiteral(""));
+        QCOMPARE(response.code, QStringLiteral(""));
+        QCOMPARE(response.message, QStringLiteral(""));
+    } catch (const ev::protocol::EnvelopeError &error) {
+        if (isValid) {
+            QFAIL(qPrintable(QStringLiteral("Unexpected response error: ") + error.message()));
+        }
+        QCOMPARE(error.code(), QStringLiteral("INVALID_REQUEST"));
     }
 }
 
