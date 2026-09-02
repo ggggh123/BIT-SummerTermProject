@@ -65,7 +65,7 @@
 
 - JSON `integer` 是数学整数，范围为 `-9,007,199,254,740,991..9,007,199,254,740,991`。ID 为正整数；计数、余额、订单金额和时长为非负整数；`amountFen`、`priceFenPerKwh` 为正整数。
 - JSON `number` 必须有限，禁止 NaN 和正负 Infinity。纬度为 `[-90,90]`，经度为 `[-180,180]`；功率、电量、负载和距离为非负有限数。
-- 金额一律为整数分（fen）。订单 `amountFen` 由服务端按累计电量和站点单价计算，客户端不得提交最终金额或结算后余额。
+- 金额一律为整数分（fen）。订单金额的唯一公式是 `qRound64(energyKwh * priceFenPerKwh)`；每次 energy 变化后由服务端用累计 `energyKwh` 重算 `amountFen`，客户端不得提交最终金额或结算后余额。
 - `Timestamp` 是有效 ISO 8601 字符串，必须显式带 `+08:00`，形式为 `YYYY-MM-DDTHH:mm:ss[.fraction]+08:00`。`Date` 是有效的 `YYYY-MM-DD`。
 - 可选字段缺失时必须省略；不得把缺失字段静默解释为权威默认。仅共享 schema 或 action 明确标为 `null` 的位置允许 JSON `null`。
 - `mobile` 必须匹配 `^1[3-9][0-9]{9}$`。`nickname`、站点 `name/address`、`username/password`、`runId/modelVersion` 均为 trim 后非空 string；v1 不另设任意长度上限。
@@ -97,20 +97,28 @@ order:   reserved -> charging -> completed
 
 `charge.stop` 是 charging 阶段内的停止计费点：写入 `endedAt`，但 order 仍为 `charging`、charger 仍为 `charging`，等待 `charge.settle`。
 
+charger 与 active order 必须作为一个耦合状态处理：
+
+- `fault=true` 作用于 `reserved` charger 时，同一事务把关联 `reserved` order 改为 `cancelled`、写入 `endedAt=recordedAt`，再把 charger 改为 `fault`。
+- `fault=true` 作用于 `charging` charger 时，同一事务写入尚为空的 `endedAt=recordedAt`，按冻结金额公式重算并冻结 `amountFen`；order 保持 `charging` 等待用户结算，charger 改为 `fault`。若 order 已停止，则保留原 `endedAt` 和冻结金额。
+- charger 后续可按 `fault->restarting->idle` 恢复，但未结算的 charging order 仍是 active order。预约必须同时检查 charger status=`idle` 且该 charger 没有关联 `reserved|charging` order，不能因重启到 idle 绕过唯一性 guard。
+- 结算完成 order 后，charger 为 `charging` 才改为 `idle`；charger 为 `fault|restarting` 时保持原状态，已经为 `idle` 时也保持 `idle`。因此结算不会回退或跳过设备恢复状态机。
+
 ## 5. 响应 code
 
 | code | `ok` | 精确用途 |
 | --- | --- | --- |
 | `OK` | true | 成功 |
-| `INVALID_REQUEST` | false | JSON、action、字段类型/必填性/范围、未知 ID 或确认文本无效 |
+| `INVALID_REQUEST` | false | 无效帧/JSON/envelope、未知 action，或 action payload 缺字段、JSON 类型错误、非 safe integer、基础范围/枚举/结构约束错误；不表示手机号格式、forecast 批次语义或实体存在性 |
 | `UNSUPPORTED_VERSION` | false | request `version` 不是数值 `1` |
 | `AUTH_REQUIRED` | false | 需要认证但 token 缺失、为空、无效或过期 |
 | `FORBIDDEN` | false | 有效身份无 action 权限，或用户尝试操作非本人订单 |
 | `INVALID_PHONE` | false | 手机号不匹配冻结正则 |
 | `INVALID_CREDENTIALS` | false | 管理员账号或密码不正确 |
+| `ENTITY_NOT_FOUND` | false | 正 safe integer 所指 station、order 或 user 不存在；charger 存在性由 `CHARGER_NOT_AVAILABLE` 独占 |
 | `USER_FROZEN` | false | 冻结用户尝试预约、充值或开始充电 |
 | `ACTIVE_ORDER_EXISTS` | false | 用户已有 `reserved` 或 `charging` 订单 |
-| `CHARGER_NOT_AVAILABLE` | false | 桩不存在、非 `idle` 或不能进入预约 |
+| `CHARGER_NOT_AVAILABLE` | false | chargerId 是正 safe integer，但 charger 不存在，或在要求可用 charger 的动作中不可用；charger payload 类型/正数约束错误仍为 `INVALID_REQUEST` |
 | `ORDER_STATE_CONFLICT` | false | 订单/桩当前权威状态不允许该转换 |
 | `INSUFFICIENT_BALANCE` | false | stopped charging order 结算余额不足 |
 | `MAP_API_ERROR` | false | 用户端腾讯地图地址解析/路线 API 失败；不改变服务端站点数据 |
@@ -120,7 +128,15 @@ order:   reserved -> charging -> completed
 | `DB_BUSY` | false | SQLite busy 或锁等待超时 |
 | `INTERNAL_ERROR` | false | 其他未分类服务端错误；不得泄露凭据或 SQL 细节 |
 
-一般失败 `INVALID_REQUEST`、`AUTH_REQUIRED`、`FORBIDDEN`、`SERVER_BUSY`、`DB_BUSY`、`INTERNAL_ERROR` 在相关 action 均可适用；第 7 节另列主要 action-specific 失败。鉴权必须先于业务 SQL。未知 action 对所有身份返回 `INVALID_REQUEST`，权限函数则必须返回 deny。
+失败判定使用固定优先级，先命中者决定唯一 code：
+
+1. frame/envelope/version：无效帧、JSON、envelope 或未知 action 为 `INVALID_REQUEST`；数值 version 非 1 为 `UNSUPPORTED_VERSION`；
+2. auth/permission：`AUTH_REQUIRED` 先于 `FORBIDDEN`，均在业务 SQL 和 action payload 语义校验前完成；
+3. action payload：缺字段、错误 JSON 类型、非 safe integer 和基础范围/枚举/结构为 `INVALID_REQUEST`；有效 string 手机号格式由 `INVALID_PHONE` 独占；forecast 元数据/记录的业务语义与整批校验由 `FORECAST_INVALID` 独占；
+4. entity/state：positive ID 的 charger 不存在或不可用由 `CHARGER_NOT_AVAILABLE` 独占；其他实体不存在为 `ENTITY_NOT_FOUND`；随后按各 action 行列出的顺序检查 ownership、user status、active-order guard、order/charger state 和余额；
+5. infrastructure：`SERVER_BUSY`，然后 `DB_BUSY`，最后 `INTERNAL_ERROR`。
+
+一般 infrastructure 失败在相关 action 均可适用；第 7 节逐 action 的“主要失败”按该 action 内的判定顺序书写。未知 action 对所有身份返回 `INVALID_REQUEST`，权限函数则必须返回 deny。
 
 ## 6. 27 个 action 与权限矩阵
 
@@ -287,7 +303,7 @@ order:   reserved -> charging -> completed
 - success data：`{token:string,user:User}`，token 为 trim 后非空不透明字符串。
 - 状态/转换：已有手机号返回该用户；未见过的有效手机号在事务中创建 `active` 用户后返回。冻结用户允许登录。
 - Qt owner：`AuthService`。
-- 主要失败：`INVALID_PHONE`, `DB_BUSY`。
+- 主要失败：`INVALID_REQUEST`（mobile 缺失/非 string），然后 `INVALID_PHONE`（string 不匹配正则），然后 `DB_BUSY`。
 
 #### 3. `user.get`
 
@@ -314,7 +330,7 @@ order:   reserved -> charging -> completed
 - success data：`{userId:integer,balanceFen:integer}`，userId 为 token 用户，balanceFen 为提交后的非负余额。
 - 状态/转换：仅 `active` 用户；在事务中将余额增加 `amountFen`，同 requestId 重放不得再次增加。
 - Qt owner：`UserService`。
-- 主要失败：`USER_FROZEN`, `INVALID_REQUEST`, `DB_BUSY`。
+- 主要失败：`INVALID_REQUEST`（amountFen 结构/范围无效），然后 `USER_FROZEN`，然后 `DB_BUSY`。
 
 #### 6. `station.list`
 
@@ -332,7 +348,7 @@ order:   reserved -> charging -> completed
 - success data：`{station:Station,chargers:array<Charger>}`；station 省略 `distanceKm`，chargers 仅属于该站。
 - 状态/转换：读取。
 - Qt owner：`StationService`。
-- 主要失败：`INVALID_REQUEST`（ID 无效或站点不存在）。
+- 主要失败：`INVALID_REQUEST`（stationId 非正 safe integer），然后 `ENTITY_NOT_FOUND`（正 ID 站点不存在）。
 
 #### 8. `charger.list`
 
@@ -341,16 +357,16 @@ order:   reserved -> charging -> completed
 - success data：`{chargers:array<Charger>}`，仅返回该站充电桩。
 - 状态/转换：读取。
 - Qt owner：`StationService`。
-- 主要失败：`INVALID_REQUEST`（ID 无效或站点不存在）。
+- 主要失败：`INVALID_REQUEST`（stationId 非正 safe integer），然后 `ENTITY_NOT_FOUND`（正 ID 站点不存在）。
 
 #### 9. `charge.reserve`
 
 - actor：user。
 - payload：`chargerId` — integer，必填，正 safe integer。
 - success data：`{order:Order}`，新 order 为 `reserved`。
-- 状态/转换：要求用户 `active`、没有 `reserved|charging` order、charger 为 `idle`；一个事务完成 charger `idle->reserved` 和新 order `reserved`。
+- 状态/转换：要求用户 `active`、用户没有 `reserved|charging` order、charger 为 `idle`，并且该 charger 没有关联 `reserved|charging` order；一个事务重新读取并锁定这些条件，再完成 charger `idle->reserved` 和新 order `reserved`。重启后变为 idle 但仍有关联 stopped charging order 的 charger 不能预约。
 - Qt owner：`ChargeService`。
-- 主要失败：`USER_FROZEN`, `ACTIVE_ORDER_EXISTS`, `CHARGER_NOT_AVAILABLE`。
+- 主要失败：`INVALID_REQUEST`（chargerId 非正 safe integer），然后 `USER_FROZEN`，然后 `ACTIVE_ORDER_EXISTS`（用户已有 active order），然后 `CHARGER_NOT_AVAILABLE`（charger 不存在、非 idle 或仍有关联 active order）。
 
 #### 10. `charge.start`
 
@@ -359,7 +375,7 @@ order:   reserved -> charging -> completed
 - success data：`{order:Order}`，返回 `charging` 且 `startedAt` 非 null。
 - 状态/转换：要求 `active` 用户拥有该 `reserved` order，关联 charger 为 `reserved`；同一事务 order `reserved->charging`、charger `reserved->charging`。
 - Qt owner：`ChargeService`。
-- 主要失败：`USER_FROZEN`, `FORBIDDEN`, `ORDER_STATE_CONFLICT`。
+- 主要失败：`INVALID_REQUEST`（orderId 非正 safe integer），然后 `ENTITY_NOT_FOUND`，然后 `FORBIDDEN`（非本人 order），然后 `USER_FROZEN`，然后 `ORDER_STATE_CONFLICT`。
 
 #### 11. `charge.stop`
 
@@ -368,16 +384,16 @@ order:   reserved -> charging -> completed
 - success data：`{order:Order}`，status 仍为 `charging`、`endedAt` 为停止 Timestamp。
 - 状态/转换：要求调用者拥有 `charging` order 且 `endedAt=null`；写入 `endedAt`，order/charger status 均保持 `charging` 等待结算。冻结用户仍可停止。
 - Qt owner：`ChargeService`。
-- 主要失败：`FORBIDDEN`, `ORDER_STATE_CONFLICT`。
+- 主要失败：`INVALID_REQUEST`（orderId 非正 safe integer），然后 `ENTITY_NOT_FOUND`，然后 `FORBIDDEN`（非本人 order），然后 `ORDER_STATE_CONFLICT`。
 
 #### 12. `charge.settle`
 
 - actor：user。
 - payload：`orderId` — integer，必填，正 safe integer。
 - success data：`{order:Order,balanceFen:integer}`，order 为 `completed`，余额非负。
-- 状态/转换：要求调用者拥有 status=`charging` 且 `endedAt!=null` 的 order，并有足够余额；同一事务扣款、order `charging->completed`、charger `charging->idle`。冻结用户仍可结算。
+- 状态/转换：要求调用者拥有 status=`charging` 且 `endedAt!=null` 的 order，并有足够余额；金额必须等于冻结的 `qRound64(energyKwh * priceFenPerKwh)`。同一事务扣款并将 order `charging->completed`；charger 当前为 `charging` 才改为 `idle`，为 `fault|restarting|idle` 时保持原状态。冻结用户仍可结算。
 - Qt owner：`ChargeService`。
-- 主要失败：`FORBIDDEN`, `ORDER_STATE_CONFLICT`, `INSUFFICIENT_BALANCE`。
+- 主要失败：`INVALID_REQUEST`（orderId 非正 safe integer），然后 `ENTITY_NOT_FOUND`，然后 `FORBIDDEN`（非本人 order），然后 `ORDER_STATE_CONFLICT`，然后 `INSUFFICIENT_BALANCE`。
 
 #### 13. `order.current`
 
@@ -404,7 +420,7 @@ order:   reserved -> charging -> completed
 - success data：`{order:Order}`，order 为 `cancelled`。
 - 状态/转换：要求调用者拥有 `reserved` order 且 charger 为 `reserved`；同一事务 order `reserved->cancelled`、charger `reserved->idle`。冻结用户仍可取消。
 - Qt owner：`ChargeService`。
-- 主要失败：`FORBIDDEN`, `ORDER_STATE_CONFLICT`。
+- 主要失败：`INVALID_REQUEST`（orderId 非正 safe integer），然后 `ENTITY_NOT_FOUND`，然后 `FORBIDDEN`（非本人 order），然后 `ORDER_STATE_CONFLICT`。
 
 #### 16. `admin.login`
 
@@ -413,7 +429,7 @@ order:   reserved -> charging -> completed
 - success data：`{token:string,admin:Admin}`，token 为 trim 后非空不透明字符串，响应不得含密码或哈希。
 - 状态/转换：只读验证凭据并创建进程内会话 token。
 - Qt owner：`AuthService`。
-- 主要失败：`INVALID_CREDENTIALS`, `INVALID_REQUEST`。
+- 主要失败：`INVALID_REQUEST`（username/password 缺失、非 string 或 blank），然后 `INVALID_CREDENTIALS`。
 
 #### 17. `admin.dashboard`
 
@@ -440,7 +456,7 @@ order:   reserved -> charging -> completed
 - success data：`{charger:Charger}`，立即返回的 charger 为 `restarting`。
 - 状态/转换：仅权威状态 `fault` 可开始；DB worker 事务执行 `fault->restarting`，随后由 DB worker 的确定性任务执行 `restarting->idle`。任何 UI/timer 线程不得直接写 SQLite。
 - Qt owner：`AdminService`。
-- 主要失败：`ORDER_STATE_CONFLICT`（不是 fault）, `INVALID_REQUEST`（ID 无效/不存在）。
+- 主要失败：`INVALID_REQUEST`（chargerId 非正 safe integer），然后 `CHARGER_NOT_AVAILABLE`（正 ID charger 不存在），然后 `ORDER_STATE_CONFLICT`（已知 charger 不是 fault）。
 
 #### 20. `admin.user_list`
 
@@ -458,25 +474,25 @@ order:   reserved -> charging -> completed
 - success data：`{user:User}`，为提交后的完整用户。
 - 状态/转换：`active|frozen -> active|frozen`，同值设置为幂等成功。冻结不会破坏已有订单；用户仍能 stop/cancel/settle 自己的已有订单。
 - Qt owner：`AdminService`。
-- 主要失败：`INVALID_REQUEST`（ID/状态无效或用户不存在）, `DB_BUSY`。
+- 主要失败：`INVALID_REQUEST`（userId 非正 safe integer或 status 结构/枚举无效），然后 `ENTITY_NOT_FOUND`（正 ID 用户不存在），然后 `DB_BUSY`。
 
 #### 22. `telemetry.push`
 
 - actor：simulator。
 - payload：`chargerId` — integer，必填，正 safe integer；`recordedAt` — Timestamp，必填，必须严格晚于该 charger 最后接纳样本；`powerKw`、`energyIncrementKwh` — number，必填，非负有限数；`status` — string，必填，charger 冻结状态且必须与权威状态一致。字段名必须是 `recordedAt`，不接受旧拼写 `observedAt` 作为权威时间。
 - success data：`{acceptedAt:Timestamp,order:Order|null}`。存在关联 charging order 时返回该 order，否则为 null。
-- 状态/转换：记录样本；仅当权威 charger=`charging` 且 order=`charging,endedAt=null` 时累加 energy 并重算服务端 amount。stop 后样本不得增加 energy/amount。payload status 不驱动状态转换。
+- 状态/转换：记录样本；仅当权威 charger=`charging` 且 order=`charging,endedAt=null` 时累加 energy，并用 `qRound64(energyKwh * priceFenPerKwh)` 重算服务端 amount。stop 或 fault 已写入 endedAt 后，样本不得增加 energy/amount。payload status 不驱动状态转换。
 - Qt owner：`TelemetryService`。
-- 主要失败：`INVALID_REQUEST`（未知 charger、时间不递增、非有限/负数、状态不一致）, `ORDER_STATE_CONFLICT`。
+- 主要失败：`INVALID_REQUEST`（字段缺失/类型错误、chargerId 非正、Timestamp 格式错误、数值非有限或为负），然后 `CHARGER_NOT_AVAILABLE`（正 ID charger 不存在），然后 `ORDER_STATE_CONFLICT`（recordedAt 不递增或 status 与权威状态不一致）。
 
 #### 23. `simulator.fault_set`
 
 - actor：simulator。
 - payload：`chargerId` — integer，必填，正 safe integer；`fault` — boolean，必填；`recordedAt` — Timestamp，必填。
 - success data：`{charger:Charger}`。
-- 状态/转换：`fault=true` 要求当前为 `idle|reserved|charging` 并转为 `fault`；`fault=false` 仅在当前为 `fault` 时记录恢复意图，charger 保持 `fault`，不得绕过管理员的 `fault->restarting->idle`。活动 order 不由该 action 静默完成、取消或结算。
+- 状态/转换：`fault=true` 要求 charger 当前为 `idle|reserved|charging`。`idle->fault` 不涉及 order；`reserved->fault` 必须在同一事务取消关联 reserved order 并写入 `endedAt=recordedAt`；`charging->fault` 必须在同一事务为尚未停止的 order 写入 `endedAt=recordedAt`、按公式冻结 amount，order 保持 charging 待结算。`fault=false` 仅在当前为 `fault` 时记录恢复意图，charger 保持 `fault`，不得绕过管理员的 `fault->restarting->idle`。
 - Qt owner：`TelemetryService`。
-- 主要失败：`INVALID_REQUEST`（charger/时间无效）, `ORDER_STATE_CONFLICT`（布尔意图与当前状态不匹配）。
+- 主要失败：`INVALID_REQUEST`（字段缺失/类型错误、chargerId 非正或 Timestamp 格式错误），然后 `CHARGER_NOT_AVAILABLE`（正 ID charger 不存在），然后 `ORDER_STATE_CONFLICT`（recordedAt 不递增、布尔意图与状态不匹配或耦合 order 不满足原子转换条件）。
 
 #### 24. `simulator.status`
 
@@ -492,9 +508,9 @@ order:   reserved -> charging -> completed
 - actor：ml。
 - payload：`runId`、`modelVersion` — string，必填，trim 后非空；`generatedAt`、`dataCutoff` — Timestamp，必填且 `dataCutoff<=generatedAt`；`records` — `array<ForecastRecord>`，必填，必须满足第 7.1 节全部边界、六站 × 24 horizon、唯一性与 144 条规则。payload 不接受 metrics。
 - success data：`{runId:string,acceptedCount:integer,snapshotReady:boolean}`；runId 与请求一致，acceptedCount 恰为 `144`；snapshotReady 表示提交后对应 Web 快照是否已经原子发布，false 时 SQLite 仍是权威来源。
-- 状态/转换：先在内存完整校验，再在 DB worker 单事务执行：旧 `active->superseded`，插入新 active run（`activatedAt` 由服务端生成）、插入 144 条、保存幂等响应、递增 snapshotVersion、提交。任一步失败整批回滚，旧 active 保持不变。同 runId+同 payloadHash 重放原 ACK；同 runId+不同 hash 失败。
+- 状态/转换：这是明确的两事务例外。先在内存完整校验；第一笔 DB worker 事务执行旧 `active->superseded`、插入新 active run（`activatedAt` 由服务端生成）、插入 144 条并递增 snapshotVersion 后提交，但不保存 ACK。提交后 `SnapshotWriter` 尝试发布该 snapshotVersion；第二笔串行 DB worker 事务才把实际结果组成的最终 ACK（包括当次真实 `snapshotReady`）写入 request_log，提交后再发送。第一笔提交前失败整批回滚并保留旧 active；第一笔已提交但最终 ACK 尚未保存时发生 crash/失败，同 runId+同 payloadHash 重试必须识别已提交批次、重试或检查对应 snapshot、保存并返回唯一最终 ACK，不能再次切换批次；同 runId+不同 hash 返回 `FORECAST_INVALID`。最终 ACK 一旦保存，同 requestId 重放必须逐字节稳定，即使后台后来成功刷新 snapshot 也不改写旧 ACK。
 - Qt owner：`ForecastService`。
-- 主要失败：`FORECAST_INVALID`, `DB_BUSY`。
+- 主要失败：`INVALID_REQUEST`（字段缺失/JSON 类型/基础结构错误），然后 `FORECAST_INVALID`（有效类型下的元数据关系、144 条完整性、物理边界、唯一性或 runId/hash 语义失败），然后 `DB_BUSY`。SnapshotWriter 文件失败不是 action 失败，而是 `snapshotReady=false`。
 
 #### 26. `forecast.latest`
 
@@ -510,9 +526,9 @@ order:   reserved -> charging -> completed
 - actor：admin。
 - payload：`confirmation` — string，必填，必须逐字等于 `RESET_DEMO`。
 - success data：`{resetAt:Timestamp,goldenHash:string}`；goldenHash 为已批准黄金库的 64 位小写 SHA-256。
-- 状态/转换：运行中 reset 只由 `DemoResetService` 排队到 DB worker，在显式表清单的单一事务中恢复批准数据、保存本次幂等响应并重建快照；失败保持运行库和旧快照不变。文件级数据库替换只能在服务端停止时执行，不是此 action 的行为。
+- 状态/转换：运行中 reset 只由 `DemoResetService` 排队到 DB worker。先在显式表清单的核心事务中恢复批准数据、递增 snapshotVersion 并提交；`SnapshotWriter` 只能在提交后重建并原子替换文件。快照成功时返回普通成功 message；快照失败时已提交 DB 保持有效、旧 snapshot 保留并安排同一版本重试，仍返回 `ok=true,code=OK` 和同一 `{resetAt,goldenHash}` data，但 message 必须明确警告 snapshot 尚未刷新，不能声称 reset 回滚。快照尝试后在串行 DB worker 事务保存最终响应，再发送；同 requestId 重放该最终响应。文件级数据库替换只能在服务端停止时执行，不是此 action 的行为。
 - Qt owner：`DemoResetService`。
-- 主要失败：`INVALID_REQUEST`（确认文本不符）, `INTERNAL_ERROR`（黄金哈希/恢复验证失败）, `DB_BUSY`。
+- 主要失败：`INVALID_REQUEST`（confirmation 缺失/非 string 或不精确等于 `RESET_DEMO`），然后 `INTERNAL_ERROR`（核心事务提交前的黄金哈希/恢复验证失败），然后 `DB_BUSY`。提交后的 snapshot 写失败不返回失败 code。
 
 ## 8. 事务、SQLite 与 dashboard snapshot 所有权
 
