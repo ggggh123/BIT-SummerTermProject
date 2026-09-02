@@ -119,7 +119,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 | `USER_FROZEN` | false | 冻结用户尝试预约、充值或开始充电 |
 | `ACTIVE_ORDER_EXISTS` | false | 用户已有 `reserved` 或 `charging` 订单 |
 | `CHARGER_NOT_AVAILABLE` | false | chargerId 是正 safe integer，但 charger 不存在，或在要求可用 charger 的动作中不可用；charger payload 类型/正数约束错误仍为 `INVALID_REQUEST` |
-| `ORDER_STATE_CONFLICT` | false | 订单/桩当前权威状态不允许该转换 |
+| `ORDER_STATE_CONFLICT` | false | 已知 order/charger 的权威时间冲突（包括 stale 或 non-increasing device event timestamp）或当前权威状态不允许该转换；payload 的 Timestamp 缺失/类型/格式错误仍为 `INVALID_REQUEST` |
 | `INSUFFICIENT_BALANCE` | false | stopped charging order 结算余额不足 |
 | `MAP_API_ERROR` | false | 用户端腾讯地图地址解析/路线 API 失败；不改变服务端站点数据 |
 | `FORECAST_INVALID` | false | 批次元数据、144 条记录、物理边界、唯一性或同 runId 哈希校验失败 |
@@ -133,7 +133,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 1. frame/envelope/version：无效帧、JSON、envelope 或未知 action 为 `INVALID_REQUEST`；数值 version 非 1 为 `UNSUPPORTED_VERSION`；
 2. auth/permission：`AUTH_REQUIRED` 先于 `FORBIDDEN`，均在业务 SQL 和 action payload 语义校验前完成；
 3. action payload：缺字段、错误 JSON 类型、非 safe integer 和基础范围/枚举/结构为 `INVALID_REQUEST`；有效 string 手机号格式由 `INVALID_PHONE` 独占；forecast 元数据/记录的业务语义与整批校验由 `FORECAST_INVALID` 独占；
-4. entity/state：positive ID 的 charger 不存在或不可用由 `CHARGER_NOT_AVAILABLE` 独占；其他实体不存在为 `ENTITY_NOT_FOUND`；随后按各 action 行列出的顺序检查 ownership、user status、active-order guard、order/charger state 和余额；
+4. business checks：code 的错误域仍按上表区分（charger 不存在/不可用为 `CHARGER_NOT_AVAILABLE`，其他实体不存在为 `ENTITY_NOT_FOUND`，权威时间/状态冲突为 `ORDER_STATE_CONFLICT`），但不存在全局 entity-first 次序；每个 action 行“主要失败”列出的 business check 顺序才是该 action 的唯一权威顺序；
 5. infrastructure：`SERVER_BUSY`，然后 `DB_BUSY`，最后 `INTERNAL_ERROR`。
 
 一般 infrastructure 失败在相关 action 均可适用；第 7 节逐 action 的“主要失败”按该 action 内的判定顺序书写。未知 action 对所有身份返回 `INVALID_REQUEST`，权限函数则必须返回 deny。
@@ -366,7 +366,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - success data：`{order:Order}`，新 order 为 `reserved`。
 - 状态/转换：要求用户 `active`、用户没有 `reserved|charging` order、charger 为 `idle`，并且该 charger 没有关联 `reserved|charging` order；一个事务重新读取并锁定这些条件，再完成 charger `idle->reserved` 和新 order `reserved`。重启后变为 idle 但仍有关联 stopped charging order 的 charger 不能预约。
 - Qt owner：`ChargeService`。
-- 主要失败：`INVALID_REQUEST`（chargerId 非正 safe integer），然后 `USER_FROZEN`，然后 `ACTIVE_ORDER_EXISTS`（用户已有 active order），然后 `CHARGER_NOT_AVAILABLE`（charger 不存在、非 idle 或仍有关联 active order）。
+- 主要失败：payload 通过后，business check 的权威顺序恰为 `USER_FROZEN` → `ACTIVE_ORDER_EXISTS`（用户已有 active order）→ `CHARGER_NOT_AVAILABLE`（charger 不存在、非 idle 或仍有关联 active order）；此前的 chargerId 缺失/类型错误/非正 safe integer 为 `INVALID_REQUEST`。
 
 #### 10. `charge.start`
 
@@ -526,7 +526,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - actor：admin。
 - payload：`confirmation` — string，必填，必须逐字等于 `RESET_DEMO`。
 - success data：`{resetAt:Timestamp,goldenHash:string}`；goldenHash 为已批准黄金库的 64 位小写 SHA-256。
-- 状态/转换：运行中 reset 只由 `DemoResetService` 排队到 DB worker。先在显式表清单的核心事务中恢复批准数据、递增 snapshotVersion 并提交；`SnapshotWriter` 只能在提交后重建并原子替换文件。快照成功时返回普通成功 message；快照失败时已提交 DB 保持有效、旧 snapshot 保留并安排同一版本重试，仍返回 `ok=true,code=OK` 和同一 `{resetAt,goldenHash}` data，但 message 必须明确警告 snapshot 尚未刷新，不能声称 reset 回滚。快照尝试后在串行 DB worker 事务保存最终响应，再发送；同 requestId 重放该最终响应。文件级数据库替换只能在服务端停止时执行，不是此 action 的行为。
+- 状态/转换：运行中 reset 只由 `DemoResetService` 排队到 DB worker。按 requestId 查询内部 receipt：无 receipt 才开始核心 reset；`pending` receipt 必须直接恢复 snapshot/final-ACK 阶段，不得再次 reset；`final` receipt 必须逐字节重放最终响应。核心事务在显式表清单中恢复批准数据、清理旧 request_log、递增 snapshotVersion，并在同一事务插入以本次 requestId 为键的内部 pending receipt `{state:"pending",requestId,resetAt,goldenHash,snapshotVersion}`；`resetAt`、`goldenHash`、`snapshotVersion` 此后保持稳定。核心事务回滚时 pending receipt 同步回滚，重试可从头开始；核心事务提交后即使进程崩溃，重试看到 pending 也只能继续对应 snapshotVersion。`SnapshotWriter` 在提交后重建并原子替换文件：成功生成普通 OK；失败保留已提交 DB 和旧 snapshot、安排同一版本重试，仍生成 `ok=true,code=OK` 和同一 `{resetAt,goldenHash}` data，但 message 明确警告 snapshot 尚未刷新。随后在串行 DB worker 事务把 pending receipt 转为 final 并持久化完整 ACK bytes，再发送；final replay 必须逐字节稳定。文件级数据库替换只能在服务端停止时执行，不是此 action 的行为。
 - Qt owner：`DemoResetService`。
 - 主要失败：`INVALID_REQUEST`（confirmation 缺失/非 string 或不精确等于 `RESET_DEMO`），然后 `INTERNAL_ERROR`（核心事务提交前的黄金哈希/恢复验证失败），然后 `DB_BUSY`。提交后的 snapshot 写失败不返回失败 code。
 

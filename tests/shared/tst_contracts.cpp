@@ -1,5 +1,7 @@
 #include "contracts/Actions.h"
+#include "contracts/BusinessRules.h"
 #include "contracts/Permissions.h"
+#include "contracts/ResetReceipt.h"
 #include "contracts/Statuses.h"
 
 #include <QSet>
@@ -50,6 +52,8 @@ private slots:
     void actionsAreStable();
     void statusesValidate();
     void permissionsAreStable();
+    void businessFailuresFollowActionOrder();
+    void pendingResetReceiptResumesAfterCrash();
 };
 
 void ContractsTest::actionsAreStable()
@@ -187,6 +191,54 @@ void ContractsTest::permissionsAreStable()
         QVERIFY2(!ev::permissions::allows(permissionCase.actor, QStringLiteral("")),
                  qPrintable(QStringLiteral("blank action allowed for actor '%1'").arg(permissionCase.actor)));
     }
+}
+
+void ContractsTest::businessFailuresFollowActionOrder()
+{
+    using ev::business::ChargeReserveFacts;
+    using ev::business::DeviceEventFacts;
+
+    QCOMPARE(ev::business::chargeReserveFailure({true, true, false}),
+             QStringLiteral("USER_FROZEN"));
+    QCOMPARE(ev::business::chargeReserveFailure({false, true, false}),
+             QStringLiteral("ACTIVE_ORDER_EXISTS"));
+    QCOMPARE(ev::business::chargeReserveFailure({false, false, false}),
+             QStringLiteral("CHARGER_NOT_AVAILABLE"));
+    QCOMPARE(ev::business::chargeReserveFailure({false, false, true}), QString());
+
+    QCOMPARE(ev::business::deviceEventFailure({false, true, true}),
+             QStringLiteral("CHARGER_NOT_AVAILABLE"));
+    QCOMPARE(ev::business::deviceEventFailure({true, true, false}),
+             QStringLiteral("ORDER_STATE_CONFLICT"));
+    QCOMPARE(ev::business::deviceEventFailure({true, false, true}),
+             QStringLiteral("ORDER_STATE_CONFLICT"));
+    QCOMPARE(ev::business::deviceEventFailure({true, false, false}), QString());
+}
+
+void ContractsTest::pendingResetReceiptResumesAfterCrash()
+{
+    using ev::reset::NextStep;
+
+    const std::optional<ev::reset::Receipt> absent;
+    QVERIFY(ev::reset::nextStep(absent) == NextStep::BeginCoreReset);
+
+    const ev::reset::Receipt pending = ev::reset::makePendingReceipt(
+        QStringLiteral("reset-request-7"),
+        QStringLiteral("2026-09-02T10:30:00+08:00"),
+        QStringLiteral("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+        42);
+    QVERIFY(ev::reset::nextStep(pending) == NextStep::ResumeSnapshot);
+
+    const QByteArray ack = QByteArrayLiteral(
+        R"({"requestId":"reset-request-7","ok":true,"code":"OK","message":"snapshot pending","data":{"resetAt":"2026-09-02T10:30:00+08:00","goldenHash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}})");
+    const ev::reset::Receipt final = ev::reset::finalizeReceipt(pending, ack);
+
+    QCOMPARE(final.requestId, pending.requestId);
+    QCOMPARE(final.resetAt, pending.resetAt);
+    QCOMPARE(final.goldenHash, pending.goldenHash);
+    QCOMPARE(final.snapshotVersion, pending.snapshotVersion);
+    QCOMPARE(final.finalAck, ack);
+    QVERIFY(ev::reset::nextStep(final) == NextStep::ReplayFinalAck);
 }
 
 QTEST_MAIN(ContractsTest)
