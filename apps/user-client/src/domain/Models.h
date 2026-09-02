@@ -1,12 +1,15 @@
 #pragma once
 
 #include <QString>
+#include <QMetaType>
 #include <QtGlobal>
+
+#include <optional>
 
 namespace ev::user {
 
 struct User final {
-    qint64 id = 0;
+    qint64 userId = 0;
     QString mobile;
     QString nickname;
     QString avatarPath;
@@ -40,19 +43,27 @@ struct Charger final {
 };
 
 struct CurrentOrder final {
-    qint64 id = 0;
+    qint64 orderId = 0;
     qint64 userId = 0;
     qint64 chargerId = 0;
+    qint64 stationId = 0;
+    QString stationName;
+    QString chargerCode;
     QString status; // reserved | charging | completed | cancelled
     QString reservedAt;
     QString startedAt;
     QString endedAt;
     double energyKwh = 0.0;
     qint64 amountFen = 0;
+    qint64 elapsedSec = 0;
+};
+
+struct CurrentOrderResult final {
+    std::optional<CurrentOrder> order;
 };
 
 struct HistoryOrder final {
-    qint64 id = 0;
+    qint64 orderId = 0;
     qint64 userId = 0;
     qint64 chargerId = 0;
     QString stationName;
@@ -72,3 +83,8 @@ struct ApiError final {
 };
 
 } // namespace ev::user
+
+Q_DECLARE_METATYPE(ev::user::User)
+Q_DECLARE_METATYPE(ev::user::CurrentOrder)
+Q_DECLARE_METATYPE(ev::user::CurrentOrderResult)
+Q_DECLARE_METATYPE(ev::user::ApiError)

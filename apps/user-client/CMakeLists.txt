@@ -9,6 +9,8 @@ add_library(ev_user_client_core STATIC
     src/app/WebEngineRuntime.cpp
     src/domain/Formatters.cpp
     src/net/TcpJsonClient.cpp
+    src/services/UserApi.cpp
+    src/ui/LoginPage.cpp
     src/ui/MainWindow.cpp
 )
 target_include_directories(ev_user_client_core PUBLIC src)
@@ -37,3 +39,8 @@ add_test(NAME user_webengine_runtime COMMAND tst_user_webengine_runtime)
 add_executable(tst_user_tcpjsonclient tests/tst_tcpjsonclient.cpp)
 target_link_libraries(tst_user_tcpjsonclient PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_tcpjsonclient COMMAND tst_user_tcpjsonclient)
+
+add_executable(tst_user_api tests/tst_userapi.cpp)
+target_link_libraries(tst_user_api PRIVATE ev_user_client_core Qt6::Test)
+add_test(NAME user_api COMMAND tst_user_api)
+set_tests_properties(user_api PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
