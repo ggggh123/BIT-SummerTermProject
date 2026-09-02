@@ -51,8 +51,8 @@ struct CurrentOrder final {
     QString chargerCode;
     QString status; // reserved | charging | completed | cancelled
     QString reservedAt;
-    QString startedAt;
-    QString endedAt;
+    QString startedAt; // Timestamp; empty QString represents a JSON null wire value.
+    QString endedAt; // Timestamp; empty QString represents a JSON null wire value.
     double energyKwh = 0.0;
     qint64 amountFen = 0;
     qint64 elapsedSec = 0;

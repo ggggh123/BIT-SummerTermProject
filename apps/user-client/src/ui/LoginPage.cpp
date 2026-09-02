@@ -49,6 +49,7 @@ void LoginPage::setPending(bool pending)
 {
     pending_ = pending;
     loginButton_->setEnabled(!pending_);
+    loginButton_->setText(pending_ ? QStringLiteral("登录中…") : QStringLiteral("登录"));
 }
 
 void LoginPage::setConnectionAvailable(bool available)

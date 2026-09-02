@@ -136,6 +136,8 @@ private slots:
     void malformedLoginSuccessIsInvalidResponseAndServerErrorIsPreserved();
     void staleLoginResponseCannotReplaceNewerSession();
     void currentOrderUsesOwnedTokenAndRequiresActiveOrderShape();
+    void decoderAcceptsMaxSafeIntegerAndRejectsTwoToThe53();
+    void nullableOrderTimestampsDecodeAsEmptyStrings();
     void loginPageDisablesWhilePendingAndShowsConnectionFailure();
     void currentOrderGuardRoutesChargingAndNullToStablePages();
 };
@@ -261,6 +263,98 @@ void UserApiTest::currentOrderUsesOwnedTokenAndRequiresActiveOrderShape()
     QVERIFY(!qvariant_cast<ev::user::CurrentOrderResult>(orders.takeFirst().at(0)).order.has_value());
 }
 
+void UserApiTest::decoderAcceptsMaxSafeIntegerAndRejectsTwoToThe53()
+{
+    constexpr qint64 maxSafeInteger = 9'007'199'254'740'991LL;
+    constexpr double twoToThe53 = 9'007'199'254'740'992.0;
+
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+    UserApi api(&client);
+    QSignalSpy logins(&api, &UserApi::loginSucceeded);
+    QSignalSpy orders(&api, &UserApi::currentOrderLoaded);
+    QSignalSpy failures(&api, &UserApi::requestFailed);
+
+    QJsonObject maximumUser = userObject();
+    maximumUser.insert(QStringLiteral("userId"), static_cast<double>(maxSafeInteger));
+    maximumUser.insert(QStringLiteral("balanceFen"), static_cast<double>(maxSafeInteger));
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto maximumLogin = takeRequest(peer);
+    reply(peer, maximumLogin.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("maximum-token")}, {QStringLiteral("user"), maximumUser}});
+    QTRY_COMPARE(logins.size(), 1);
+    QCOMPARE(qvariant_cast<ev::user::User>(logins.takeFirst().at(0)).userId, maxSafeInteger);
+
+    QJsonObject maximumOrder = orderObject();
+    maximumOrder.insert(QStringLiteral("orderId"), static_cast<double>(maxSafeInteger));
+    maximumOrder.insert(QStringLiteral("userId"), static_cast<double>(maxSafeInteger));
+    maximumOrder.insert(QStringLiteral("chargerId"), static_cast<double>(maxSafeInteger));
+    maximumOrder.insert(QStringLiteral("stationId"), static_cast<double>(maxSafeInteger));
+    maximumOrder.insert(QStringLiteral("amountFen"), static_cast<double>(maxSafeInteger));
+    maximumOrder.insert(QStringLiteral("elapsedSec"), static_cast<double>(maxSafeInteger));
+    api.loadCurrentOrder();
+    const auto maximumOrderRequest = takeRequest(peer);
+    reply(peer, maximumOrderRequest.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), maximumOrder}});
+    QTRY_COMPARE(orders.size(), 1);
+    const auto maximumResult = qvariant_cast<ev::user::CurrentOrderResult>(orders.takeFirst().at(0));
+    QVERIFY(maximumResult.order.has_value());
+    QCOMPARE(maximumResult.order->orderId, maxSafeInteger);
+    QCOMPARE(maximumResult.order->amountFen, maxSafeInteger);
+    QCOMPARE(maximumResult.order->elapsedSec, maxSafeInteger);
+
+    QJsonObject oversizedAmountOrder = orderObject();
+    oversizedAmountOrder.insert(QStringLiteral("amountFen"), twoToThe53);
+    api.loadCurrentOrder();
+    const auto oversizedAmountRequest = takeRequest(peer);
+    reply(peer, oversizedAmountRequest.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), oversizedAmountOrder}});
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code, QStringLiteral("INVALID_RESPONSE"));
+
+    QJsonObject oversizedUser = userObject();
+    oversizedUser.insert(QStringLiteral("userId"), twoToThe53);
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto oversizedLogin = takeRequest(peer);
+    reply(peer, oversizedLogin.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("oversized-token")}, {QStringLiteral("user"), oversizedUser}});
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code, QStringLiteral("INVALID_RESPONSE"));
+}
+
+void UserApiTest::nullableOrderTimestampsDecodeAsEmptyStrings()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+    UserApi api(&client);
+    QSignalSpy orders(&api, &UserApi::currentOrderLoaded);
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer);
+    reply(peer, login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("nullable-token")}, {QStringLiteral("user"), userObject()}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+    api.loadCurrentOrder();
+    const auto currentOrder = takeRequest(peer);
+    reply(peer, currentOrder.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
+    QTRY_COMPARE(orders.size(), 1);
+    const auto result = qvariant_cast<ev::user::CurrentOrderResult>(orders.takeFirst().at(0));
+    QVERIFY(result.order.has_value());
+    QVERIFY(result.order->startedAt.isEmpty());
+    QVERIFY(result.order->endedAt.isEmpty());
+}
+
 void UserApiTest::loginPageDisablesWhilePendingAndShowsConnectionFailure()
 {
     LoginPage page;
@@ -273,6 +367,10 @@ void UserApiTest::loginPageDisablesWhilePendingAndShowsConnectionFailure()
     phone->setText(QString::fromLatin1(kMobile));
     page.setPending(true);
     QVERIFY(!button->isEnabled());
+    QCOMPARE(button->text(), QStringLiteral("登录中…"));
+    page.setPending(false);
+    QVERIFY(button->isEnabled());
+    QCOMPARE(button->text(), QStringLiteral("登录"));
     page.setConnectionAvailable(false);
     QCOMPARE(banner->text(), QStringLiteral("服务器连接不可用"));
 }
