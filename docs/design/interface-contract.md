@@ -67,6 +67,7 @@
 - JSON `number` 必须有限，禁止 NaN 和正负 Infinity。纬度为 `[-90,90]`，经度为 `[-180,180]`；功率、电量、负载和距离为非负有限数。
 - 金额一律为整数分（fen）。订单金额的唯一公式是 `qRound64(energyKwh * priceFenPerKwh)`；每次 energy 变化后由服务端用累计 `energyKwh` 重算 `amountFen`，客户端不得提交最终金额或结算后余额。
 - `Timestamp` 是有效 ISO 8601 字符串，必须显式带 `+08:00`，形式为 `YYYY-MM-DDTHH:mm:ss[.fraction]+08:00`。`Date` 是有效的 `YYYY-MM-DD`。
+- success data 中的 `acceptedAt` 是服务端首次接纳并提交该 `requestId` 对应动作时生成的 Timestamp，不是客户端事件时间；同一 `requestId` 幂等重放必须保留首次响应中的原始 `acceptedAt`。
 - 可选字段缺失时必须省略；不得把缺失字段静默解释为权威默认。仅共享 schema 或 action 明确标为 `null` 的位置允许 JSON `null`。
 - `mobile` 必须匹配 `^1[3-9][0-9]{9}$`。`nickname`、站点 `name/address`、`username/password`、`runId/modelVersion` 均为 trim 后非空 string；v1 不另设任意长度上限。
 - 分页 `limit` 可选，范围 `1..100`，省略时为 `20`；`offset` 可选，为非负 integer，省略时为 `0`。
@@ -103,6 +104,8 @@ charger 与 active order 必须作为一个耦合状态处理：
 - `fault=true` 作用于 `charging` charger 时，同一事务写入尚为空的 `endedAt=recordedAt`，按冻结金额公式重算并冻结 `amountFen`；order 保持 `charging` 等待用户结算，charger 改为 `fault`。若 order 已停止，则保留原 `endedAt` 和冻结金额。
 - charger 后续可按 `fault->restarting->idle` 恢复，但未结算的 charging order 仍是 active order。预约必须同时检查 charger status=`idle` 且该 charger 没有关联 `reserved|charging` order，不能因重启到 idle 绕过唯一性 guard。
 - 结算完成 order 后，charger 为 `charging` 才改为 `idle`；charger 为 `fault|restarting` 时保持原状态，已经为 `idle` 时也保持 `idle`。因此结算不会回退或跳过设备恢复状态机。
+
+`telemetry.push` 与 `simulator.fault_set` 对每个 charger 共享一个持久化 device-event cursor。其值是这两类动作中此前首次接纳事件的最大 `recordedAt`；每个新的首次请求必须严格晚于该 cursor。同一 `requestId` 的已存响应必须在 cursor 校验前直接重放。首次接纳事件必须在执行业务转换的同一 DB worker 事务中记录事件并推进 cursor；cursor 可由 telemetry/event storage 持久化或求最大值得出，但不得使用管理员操作会更新的 `charger.updatedAt` 代替。
 
 ## 5. 响应 code
 
@@ -290,7 +293,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 #### 1. `system.health`
 
 - actor：任意 actor，包括匿名和未知非空 actor。
-- payload：恰为 `{}`，无字段。
+- payload：无声明字段；未知字段仍按 2.2 忽略。
 - success data：`{status:string,schemaVersion:integer,snapshotVersion:integer,forecastRunId:string|null,serverTime:Timestamp}`。`status=starting|degraded|ready`，`schemaVersion=1`；`snapshotVersion` 非负（仅首次快照前可为 `0`，否则为正整数）；无 active forecast 时 `forecastRunId=null`。
 - 状态/转换：读取缓存健康状态，不执行 SQL。
 - Qt owner：`HealthService`。
@@ -308,7 +311,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 #### 3. `user.get`
 
 - actor：user。
-- payload：`{}`。
+- payload：无声明字段；未知字段仍按 2.2 忽略。
 - success data：`{user:User}`。
 - 状态/转换：读取 token 用户；`active|frozen` 均允许。
 - Qt owner：`UserService`。
@@ -398,7 +401,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 #### 13. `order.current`
 
 - actor：user。
-- payload：`{}`。
+- payload：无声明字段；未知字段仍按 2.2 忽略。
 - success data：`{order:Order|null}`；仅 token 用户的唯一 `reserved|charging` order，无活动订单时恰为 null。
 - 状态/转换：读取；`active|frozen` 均允许。
 - Qt owner：`ChargeService`。
@@ -479,9 +482,9 @@ charger 与 active order 必须作为一个耦合状态处理：
 #### 22. `telemetry.push`
 
 - actor：simulator。
-- payload：`chargerId` — integer，必填，正 safe integer；`recordedAt` — Timestamp，必填，必须严格晚于该 charger 最后接纳样本；`powerKw`、`energyIncrementKwh` — number，必填，非负有限数；`status` — string，必填，charger 冻结状态且必须与权威状态一致。字段名必须是 `recordedAt`，不接受旧拼写 `observedAt` 作为权威时间。
-- success data：`{acceptedAt:Timestamp,order:Order|null}`。存在关联 charging order 时返回该 order，否则为 null。
-- 状态/转换：记录样本；仅当权威 charger=`charging` 且 order=`charging,endedAt=null` 时累加 energy，并用 `qRound64(energyKwh * priceFenPerKwh)` 重算服务端 amount。stop 或 fault 已写入 endedAt 后，样本不得增加 energy/amount。payload status 不驱动状态转换。
+- payload：`chargerId` — integer，必填，正 safe integer；`recordedAt` — Timestamp，必填；`powerKw`、`energyIncrementKwh` — number，必填，非负有限数；`status` — string，必填，charger 冻结状态且必须与权威状态一致。字段名必须是 `recordedAt`，不接受旧拼写 `observedAt` 作为权威时间。新的首次请求的 `recordedAt` 必须严格晚于该 charger 跨 telemetry/fault 的共享 persisted cursor。
+- success data：`{acceptedAt:Timestamp,order:Order|null}`。存在关联 charging order 时返回该 order，否则为 null；`acceptedAt` 遵循第 3 节的首次提交/重放规则。
+- 状态/转换：先按 requestId 查找已存响应；命中则在 cursor 校验前逐字节重放。首次请求记录样本；仅当权威 charger=`charging` 且 order=`charging,endedAt=null` 时累加 energy，并用 `qRound64(energyKwh * priceFenPerKwh)` 重算服务端 amount。stop 或 fault 已写入 endedAt 后，样本不得增加 energy/amount。payload status 不驱动状态转换。首次接纳必须在同一事务持久化样本/业务变化、推进共享 cursor 并保存响应。
 - Qt owner：`TelemetryService`。
 - 主要失败：`INVALID_REQUEST`（字段缺失/类型错误、chargerId 非正、Timestamp 格式错误、数值非有限或为负），然后 `CHARGER_NOT_AVAILABLE`（正 ID charger 不存在），然后 `ORDER_STATE_CONFLICT`（recordedAt 不递增或 status 与权威状态不一致）。
 
@@ -490,7 +493,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - actor：simulator。
 - payload：`chargerId` — integer，必填，正 safe integer；`fault` — boolean，必填；`recordedAt` — Timestamp，必填。
 - success data：`{charger:Charger}`。
-- 状态/转换：`fault=true` 要求 charger 当前为 `idle|reserved|charging`。`idle->fault` 不涉及 order；`reserved->fault` 必须在同一事务取消关联 reserved order 并写入 `endedAt=recordedAt`；`charging->fault` 必须在同一事务为尚未停止的 order 写入 `endedAt=recordedAt`、按公式冻结 amount，order 保持 charging 待结算。`fault=false` 仅在当前为 `fault` 时记录恢复意图，charger 保持 `fault`，不得绕过管理员的 `fault->restarting->idle`。
+- 状态/转换：先按 requestId 查找已存响应；命中则在 cursor 校验前逐字节重放。新的首次请求的 `recordedAt` 必须严格晚于该 charger 跨 telemetry/fault 的共享 persisted cursor。`fault=true` 要求 charger 当前为 `idle|reserved|charging`。`idle->fault` 不涉及 order；`reserved->fault` 必须在同一事务取消关联 reserved order 并写入 `endedAt=recordedAt`；`charging->fault` 必须在同一事务为尚未停止的 order 写入 `endedAt=recordedAt`、按公式冻结 amount，order 保持 charging 待结算。`fault=false` 仅在当前为 `fault` 时记录恢复意图，charger 保持 `fault`，不得绕过管理员的 `fault->restarting->idle`。首次接纳必须在同一事务持久化事件/耦合状态变化、推进共享 cursor 并保存响应。
 - Qt owner：`TelemetryService`。
 - 主要失败：`INVALID_REQUEST`（字段缺失/类型错误、chargerId 非正或 Timestamp 格式错误），然后 `CHARGER_NOT_AVAILABLE`（正 ID charger 不存在），然后 `ORDER_STATE_CONFLICT`（recordedAt 不递增、布尔意图与状态不匹配或耦合 order 不满足原子转换条件）。
 
@@ -498,7 +501,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 
 - actor：simulator。
 - payload：`state` — string，必填，`running|paused`；`simulatedAt` — Timestamp，必填；`eventCount` — integer，必填，非负 safe integer。
-- success data：`{acceptedAt:Timestamp,chargers:array<Charger>}`，chargers 是用于重连同步的完整权威快照。
+- success data：`{acceptedAt:Timestamp,chargers:array<Charger>}`，chargers 是用于重连同步的完整权威快照；`acceptedAt` 遵循第 3 节的首次提交/重放规则。
 - 状态/转换：记录模拟器心跳/游标，不以 payload 覆盖 charger 状态。
 - Qt owner：`SimulatorService`。
 - 主要失败：`INVALID_REQUEST`（state、时间或计数无效）。
@@ -515,7 +518,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 #### 26. `forecast.latest`
 
 - actor：user 或 admin。
-- payload：`{}`。
+- payload：无声明字段；未知字段仍按 2.2 忽略。
 - success data：`{forecastRun:ForecastRun|null,records:array<ForecastRecord>}`。没有 active run 时必须恰为 `{forecastRun:null,records:[]}`；有 active run 时 records 恰为 144 条。
 - 状态/转换：读取。即使超过两小时也返回 `ok=true`、完整记录和 `forecastRun.stale=true`，不得返回 `FORECAST_STALE` 阻止查看。
 - Qt owner：`ForecastService`。

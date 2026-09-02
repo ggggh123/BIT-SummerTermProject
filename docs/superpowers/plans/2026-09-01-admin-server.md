@@ -218,11 +218,11 @@ idle + active user -> reserve => charger reserved, order reserved
 reserved + same user -> start => charger charging, order charging
 TelemetryService telemetry 0.25 kWh -> ChargeService energy += 0.25 and amountFen = rounded energy * price
 stop -> endedAt set and further telemetry ignored
-settle with sufficient balance -> order completed, balance debited, charger idle
+settle with sufficient balance -> order completed and balance debited; charger charging -> idle, while fault/restarting/idle remains unchanged
 cancel reserved -> order cancelled, charger idle
 ```
 
-Also assert unknown charger, non-increasing timestamp, negative/nonfinite energy, and a status mismatch are rejected by the one TelemetryService handler. `USER_FROZEN`, `ACTIVE_ORDER_EXISTS`, `CHARGER_NOT_AVAILABLE`, `ORDER_STATE_CONFLICT`, and `INSUFFICIENT_BALANCE` leave the database unchanged.
+Also assert reserve requires both charger status `idle` and no associated `reserved|charging` order, including after restart reaches idle while a stopped charging order remains unsettled. Assert unknown charger, non-increasing timestamp, negative/nonfinite energy, and a status mismatch are rejected by the one TelemetryService handler. `USER_FROZEN`, `ACTIVE_ORDER_EXISTS`, `CHARGER_NOT_AVAILABLE`, `ORDER_STATE_CONFLICT`, and `INSUFFICIENT_BALANCE` leave the database unchanged.
 
 - [ ] **Step 2: Run and verify failure**
 
@@ -232,7 +232,7 @@ Expected: FAIL because `ChargeService` is absent.
 
 - [ ] **Step 3: Implement each transition as one SQLite transaction**
 
-Use `BEGIN IMMEDIATE`; re-read user/order/charger rows inside the transaction; update only with a matching previous state; require one affected row. `charge.stop` stores `ended_at` while order remains `charging`; `charge.settle` requires non-null `ended_at` and changes status to `completed`. Compute:
+Use `BEGIN IMMEDIATE`; re-read user/order/charger rows inside the transaction; update only with a matching previous state; require one affected row. `charge.stop` stores `ended_at` while order remains `charging`; `charge.settle` requires non-null `ended_at` and changes status to `completed`, changing the charger only from `charging` to `idle` and preserving `fault|restarting|idle`. Compute:
 
 ```cpp
 const qint64 amountFen = qRound64(energyKwh * priceFenPerKwh);
@@ -335,7 +335,9 @@ git commit -m "feat(admin): add operations dashboard and management pages"
 
 - [ ] **Step 1: Write failing telemetry and forecast tests**
 
-Assert fault/recovery requires the simulator role and valid charger state; `simulator.status` validates `running|paused`, timestamp and nonnegative event count, then returns the authoritative charger snapshots needed after reconnect. A forecast batch must contain exactly 144 records: the 6 `forecast_enabled=1` stations × horizons 1–24, one run ID, no duplicate tuple, no NaN, busy/idle counts within station capacity. Invalid batches leave the previous run active.
+Assert fault/recovery requires the simulator role and valid charger state. Cover the coupled matrix: `fault=true` on reserved atomically cancels its reserved order; on an unstopped charging order it writes `endedAt`, freezes the amount and leaves the order `charging` pending settlement; on an already stopped charging order it preserves the earlier `endedAt` and frozen amount. Restart may reach `idle` while the unsettled active order continues to block reservation. Settlement changes charger `charging -> idle` and preserves `fault|restarting|idle`.
+
+Exercise one persisted per-charger device-event cursor shared by `telemetry.push` and `simulator.fault_set`: accept telemetry at t1, accept fault at t3, reject delayed telemetry at t2 and delayed fault at t2 with `ORDER_STATE_CONFLICT`. Replay a previously accepted request ID before the cursor check and assert its response bytes remain stable. `simulator.status` validates `running|paused`, timestamp and nonnegative event count, then returns the authoritative charger snapshots needed after reconnect. A forecast batch must contain exactly 144 records: the 6 `forecast_enabled=1` stations × horizons 1–24, one run ID, no duplicate tuple, no NaN, busy/idle counts within station capacity. Invalid batches leave the previous run active.
 
 - [ ] **Step 2: Write the failing atomic snapshot test**
 
@@ -349,7 +351,9 @@ Expected: FAIL.
 
 - [ ] **Step 4: Implement services and transaction semantics**
 
-Forecast publish validates all records and a canonical payload hash in memory, then uses an explicit two-transaction ACK flow. The first transaction is `BEGIN IMMEDIATE` → old `active` run to `superseded` → insert the new run as `active` with server-owned `activated_at` → insert 144 records → increment `snapshot_meta.version` → `COMMIT`; it does not store an ACK. After commit, attempt the corresponding snapshot write. A second serialized DB-worker transaction stores the final ACK with that attempt's actual `snapshotReady`, and only then may the server send it. Failure before the first commit leaves the old run active. If the batch committed but the final ACK was not stored, the same run ID/hash retry recognizes the committed batch, retries/checks the snapshot and stores one final ACK without switching the run again; a different hash returns `FORECAST_INVALID`. Once stored, same-request-ID replay is byte-stable. Metrics remain ML artifacts and are not accepted in the payload. `forecast.latest` returns `{forecastRun,records}`; it returns stale records with `ok=true`, and returns `{null,[]}` only when no active run exists. Staleness uses `activated_at`. Telemetry applies only to known chargers; for charging orders it increments energy and recomputes server-side amount.
+Forecast publish validates all records and a canonical payload hash in memory, then uses an explicit two-transaction ACK flow. The first transaction is `BEGIN IMMEDIATE` → old `active` run to `superseded` → insert the new run as `active` with server-owned `activated_at` → insert 144 records → increment `snapshot_meta.version` → `COMMIT`; it does not store an ACK. After commit, attempt the corresponding snapshot write. A second serialized DB-worker transaction stores the final ACK with that attempt's actual `snapshotReady`, and only then may the server send it. Failure before the first commit leaves the old run active. If the batch committed but the final ACK was not stored, the same run ID/hash retry recognizes the committed batch, retries/checks the snapshot and stores one final ACK without switching the run again; a different hash returns `FORECAST_INVALID`. Once stored, same-request-ID replay is byte-stable. Metrics remain ML artifacts and are not accepted in the payload. `forecast.latest` returns `{forecastRun,records}`; it returns stale records with `ok=true`, and returns `{null,[]}` only when no active run exists. Staleness uses `activated_at`.
+
+Telemetry/fault handling first checks `request_log`; a hit replays the exact stored response before validating the device-event cursor. For a first-time request, read the one persisted cursor per charger as the maximum accepted `recordedAt` across both telemetry and fault event storage, never from admin-updated `charger.updated_at`; require the new time to be strictly later. In the same `BEGIN IMMEDIATE` transaction, apply the telemetry or coupled fault/order transition, persist the event, advance the shared cursor and store the final response. Telemetry applies only to known chargers; for charging orders it increments energy and recomputes server-side amount. Fault transitions use the coupled matrix from Step 1 and must not detach an active order from an idle-after-restart charger.
 
 - [ ] **Step 5: Implement atomic snapshot replacement**
 

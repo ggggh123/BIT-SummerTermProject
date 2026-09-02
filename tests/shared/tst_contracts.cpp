@@ -206,6 +206,11 @@ void ContractsTest::businessFailuresFollowActionOrder()
              QStringLiteral("CHARGER_NOT_AVAILABLE"));
     QCOMPARE(ev::business::chargeReserveFailure({false, false, true}), QString());
 
+    const DeviceEventFacts defaults;
+    QVERIFY(!defaults.chargerExists);
+    QVERIFY(!defaults.temporalConflict);
+    QVERIFY(!defaults.stateTransitionConflict);
+
     QCOMPARE(ev::business::deviceEventFailure({false, true, true}),
              QStringLiteral("CHARGER_NOT_AVAILABLE"));
     QCOMPARE(ev::business::deviceEventFailure({true, true, false}),
@@ -239,6 +244,16 @@ void ContractsTest::pendingResetReceiptResumesAfterCrash()
     QCOMPARE(final.snapshotVersion, pending.snapshotVersion);
     QCOMPARE(final.finalAck, ack);
     QVERIFY(ev::reset::nextStep(final) == NextStep::ReplayFinalAck);
+
+    const QByteArray replacementAck = QByteArrayLiteral(
+        R"({"requestId":"reset-request-7","ok":false,"code":"INTERNAL_ERROR","message":"must not replace final ACK","data":{}})");
+    const ev::reset::Receipt finalizedAgain = ev::reset::finalizeReceipt(final, replacementAck);
+    QCOMPARE(finalizedAgain.state, ev::reset::ReceiptState::Final);
+    QCOMPARE(finalizedAgain.requestId, final.requestId);
+    QCOMPARE(finalizedAgain.resetAt, final.resetAt);
+    QCOMPARE(finalizedAgain.goldenHash, final.goldenHash);
+    QCOMPARE(finalizedAgain.snapshotVersion, final.snapshotVersion);
+    QCOMPARE(finalizedAgain.finalAck, ack);
 }
 
 QTEST_MAIN(ContractsTest)

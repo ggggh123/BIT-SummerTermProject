@@ -5,9 +5,9 @@
 namespace ev::business {
 
 struct ChargeReserveFacts {
-    bool userFrozen;
-    bool activeOrderExists;
-    bool chargerAvailable;
+    bool userFrozen = false;
+    bool activeOrderExists = false;
+    bool chargerAvailable = false;
 };
 
 inline QString chargeReserveFailure(const ChargeReserveFacts &facts)
@@ -25,14 +25,14 @@ inline QString chargeReserveFailure(const ChargeReserveFacts &facts)
 }
 
 struct DeviceEventFacts {
-    bool chargerAvailable;
-    bool temporalConflict;
-    bool stateTransitionConflict;
+    bool chargerExists = false;
+    bool temporalConflict = false;
+    bool stateTransitionConflict = false;
 };
 
 inline QString deviceEventFailure(const DeviceEventFacts &facts)
 {
-    if (!facts.chargerAvailable) {
+    if (!facts.chargerExists) {
         return QStringLiteral("CHARGER_NOT_AVAILABLE");
     }
     if (facts.temporalConflict || facts.stateTransitionConflict) {

@@ -79,8 +79,8 @@ for command_name in git cmake ninja qmake6 qtpaths6 python3 node npm pkg-config;
   fi
 done
 for qt_module in Qt6Core Qt6Network Qt6Widgets Qt6WebEngineWidgets Qt6Charts Qt6Test; do
-  if ! pkg-config --exists "$qt_module"; then
-    printf 'MISSING %s\n' "$qt_module"
+  if ! pkg-config --atleast-version=6.2 "$qt_module"; then
+    printf 'MISSING %s >= 6.2\n' "$qt_module"
     missing=1
   fi
 done
@@ -404,10 +404,10 @@ Require `version == 1`, nonblank request ID/action, string token when present, a
 `response-health.json`:
 
 ```json
-{"requestId":"fixture-health","ok":true,"code":"OK","message":"healthy","data":{"status":"ok"}}
+{"requestId":"fixture-health","ok":true,"code":"OK","message":"healthy","data":{"status":"ready","schemaVersion":1,"snapshotVersion":42,"forecastRunId":"forecast-fixture-20260902","serverTime":"2026-09-02T10:30:00+08:00"}}
 ```
 
-Tests load both files and round-trip them without changing field values.
+Tests load both files and round-trip them without changing field values. The response test also asserts every health data field, its JSON type and literal fixture value, membership of `status` in `starting|degraded|ready`, positive `snapshotVersion`, nonempty `forecastRunId`, and a valid `+08:00` Timestamp.
 
 - [ ] **Step 5: Run all shared tests**
 

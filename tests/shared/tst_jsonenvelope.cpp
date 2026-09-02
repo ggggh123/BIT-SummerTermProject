@@ -1,7 +1,9 @@
 #include "protocol/JsonEnvelope.h"
 
+#include <QDateTime>
 #include <QFile>
 #include <QJsonDocument>
+#include <QSet>
 #include <QtTest/QtTest>
 
 class JsonEnvelopeTest : public QObject
@@ -117,6 +119,46 @@ void JsonEnvelopeTest::roundTripsFixtures()
     const auto response = ev::protocol::parseResponse(responseFixture);
     QCOMPARE(QJsonDocument::fromJson(ev::protocol::toJson(response)).object(),
              QJsonDocument::fromJson(responseFixture).object());
+
+    QVERIFY(response.ok);
+    QCOMPARE(response.code, QStringLiteral("OK"));
+    QVERIFY(response.data.isObject());
+    const QJsonObject health = response.data.toObject();
+    const QStringList healthKeys = health.keys();
+    QCOMPARE(QSet<QString>(healthKeys.cbegin(), healthKeys.cend()),
+             QSet<QString>({QStringLiteral("status"),
+                            QStringLiteral("schemaVersion"),
+                            QStringLiteral("snapshotVersion"),
+                            QStringLiteral("forecastRunId"),
+                            QStringLiteral("serverTime")}));
+
+    const QJsonValue status = health.value(QStringLiteral("status"));
+    QVERIFY(status.isString());
+    const QSet<QString> healthStatuses = {
+        QStringLiteral("starting"), QStringLiteral("degraded"), QStringLiteral("ready")};
+    QVERIFY(healthStatuses.contains(status.toString()));
+    QCOMPARE(status.toString(), QStringLiteral("ready"));
+
+    const QJsonValue schemaVersion = health.value(QStringLiteral("schemaVersion"));
+    QVERIFY(schemaVersion.isDouble());
+    QCOMPARE(schemaVersion.toInt(), 1);
+
+    const QJsonValue snapshotVersion = health.value(QStringLiteral("snapshotVersion"));
+    QVERIFY(snapshotVersion.isDouble());
+    QCOMPARE(snapshotVersion.toInt(), 42);
+    QVERIFY(snapshotVersion.toInt() > 0);
+
+    const QJsonValue forecastRunId = health.value(QStringLiteral("forecastRunId"));
+    QVERIFY(forecastRunId.isString());
+    QCOMPARE(forecastRunId.toString(), QStringLiteral("forecast-fixture-20260902"));
+    QVERIFY(!forecastRunId.toString().trimmed().isEmpty());
+
+    const QJsonValue serverTime = health.value(QStringLiteral("serverTime"));
+    QVERIFY(serverTime.isString());
+    QCOMPARE(serverTime.toString(), QStringLiteral("2026-09-02T10:30:00+08:00"));
+    const QDateTime parsedServerTime = QDateTime::fromString(serverTime.toString(), Qt::ISODate);
+    QVERIFY(parsedServerTime.isValid());
+    QCOMPARE(parsedServerTime.offsetFromUtc(), 8 * 60 * 60);
 }
 
 QTEST_MAIN(JsonEnvelopeTest)

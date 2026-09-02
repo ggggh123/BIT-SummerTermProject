@@ -46,6 +46,9 @@ inline Receipt makePendingReceipt(QString requestId,
 
 inline Receipt finalizeReceipt(Receipt receipt, QByteArray finalAck)
 {
+    if (receipt.state == ReceiptState::Final) {
+        return receipt;
+    }
     receipt.state = ReceiptState::Final;
     receipt.finalAck = std::move(finalAck);
     return receipt;

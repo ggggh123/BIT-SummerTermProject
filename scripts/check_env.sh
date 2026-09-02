@@ -15,8 +15,8 @@ for command_name in git cmake ninja qmake6 qtpaths6 python3 node npm pkg-config;
 done
 
 for qt_module in Qt6Core Qt6Network Qt6Widgets Qt6WebEngineWidgets Qt6Charts Qt6Test; do
-  if ! pkg-config --exists "$qt_module"; then
-    printf 'MISSING %s\n' "$qt_module"
+  if ! pkg-config --atleast-version=6.2 "$qt_module"; then
+    printf 'MISSING %s >= 6.2\n' "$qt_module"
     missing=1
   fi
 done
