@@ -1,6 +1,7 @@
 #include "protocol/JsonEnvelope.h"
 
 #include <QFile>
+#include <QJsonDocument>
 #include <QtTest/QtTest>
 
 class JsonEnvelopeTest : public QObject
@@ -10,10 +11,8 @@ class JsonEnvelopeTest : public QObject
 private slots:
     void roundTripsRequest();
     void rejectsMissingAndWrongFields();
+    void classifiesRequestVersionErrors();
     void roundTripsFixtures();
-
-private:
-    QByteArray readFixture(const QString &name) const;
 };
 
 void JsonEnvelopeTest::roundTripsRequest()
@@ -33,32 +32,54 @@ void JsonEnvelopeTest::rejectsMissingAndWrongFields()
                              ev::protocol::EnvelopeError);
 }
 
-void JsonEnvelopeTest::roundTripsFixtures()
+void JsonEnvelopeTest::classifiesRequestVersionErrors()
 {
-    const QByteArray requestFixture = readFixture(QStringLiteral("request-health.json"));
-    const auto request = ev::protocol::parseRequest(requestFixture);
-    QCOMPARE(request.version, 1);
-    QCOMPARE(request.requestId, QStringLiteral("fixture-health"));
-    QCOMPARE(request.action, QStringLiteral("system.health"));
-    QCOMPARE(request.token, QStringLiteral(""));
-    QCOMPARE(request.payload, QJsonObject{});
+    try {
+        ev::protocol::parseRequest(R"({"requestId":"x","action":"system.health","payload":{}})");
+        QFAIL("Expected missing version to be rejected");
+    } catch (const ev::protocol::EnvelopeError &error) {
+        QCOMPARE(error.code(), QStringLiteral("INVALID_REQUEST"));
+    }
 
-    const QByteArray responseFixture = readFixture(QStringLiteral("response-health.json"));
-    const auto response = ev::protocol::parseResponse(responseFixture);
-    QCOMPARE(response.requestId, QStringLiteral("fixture-health"));
-    QCOMPARE(response.ok, true);
-    QCOMPARE(response.code, QStringLiteral("OK"));
-    QCOMPARE(response.message, QStringLiteral("healthy"));
-    QCOMPARE(response.data.toObject().value(QStringLiteral("status")).toString(), QStringLiteral("ok"));
+    try {
+        ev::protocol::parseRequest(R"({"version":"1","requestId":"x","action":"system.health","payload":{}})");
+        QFAIL("Expected string version to be rejected");
+    } catch (const ev::protocol::EnvelopeError &error) {
+        QCOMPARE(error.code(), QStringLiteral("INVALID_REQUEST"));
+    }
+
+    try {
+        ev::protocol::parseRequest(R"({"version":2,"requestId":"x","action":"system.health","payload":{}})");
+        QFAIL("Expected unsupported numeric version to be rejected");
+    } catch (const ev::protocol::EnvelopeError &error) {
+        QCOMPARE(error.code(), QStringLiteral("UNSUPPORTED_VERSION"));
+    }
+
+    try {
+        ev::protocol::parseRequest(R"({"version":1.5,"requestId":"x","action":"system.health","payload":{}})");
+        QFAIL("Expected non-v1 numeric version to be rejected");
+    } catch (const ev::protocol::EnvelopeError &error) {
+        QCOMPARE(error.code(), QStringLiteral("UNSUPPORTED_VERSION"));
+    }
 }
 
-QByteArray JsonEnvelopeTest::readFixture(const QString &name) const
+void JsonEnvelopeTest::roundTripsFixtures()
 {
-    QFile file(QStringLiteral(TEST_FIXTURE_DIR) + QStringLiteral("/") + name);
-    if (!file.open(QIODevice::ReadOnly)) {
-        QFAIL(qPrintable(QStringLiteral("Cannot open fixture: ") + file.fileName()));
-    }
-    return file.readAll();
+    QFile requestFile(QStringLiteral(TEST_FIXTURE_DIR) + QStringLiteral("/request-health.json"));
+    QVERIFY2(requestFile.open(QIODevice::ReadOnly),
+             qPrintable(QStringLiteral("Cannot open fixture: ") + requestFile.fileName()));
+    const QByteArray requestFixture = requestFile.readAll();
+    const auto request = ev::protocol::parseRequest(requestFixture);
+    QCOMPARE(QJsonDocument::fromJson(ev::protocol::toJson(request)).object(),
+             QJsonDocument::fromJson(requestFixture).object());
+
+    QFile responseFile(QStringLiteral(TEST_FIXTURE_DIR) + QStringLiteral("/response-health.json"));
+    QVERIFY2(responseFile.open(QIODevice::ReadOnly),
+             qPrintable(QStringLiteral("Cannot open fixture: ") + responseFile.fileName()));
+    const QByteArray responseFixture = responseFile.readAll();
+    const auto response = ev::protocol::parseResponse(responseFixture);
+    QCOMPARE(QJsonDocument::fromJson(ev::protocol::toJson(response)).object(),
+             QJsonDocument::fromJson(responseFixture).object());
 }
 
 QTEST_MAIN(JsonEnvelopeTest)

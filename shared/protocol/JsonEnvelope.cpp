@@ -73,7 +73,10 @@ RequestEnvelope parseRequest(QByteArrayView json)
     const QJsonObject object = parseObject(json);
 
     const QJsonValue versionValue = object.value(QStringLiteral("version"));
-    if (!versionValue.isDouble() || versionValue.toInt() != 1) {
+    if (!versionValue.isDouble()) {
+        throw EnvelopeError(QStringLiteral("INVALID_REQUEST"), QStringLiteral("version must be a number"));
+    }
+    if (versionValue.toDouble() != 1.0) {
         throw EnvelopeError(QStringLiteral("UNSUPPORTED_VERSION"), QStringLiteral("version must be 1"));
     }
 
