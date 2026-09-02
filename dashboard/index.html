@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>电动汽车充电平台 · 运营大屏</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>电动汽车充电平台 · 运营大屏</h1>
+      <p class="subtitle">数据来自服务端原子快照 dashboard_snapshot.json，每 2 秒轮询</p>
+    </div>
+    <div class="status-area">
+      <span id="connection-state" class="pill pill-pending" role="status">连接检测中…</span>
+      <span id="generated-at" class="generated-at" aria-label="快照生成时间">生成时间：—</span>
+    </div>
+  </header>
+
+  <section class="kpi-row" aria-label="核心指标">
+    <div class="kpi-card">
+      <h2 class="kpi-label">今日营收</h2>
+      <p class="kpi-value" id="kpi-revenue">—</p>
+      <p class="kpi-hint">近 7 日 / 30 日趋势见下方营收图</p>
+    </div>
+    <div class="kpi-card">
+      <h2 class="kpi-label">今日充电量</h2>
+      <p class="kpi-value" id="kpi-energy">—</p>
+      <p class="kpi-hint">全部充电桩累计输出电量</p>
+    </div>
+    <div class="kpi-card">
+      <h2 class="kpi-label">今日订单</h2>
+      <p class="kpi-value" id="kpi-orders">—</p>
+      <p class="kpi-hint">今日完成订单笔数</p>
+    </div>
+    <div class="kpi-card">
+      <h2 class="kpi-label">在线率 / 空闲桩</h2>
+      <p class="kpi-value"><span id="kpi-online">—</span></p>
+      <p class="kpi-hint" id="kpi-idle">空闲桩：—</p>
+    </div>
+  </section>
+
+  <main class="layout">
+    <section class="panel revenue-panel" aria-labelledby="revenue-title">
+      <h2 id="revenue-title">近 7 日营收趋势（元）</h2>
+      <div id="revenue-chart" class="chart" role="img" aria-label="近 7 日营收柱状图"></div>
+    </section>
+
+    <section class="panel status-panel" aria-labelledby="status-title">
+      <h2 id="status-title">充电桩状态分布（个）</h2>
+      <div id="status-chart" class="chart" role="img" aria-label="充电桩状态环图"></div>
+    </section>
+
+    <section class="panel load-panel" aria-labelledby="load-title">
+      <h2 id="load-title">24 小时实际负荷与未来 24 小时预测（kW）
+        <label class="station-picker">站点
+          <select id="station-select" aria-label="选择站点"></select>
+        </label>
+      </h2>
+      <p id="load-note" class="panel-note" hidden></p>
+      <div id="load-chart" class="chart tall" role="img" aria-label="负荷与预测双曲线图"></div>
+    </section>
+
+    <section class="panel ranking-panel" aria-labelledby="ranking-title">
+      <h2 id="ranking-title">站点利用率排行（%）</h2>
+      <div id="ranking-chart" class="chart" role="img" aria-label="站点利用率横向条形图"></div>
+    </section>
+
+    <section class="panel map-panel" aria-labelledby="map-title">
+      <h2 id="map-title">站点分布（点击站点查看详情）</h2>
+      <div id="station-map" class="chart" role="img" aria-label="站点经纬度散点图"></div>
+      <dl id="station-detail" class="station-detail" aria-live="polite">
+        <dt>当前站点</dt><dd>点击上方散点选择站点</dd>
+      </dl>
+    </section>
+
+    <section class="panel events-panel" aria-labelledby="events-title">
+      <h2 id="events-title">实时事件流</h2>
+      <ul id="event-list" class="event-list" aria-live="polite"></ul>
+    </section>
+  </main>
+
+  <footer class="footnote">
+    快照失败时保留最后成功数据并显示连接状态 · 预测依据服务端 activatedAt 判定是否过期 · 本地静态资源，无外部 CDN
+  </footer>
+
+  <script src="vendor/echarts.min.js"></script>
+  <script type="module" src="assets/dashboard.js"></script>
+</body>
+</html>
