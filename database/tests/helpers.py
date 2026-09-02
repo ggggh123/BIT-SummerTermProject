@@ -1,8 +1,13 @@
 """Shared test helpers for the database test suite."""
+import hashlib
 import sqlite3
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Make the ``database`` package (seed_demo.py etc.) importable from tests.
+sys.path.insert(0, str(REPO_ROOT / "database"))
 
 
 def _connect(path):
@@ -54,3 +59,31 @@ def expect_integrity_error(db_path, sql, params=()):
         conn.close()
     if not raised:
         raise AssertionError("expected sqlite3.IntegrityError for: " + sql)
+
+
+def build_temp_db(tmp_path, seed=20260901, cutoff="2026-09-01T09:00:00+08:00",
+                  name="demo.db"):
+    """Apply the schema, seed the database, and return the SeedSummary."""
+    from seed_demo import seed_database
+
+    db = tmp_path / name
+    apply_schema(db, Path("database/schema.sql"))
+    conn = _connect(db)
+    summary = seed_database(conn, seed=seed, cutoff=cutoff)
+    conn.commit()
+    conn.close()
+    return summary
+
+
+def canonical_hash(db_path):
+    """Return a SHA-256 over every table's rows, in a stable order."""
+    conn = _connect(db_path)
+    tables = [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name NOT LIKE 'sqlite_%' ORDER BY name").fetchall()]
+    parts = []
+    for table in tables:
+        for row in conn.execute(f'SELECT * FROM "{table}" ORDER BY rowid'):
+            parts.append(table + "|" + "|".join(repr(v) for v in row))
+    conn.close()
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
