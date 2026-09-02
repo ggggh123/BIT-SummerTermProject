@@ -6,8 +6,11 @@
 #include "ui/LoginPage.h"
 #include "ui/NavigationPage.h"
 #include "ui/NearbyPage.h"
+#include "ui/ProfilePage.h"
 
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -34,14 +37,30 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     }
     layout->addWidget(configurationMessage);
 
+    authenticatedNavigation_ = new QWidget(centralWidget);
+    authenticatedNavigation_->setObjectName(QStringLiteral("authenticatedNavigation"));
+    auto *navigationLayout = new QHBoxLayout(authenticatedNavigation_);
+    navigationLayout->setContentsMargins(0, 0, 0, 0);
+    nearbyNavigationButton_ = new QPushButton(QStringLiteral("附近充电站"), authenticatedNavigation_);
+    nearbyNavigationButton_->setObjectName(QStringLiteral("nearbyNavigationButton"));
+    profileNavigationButton_ = new QPushButton(QStringLiteral("我的账户"), authenticatedNavigation_);
+    profileNavigationButton_->setObjectName(QStringLiteral("profileNavigationButton"));
+    navigationLayout->addWidget(nearbyNavigationButton_);
+    navigationLayout->addWidget(profileNavigationButton_);
+    navigationLayout->addStretch();
+    authenticatedNavigation_->setVisible(false);
+    layout->addWidget(authenticatedNavigation_);
+
     pages_ = new QStackedWidget(centralWidget);
     pages_->setObjectName(QStringLiteral("mainPages"));
     loginPage_ = new LoginPage(pages_);
     nearbyPage_ = new NearbyPage(userApi_, mapClient_, pages_);
+    profilePage_ = new ProfilePage(userApi_, pages_);
     chargePage_ = new QLabel(QStringLiteral("当前充电订单"), pages_);
     chargePage_->setObjectName(QStringLiteral("chargePage"));
     pages_->addWidget(loginPage_);
     pages_->addWidget(nearbyPage_);
+    pages_->addWidget(profilePage_);
     pages_->addWidget(chargePage_);
     pages_->setCurrentWidget(loginPage_);
     layout->addWidget(pages_);
@@ -51,13 +70,23 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     connect(userApi_, &UserApi::connectionChanged, loginPage_, &LoginPage::setConnectionAvailable);
     connect(userApi_, &UserApi::connectionChanged, nearbyPage_, &NearbyPage::setConnectionAvailable);
     connect(userApi_, &UserApi::requestFailed, this, [this](const ev::user::ApiError &error) {
-        loginPage_->setError(error.message);
+        if (pages_->currentWidget() == loginPage_) {
+            loginPage_->setError(error.message);
+        }
     });
     connect(userApi_, &UserApi::loginSucceeded, this, [this](const ev::user::User &) {
         userApi_->loadCurrentOrder();
     });
     connect(userApi_, &UserApi::currentOrderLoaded, this, [this](const ev::user::CurrentOrderResult &result) {
+        authenticatedNavigation_->setVisible(true);
         pages_->setCurrentWidget(result.order.has_value() ? chargePage_ : nearbyPage_);
+    });
+    connect(nearbyNavigationButton_, &QPushButton::clicked, this, [this] {
+        pages_->setCurrentWidget(nearbyPage_);
+    });
+    connect(profileNavigationButton_, &QPushButton::clicked, this, [this] {
+        pages_->setCurrentWidget(profilePage_);
+        profilePage_->refresh();
     });
     connect(nearbyPage_, &NearbyPage::navigationRequested, this,
             [this](ev::user::GeoPoint origin, ev::user::Station station) {

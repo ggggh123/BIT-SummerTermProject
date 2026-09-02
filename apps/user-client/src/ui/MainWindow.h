@@ -15,7 +15,11 @@ private:
     class LoginPage *loginPage_;
     class QStackedWidget *pages_;
     class NearbyPage *nearbyPage_;
+    class ProfilePage *profilePage_;
     class NavigationPage *navigationPage_ = nullptr;
+    QWidget *authenticatedNavigation_;
+    class QPushButton *nearbyNavigationButton_;
+    class QPushButton *profileNavigationButton_;
     QWidget *chargePage_;
     QString mapKey_;
 };

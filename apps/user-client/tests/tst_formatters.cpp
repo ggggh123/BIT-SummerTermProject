@@ -31,7 +31,8 @@ class FormattersTest final : public QObject {
 
 private slots:
     void phoneAndMoney();
-    void moneyRejectsOverflowAndExtraPrecision();
+    void moneyUsesCheckedSafeIntegerArithmetic();
+    void moneyRejectsNonCanonicalOrNonAsciiText();
     void distanceIsStable();
     void environmentOverridesLocalIni();
     void missingConfigurationIsVisibleInChinese();
@@ -46,10 +47,30 @@ void FormattersTest::phoneAndMoney() {
     QCOMPARE(formatFen(1234), QStringLiteral("12.34"));
 }
 
-void FormattersTest::moneyRejectsOverflowAndExtraPrecision() {
+void FormattersTest::moneyUsesCheckedSafeIntegerArithmetic() {
+    const auto minimumFen = parsePositiveFen(QStringLiteral("0.01"));
+    QVERIFY(minimumFen.has_value());
+    QCOMPARE(*minimumFen, qint64{1});
     QCOMPARE(parsePositiveFen(QStringLiteral("1.2")).value(), qint64{120});
+    const auto maximumFen = parsePositiveFen(QStringLiteral("90071992547409.91"));
+    QVERIFY(maximumFen.has_value());
+    QCOMPARE(*maximumFen, qint64{9'007'199'254'740'991LL});
+    QVERIFY(!parsePositiveFen(QStringLiteral("90071992547409.92")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("90071992547410")).has_value());
     QVERIFY(!parsePositiveFen(QStringLiteral("92233720368547758.08")).has_value());
+}
+
+void FormattersTest::moneyRejectsNonCanonicalOrNonAsciiText() {
     QVERIFY(!parsePositiveFen(QStringLiteral("12.")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("0.00")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("00.01")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("+1")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("-1")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral(" 1")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("1 ")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("1e2")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("１.００")).has_value());
+    QVERIFY(!parsePositiveFen(QStringLiteral("0.001")).has_value());
 }
 
 void FormattersTest::distanceIsStable() {

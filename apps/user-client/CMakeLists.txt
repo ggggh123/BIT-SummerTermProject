@@ -15,6 +15,7 @@ add_library(ev_user_client_core STATIC
     src/ui/MainWindow.cpp
     src/ui/NavigationPage.cpp
     src/ui/NearbyPage.cpp
+    src/ui/ProfilePage.cpp
 )
 target_include_directories(ev_user_client_core PUBLIC src)
 target_link_libraries(ev_user_client_core
@@ -43,7 +44,7 @@ add_executable(tst_user_tcpjsonclient tests/tst_tcpjsonclient.cpp)
 target_link_libraries(tst_user_tcpjsonclient PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_tcpjsonclient COMMAND tst_user_tcpjsonclient)
 
-add_executable(tst_user_api tests/tst_userapi.cpp)
+add_executable(tst_user_api tests/tst_userapi.cpp resources/resources.qrc)
 target_link_libraries(tst_user_api PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_api COMMAND tst_user_api)
 set_tests_properties(user_api PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

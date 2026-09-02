@@ -2,6 +2,7 @@
 
 #include "contracts/Actions.h"
 #include "contracts/Statuses.h"
+#include "domain/Formatters.h"
 #include "net/TcpJsonClient.h"
 #include "protocol/Envelope.h"
 
@@ -21,6 +22,7 @@ namespace {
 constexpr qint64 kMaxSafeInteger = 9'007'199'254'740'991LL;
 const QString kInvalidResponse = QStringLiteral("INVALID_RESPONSE");
 const QString kInvalidResponseMessage = QStringLiteral("服务器响应无效");
+const QString kUncertainMessage = QStringLiteral("结果未确认，请重新连接后刷新账户信息");
 const QRegularExpression kMobilePattern(QStringLiteral("^1[3-9][0-9]{9}$"));
 const QRegularExpression kTimestampPattern(
     QStringLiteral("^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.\\d+)?\\+08:00$"));
@@ -488,7 +490,7 @@ UserApi::UserApi(TcpJsonClient *client, QObject *parent)
     qRegisterMetaType<ev::user::ForecastLatestResult>();
     connect(client_, &TcpJsonClient::responseReceived, this, &UserApi::handleResponse);
     connect(client_, &TcpJsonClient::transportFailed, this, &UserApi::handleTransportFailure);
-    connect(client_, &TcpJsonClient::connectionChanged, this, &UserApi::connectionChanged);
+    connect(client_, &TcpJsonClient::connectionChanged, this, &UserApi::handleConnectionState);
 }
 
 void UserApi::loginByPhone(const QString &mobile)
@@ -497,6 +499,12 @@ void UserApi::loginByPhone(const QString &mobile)
     user_.reset();
     stationSnapshots_.clear();
     token_.clear();
+    profileRequestId_.clear();
+    if (profileOutcomeUncertain_) {
+        profileOutcomeUncertain_ = false;
+    }
+    emit profileReadPendingChanged(false);
+    emit profileMutationPendingChanged(false);
     emit loginPendingChanged(true);
     if (!kMobilePattern.match(mobile).hasMatch()) {
         emit loginPendingChanged(false);
@@ -571,9 +579,145 @@ QString UserApi::loadLatestForecast(const QString &stationListRequestId)
     return requestId;
 }
 
+QString UserApi::loadProfile()
+{
+    return loadProfile(profileOutcomeUncertain_);
+}
+
+QString UserApi::loadProfile(bool reconciliation)
+{
+    if (!user_.has_value() || token_.isEmpty()) {
+        emitProfileFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
+        return {};
+    }
+    if (profileOperationPending()) {
+        emitProfileFailure(QString(), QStringLiteral("PROFILE_BUSY"),
+                           QStringLiteral("账户操作正在进行，请稍候"));
+        return {};
+    }
+    const QString requestId = client_->send(ev::actions::UserGet, {}, token_);
+    PendingOperation pending{Operation::ProfileGet, sessionGeneration_};
+    pending.reconciliation = reconciliation;
+    pendingOperations_.insert(requestId, std::move(pending));
+    profileRequestId_ = requestId;
+    emit profileReadPendingChanged(true);
+    return requestId;
+}
+
+QString UserApi::updateNickname(const QString &nickname)
+{
+    if (!user_.has_value() || token_.isEmpty()) {
+        emitProfileFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
+        return {};
+    }
+    const QString normalized = nickname.trimmed();
+    if (normalized.isEmpty()) {
+        emitProfileFailure(QString(), QStringLiteral("INVALID_NICKNAME"),
+                           QStringLiteral("昵称不能为空"));
+        return {};
+    }
+    if (profileOutcomeUncertain_) {
+        emitProfileFailure(QString(), QStringLiteral("RECONCILIATION_REQUIRED"),
+                           kUncertainMessage);
+        return {};
+    }
+    if (profileOperationPending()) {
+        emitProfileFailure(QString(), QStringLiteral("PROFILE_BUSY"),
+                           QStringLiteral("账户操作正在进行，请稍候"));
+        return {};
+    }
+    const QString requestId = client_->send(
+        ev::actions::UserUpdate,
+        QJsonObject{{QStringLiteral("nickname"), normalized}}, token_);
+    pendingOperations_.insert(requestId, {Operation::ProfileUpdate, sessionGeneration_});
+    profileRequestId_ = requestId;
+    emit profileMutationPendingChanged(true);
+    return requestId;
+}
+
+QString UserApi::rechargeWallet(const QString &amount)
+{
+    if (!user_.has_value() || token_.isEmpty()) {
+        emitProfileFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
+        return {};
+    }
+    const auto amountFen = parsePositiveFen(amount);
+    if (!amountFen.has_value()) {
+        emitProfileFailure(QString(), QStringLiteral("INVALID_AMOUNT"),
+                           QStringLiteral("请输入有效的充值金额（最多两位小数）"));
+        return {};
+    }
+    if (profileOutcomeUncertain_) {
+        emitProfileFailure(QString(), QStringLiteral("RECONCILIATION_REQUIRED"),
+                           kUncertainMessage);
+        return {};
+    }
+    if (profileOperationPending()) {
+        emitProfileFailure(QString(), QStringLiteral("PROFILE_BUSY"),
+                           QStringLiteral("账户操作正在进行，请稍候"));
+        return {};
+    }
+    const QString requestId = client_->send(
+        ev::actions::WalletRecharge,
+        QJsonObject{{QStringLiteral("amountFen"), *amountFen}}, token_);
+    pendingOperations_.insert(requestId, {Operation::ProfileRecharge, sessionGeneration_});
+    profileRequestId_ = requestId;
+    emit profileMutationPendingChanged(true);
+    return requestId;
+}
+
 std::optional<ev::user::User> UserApi::sessionUser() const
 {
     return user_;
+}
+
+bool UserApi::profileNeedsReconciliation() const
+{
+    return profileOutcomeUncertain_;
+}
+
+bool UserApi::profileOperationPending() const
+{
+    return !profileRequestId_.isEmpty();
+}
+
+bool UserApi::isProfileOperation(Operation operation)
+{
+    return operation == Operation::ProfileGet || operation == Operation::ProfileUpdate
+        || operation == Operation::ProfileRecharge;
+}
+
+bool UserApi::isProfileMutation(Operation operation)
+{
+    return operation == Operation::ProfileUpdate || operation == Operation::ProfileRecharge;
+}
+
+void UserApi::finishProfileOperation(Operation operation)
+{
+    profileRequestId_.clear();
+    if (isProfileMutation(operation)) {
+        emit profileMutationPendingChanged(false);
+    } else {
+        emit profileReadPendingChanged(false);
+    }
+}
+
+void UserApi::markProfileUncertain()
+{
+    if (profileOutcomeUncertain_) {
+        return;
+    }
+    profileOutcomeUncertain_ = true;
+    emit profileReconciliationRequired();
+}
+
+void UserApi::handleConnectionState(bool connected)
+{
+    emit connectionChanged(connected);
+    if (connected && profileOutcomeUncertain_ && user_.has_value() && !token_.isEmpty()
+        && !profileOperationPending()) {
+        (void)loadProfile(true);
+    }
 }
 
 void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
@@ -589,6 +733,63 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
     }
     if (pending.operation == Operation::Login) {
         emit loginPendingChanged(false);
+    }
+    if (isProfileOperation(pending.operation)) {
+        const auto invalidProfileResponse = [this, &response, &pending] {
+            if (isProfileMutation(pending.operation)) {
+                markProfileUncertain();
+            }
+            finishProfileOperation(pending.operation);
+            emitProfileFailure(response.requestId, kInvalidResponse, kInvalidResponseMessage);
+        };
+        if (!response.ok) {
+            if (!validFailure(response)) {
+                invalidProfileResponse();
+            } else {
+                finishProfileOperation(pending.operation);
+                emitProfileFailure(response.requestId, response.code, response.message);
+            }
+            return;
+        }
+        if (response.code != QStringLiteral("OK") || !response.data.isObject()) {
+            invalidProfileResponse();
+            return;
+        }
+        const QJsonObject profileData = response.data.toObject();
+        if (pending.operation == Operation::ProfileGet
+            || pending.operation == Operation::ProfileUpdate) {
+            ev::user::User decoded;
+            if (!hasExactlyKeys(profileData, {"user"})
+                || !parseUser(profileData.value(QStringLiteral("user")), &decoded)
+                || !user_.has_value() || decoded.userId != user_->userId
+                || decoded.mobile != user_->mobile) {
+                invalidProfileResponse();
+                return;
+            }
+            user_ = decoded;
+            const bool reconciled = pending.reconciliation && profileOutcomeUncertain_;
+            finishProfileOperation(pending.operation);
+            emit profileUserChanged(decoded);
+            if (reconciled) {
+                profileOutcomeUncertain_ = false;
+                emit profileReconciled(decoded);
+            }
+            return;
+        }
+        qint64 userId = 0;
+        qint64 balanceFen = 0;
+        if (!hasExactlyKeys(profileData, {"userId", "balanceFen"})
+            || !positiveInteger(profileData, "userId", &userId)
+            || !nonnegativeInteger(profileData, "balanceFen", &balanceFen)
+            || !user_.has_value() || userId != user_->userId) {
+            invalidProfileResponse();
+            return;
+        }
+        user_->balanceFen = balanceFen;
+        const ev::user::User updated = *user_;
+        finishProfileOperation(pending.operation);
+        emit profileUserChanged(updated);
+        return;
     }
     if (!response.ok) {
         if (!validFailure(response)) {
@@ -679,6 +880,14 @@ void UserApi::handleTransportFailure(const QString &requestId, const QString &co
     if (pending.operation == Operation::Login) {
         emit loginPendingChanged(false);
     }
+    if (isProfileOperation(pending.operation)) {
+        if (isProfileMutation(pending.operation) && code != QStringLiteral("NOT_CONNECTED")) {
+            markProfileUncertain();
+        }
+        finishProfileOperation(pending.operation);
+        emitProfileFailure(requestId, code, message);
+        return;
+    }
     emitFailure(requestId, code, message);
 }
 
@@ -690,4 +899,12 @@ void UserApi::emitInvalidResponse(const QString &requestId)
 void UserApi::emitFailure(const QString &requestId, const QString &code, const QString &message)
 {
     emit requestFailed({requestId, code, message});
+}
+
+void UserApi::emitProfileFailure(const QString &requestId, const QString &code,
+                                 const QString &message)
+{
+    const ev::user::ApiError error{requestId, code, message};
+    emit profileRequestFailed(error);
+    emit requestFailed(error);
 }

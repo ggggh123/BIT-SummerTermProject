@@ -133,12 +133,15 @@ async function configureWithFakeMap(page, key = 'runtime key +&=') {
   return fake;
 }
 
-test('qrc manifest exposes only the checked-in navigation route page', () => {
+test('qrc manifest exposes only the checked-in navigation page and default avatar', () => {
   const qrc = readFileSync(qrcPath, 'utf8');
   const files = [...qrc.matchAll(/<file(?:\s[^>]*)?>([^<]+)<\/file>/g)].map((match) => match[1].trim());
-  assert.deepEqual(files, ['map/navigation.html']);
+  assert.deepEqual(files, ['map/navigation.html', 'images/default-avatar.svg']);
   const mapping = execFileSync(rccExecutable, ['--list-mapping', qrcPath.pathname], { encoding: 'utf8' });
-  assert.deepEqual(mapping.trim().split('\n').map((line) => line.split('\t')[0]), [':/map/navigation.html']);
+  assert.deepEqual(
+    mapping.trim().split('\n').map((line) => line.split('\t')[0]),
+    [':/images/default-avatar.svg', ':/map/navigation.html'],
+  );
 });
 
 test('page has no committed key and does not load remote code before configuration', () => {

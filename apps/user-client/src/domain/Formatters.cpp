@@ -9,16 +9,33 @@ bool isValidPhone(const QString &phone) {
 }
 
 std::optional<qint64> parsePositiveFen(const QString &amount) {
-    static const QRegularExpression pattern(QStringLiteral("^[1-9][0-9]*(\\.[0-9]{1,2})?$"));
+    constexpr qint64 maxSafeInteger = 9'007'199'254'740'991LL;
+    static const QRegularExpression pattern(
+        QStringLiteral("^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$"));
     if (!pattern.match(amount).hasMatch()) {
         return std::nullopt;
     }
 
     const QStringList parts = amount.split(QLatin1Char('.'));
-    const QString cents = parts.value(0) + parts.value(1).leftJustified(2, QLatin1Char('0'));
-    bool conversionOk = false;
-    const qint64 fen = cents.toLongLong(&conversionOk);
-    if (!conversionOk || fen <= 0) {
+    qint64 major = 0;
+    for (const QChar digit : parts.constFirst()) {
+        const qint64 value = digit.unicode() - QLatin1Char('0').unicode();
+        if (major > (maxSafeInteger / 100 - value) / 10) {
+            return std::nullopt;
+        }
+        major = major * 10 + value;
+    }
+
+    const QString fraction = parts.value(1).leftJustified(2, QLatin1Char('0'));
+    qint64 minor = 0;
+    for (const QChar digit : fraction) {
+        minor = minor * 10 + digit.unicode() - QLatin1Char('0').unicode();
+    }
+    if (major > (maxSafeInteger - minor) / 100) {
+        return std::nullopt;
+    }
+    const qint64 fen = major * 100 + minor;
+    if (fen <= 0) {
         return std::nullopt;
     }
     return fen;
