@@ -22,6 +22,7 @@
 - ML never writes SQLite. It publishes action `forecast.publish` through the v1 4-byte big-endian JSON protocol.
 - Test fixtures may use the fixed Sep 1 cutoff, but release generation must take an explicit recorded `--cutoff/--generated-at` whose 24-hour forecast window covers the Sep 10 presentation slot. No code silently substitutes the current clock.
 - If Ridge validation performance is not better than baseline for a target, deploy the baseline for that target and report the choice honestly.
+- Use Ubuntu's system `python3-sklearn` package (scikit-learn 1.4.x on the demonstration host) as authoritative; Ridge, TimeSeriesSplit, MAE and R² cover the frozen scope. Do not install scikit-learn or other ML dependencies with pip.
 
 ---
 
@@ -107,7 +108,7 @@ Also reject duplicate station/hour, timezone-naive timestamp, gaps, nonfinite va
 
 - [ ] **Step 3: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_repository_features.py -v`
+Run: `python3 -m pytest ml/tests/test_repository_features.py -v`
 
 Expected: `ModuleNotFoundError` or missing functions.
 
@@ -117,11 +118,11 @@ CSV columns are `station_id,observed_at,pile_count,rated_power_kw,temperature_c,
 
 - [ ] **Step 5: Install package and pass**
 
-Run:
+The editable install uses `--break-system-packages` only to register the project's own `evml` package on the APT-managed system Python; it must never install third-party dependencies (NumPy/pandas/scikit-learn come from Ubuntu's system packages). Run:
 
 ```bash
-.venv/bin/pip install -e ml
-.venv/bin/pytest ml/tests/test_repository_features.py -v
+python3 -m pip install --break-system-packages -e ml
+python3 -m pytest ml/tests/test_repository_features.py -v
 ```
 
 Expected: PASS with a 62/14/14-day split.
@@ -163,7 +164,7 @@ For a daily repeating fixture, seasonal prediction must equal truth and MAE/WAPE
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_baseline_metrics.py -v`
+Run: `python3 -m pytest ml/tests/test_baseline_metrics.py -v`
 
 Expected: FAIL.
 
@@ -180,7 +181,7 @@ Use MAE for both targets and WAPE only for load; busy `wape` is `None`.
 
 - [ ] **Step 4: Run and pass**
 
-Run: `.venv/bin/pytest ml/tests/test_baseline_metrics.py -v`
+Run: `python3 -m pytest ml/tests/test_baseline_metrics.py -v`
 
 Expected: PASS and exactly 6 metric rows per evaluated model.
 
@@ -216,7 +217,7 @@ For an intentionally bad Ridge metric fixture, assert baseline is chosen; for be
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_ridge.py -v`
+Run: `python3 -m pytest ml/tests/test_ridge.py -v`
 
 Expected: FAIL.
 
@@ -231,7 +232,7 @@ On the fixed generated dataset, require finite metrics and write warnings when l
 - [ ] **Step 5: Run and pass, then commit**
 
 ```bash
-.venv/bin/pytest ml/tests/test_ridge.py -v
+python3 -m pytest ml/tests/test_ridge.py -v
 git add ml/src/evml/ridge.py ml/tests/test_ridge.py
 git commit -m "feat(ml): train Ridge and select honest champions"
 ```
@@ -265,7 +266,7 @@ Assert one largest consecutive two-hour peak window per station; congestion is l
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_forecast.py -v`
+Run: `python3 -m pytest ml/tests/test_forecast.py -v`
 
 Expected: FAIL.
 
@@ -280,7 +281,7 @@ Generate horizons in order, using known calendar/simulated temperature and prior
 - [ ] **Step 5: Run and pass, then commit**
 
 ```bash
-.venv/bin/pytest ml/tests/test_forecast.py -v
+python3 -m pytest ml/tests/test_forecast.py -v
 git add ml/src/evml/forecast.py ml/tests/test_forecast.py
 git commit -m "feat(ml): produce bounded 24-hour station forecasts"
 ```
@@ -302,7 +303,7 @@ git commit -m "feat(ml): produce bounded 24-hour station forecasts"
 Invoke:
 
 ```bash
-.venv/bin/evml run-all \
+python3 -m evml run-all \
   --history ml/tests/fixtures/station_hourly_history.csv \
   --cutoff 2026-09-01T09:00:00+08:00 \
   --output-dir "$tmp_path"
@@ -312,7 +313,7 @@ Assert exit code 0 and these files exist: `model_load.joblib`, `model_busy.jobli
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_pipeline_cli.py -v`
+Run: `python3 -m pytest ml/tests/test_pipeline_cli.py -v`
 
 Expected: FAIL because CLI is absent.
 
@@ -327,7 +328,7 @@ Write to sibling temp files, flush/fsync and `os.replace`; JSON uses UTF-8, `ens
 
 - [ ] **Step 4: Run all non-network ML tests**
 
-Run: `.venv/bin/pytest ml/tests -k 'not publisher' -v`
+Run: `python3 -m pytest ml/tests -k 'not publisher' -v`
 
 Expected: PASS and repeated fixed runs have identical metrics/forecast content.
 
@@ -367,7 +368,7 @@ Fake server returns standard response with `ok:true`, `code:"OK"`, and `data:{ru
 
 - [ ] **Step 3: Run and verify failure**
 
-Run: `.venv/bin/pytest ml/tests/test_protocol_publisher.py -v`
+Run: `python3 -m pytest ml/tests/test_protocol_publisher.py -v`
 
 Expected: FAIL.
 
@@ -384,11 +385,11 @@ Use `socket.create_connection`, `sendall`, exact-read loop and three-second time
 - [ ] **Step 5: Run full ML verification and live publish**
 
 ```bash
-.venv/bin/pytest ml/tests -v
-.venv/bin/evml run-all --history runtime/ml/station_hourly_history.csv \
+python3 -m pytest ml/tests -v
+python3 -m evml run-all --history runtime/ml/station_hourly_history.csv \
   --cutoff "$DEMO_FORECAST_ORIGIN" --generated-at "$DEMO_MODEL_GENERATED_AT" \
   --output-dir runtime/ml/artifacts
-.venv/bin/evml publish --candidate runtime/ml/artifacts/forecast_candidate.json \
+python3 -m evml publish --candidate runtime/ml/artifacts/forecast_candidate.json \
   --host 127.0.0.1 --port 9100 --last-good runtime/ml/forecast_last_good.json
 ```
 

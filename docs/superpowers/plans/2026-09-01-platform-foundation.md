@@ -6,7 +6,7 @@
 
 **Architecture:** One CMake workspace builds the three Qt/C++ executables and shared libraries. `ev_contracts` owns action/status strings and `ev_protocol` owns request/response envelopes plus the 4-byte big-endian frame codec; no subsystem duplicates these definitions.
 
-**Tech Stack:** Ubuntu 22.04+, Bash, Git, CMake, Ninja, C++17, Qt 6.2+ (`Core`, `Network`, `Test`), Python 3 with `venv`/`pytest`, Node.js for dependency-free Web unit tests.
+**Tech Stack:** Ubuntu 22.04+, Bash, Git, CMake, Ninja, C++17, Qt 6.2+ (`Core`, `Network`, `Test`), Python 3 system packages with `pytest`, Node.js for dependency-free Web unit tests.
 
 **Spec:** `docs/plans/2026-09-01-ev-charging-platform-design.md`
 
@@ -29,8 +29,7 @@
 - `CMakeLists.txt` — root C++17 project and test entry point.
 - `CMakePresets.json` — repeatable Debug/Release Ninja builds.
 - `scripts/check_env.sh` — read-only prerequisite report.
-- `scripts/bootstrap.sh` — installs the approved development dependencies and creates `.venv`.
-- `requirements-dev.txt` — Python test/tool dependencies.
+- `scripts/bootstrap.sh` — installs the approved development dependencies globally via APT.
 - `shared/contracts/Actions.h` — canonical protocol action constants.
 - `shared/contracts/Statuses.h` — canonical enum strings and validation.
 - `shared/contracts/Permissions.h` — canonical action-to-role authorization matrix.
@@ -50,7 +49,6 @@
 - Create: `CMakePresets.json`
 - Create: `scripts/check_env.sh`
 - Create: `scripts/bootstrap.sh`
-- Create: `requirements-dev.txt`
 - Create: `apps/user-client/CMakeLists.txt`
 - Create: `apps/admin-server/CMakeLists.txt`
 - Create: `simulator/CMakeLists.txt`
@@ -58,8 +56,8 @@
 - Create: `tests/shared/CMakeLists.txt`
 
 **Interfaces:**
-- Consumes: Ubuntu APT repositories and Python package index during bootstrap.
-- Produces: `build/debug`, `build/release`, `.venv`, and a root CMake graph that later plans extend.
+- Consumes: Ubuntu APT repositories during bootstrap.
+- Produces: `build/debug`, `build/release`, and a root CMake graph that later plans extend.
 
 - [ ] **Step 1: Write the failing environment check**
 
@@ -90,27 +88,15 @@ Expected on the current VM: non-zero exit with at least `MISSING cmake`, `MISSIN
 
 - [ ] **Step 3: Write the bootstrap script**
 
-Create `scripts/bootstrap.sh`:
+Create `scripts/bootstrap.sh` with the exact global APT list from kickoff Task 3. It installs all dependencies system-wide and never creates a virtual environment:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 sudo apt-get update
-sudo apt-get install -y git cmake ninja-build pkg-config nodejs npm python3-venv \
-  qt6-base-dev qt6-base-dev-tools qt6-webengine-dev qt6-charts-dev
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -r requirements-dev.txt
-```
-
-Create `requirements-dev.txt`:
-
-```text
-pytest>=8,<9
-numpy>=2,<3
-pandas>=2,<3
-scikit-learn>=1.6,<2
-joblib>=1.4,<2
+sudo apt-get install -y git cmake ninja-build pkg-config nodejs npm \
+  qt6-base-dev qt6-base-dev-tools qt6-webengine-dev qt6-charts-dev \
+  python3-pytest python3-numpy python3-pandas python3-sklearn python3-joblib
 ```
 
 - [ ] **Step 4: Create the root build files and empty subsystem targets**
@@ -174,7 +160,7 @@ Run only if `git rev-parse --is-inside-work-tree` fails:
 ```bash
 git init
 git switch -c main
-git add .gitignore CMakeLists.txt CMakePresets.json scripts requirements-dev.txt apps simulator
+git add .gitignore CMakeLists.txt CMakePresets.json scripts apps simulator
 git commit -m "build: bootstrap EV charging monorepo"
 git switch -c dev
 ```

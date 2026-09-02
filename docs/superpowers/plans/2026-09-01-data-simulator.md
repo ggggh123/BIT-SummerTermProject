@@ -67,7 +67,7 @@ Add negative inserts that must fail: duplicate mobile/code, unknown station fore
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest database/tests/test_schema.py -v`
+Run: `python3 -m pytest database/tests/test_schema.py -v`
 
 Expected: FAIL because `schema.sql` is missing.
 
@@ -99,7 +99,7 @@ Define `forecast_runs` with `generated_at,data_cutoff,activated_at,model_version
 
 - [ ] **Step 4: Run and pass**
 
-Run: `.venv/bin/pytest database/tests/test_schema.py -v`
+Run: `python3 -m pytest database/tests/test_schema.py -v`
 
 Expected: PASS.
 
@@ -137,7 +137,7 @@ Also assert: at least six deterministic idle chargers including charger `1001`, 
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest database/tests/test_seed_demo.py -v`
+Run: `python3 -m pytest database/tests/test_seed_demo.py -v`
 
 Expected: FAIL.
 
@@ -151,7 +151,7 @@ For each station/hour, derive demand from morning/evening peaks, weekday/weekend
 
 - [ ] **Step 5: Run and pass**
 
-Run: `.venv/bin/pytest database/tests/test_seed_demo.py -v`
+Run: `python3 -m pytest database/tests/test_seed_demo.py -v`
 
 Expected: PASS and canonical hashes match.
 
@@ -183,7 +183,7 @@ Builder/finalizer must refuse `/`, existing directories, and outputs outside the
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `.venv/bin/pytest database/tests/test_build_golden.py database/tests/test_export_ml_history.py database/tests/test_finalize_golden.py -v`
+Run: `python3 -m pytest database/tests/test_build_golden.py database/tests/test_export_ml_history.py database/tests/test_finalize_golden.py -v`
 
 Expected: FAIL.
 
@@ -194,12 +194,12 @@ Build/finalize in temporary sibling files, use explicit transactions, run integr
 - [ ] **Step 4: Verify exact commands**
 
 ```bash
-.venv/bin/python database/build_golden.py \
+python3 database/build_golden.py \
   --output-dir runtime/golden --seed 20260901 \
   --cutoff 2026-09-01T09:00:00+08:00 --name base.db
-.venv/bin/python database/export_ml_history.py \
+python3 database/export_ml_history.py \
   --db runtime/golden/base.db --out runtime/ml/station_hourly_history.csv
-.venv/bin/pytest database/tests -v
+python3 -m pytest database/tests -v
 ```
 
 Expected: commands exit 0 and CSV has 12,960 data rows. Task 7 executes the finalizer after ML approval.
@@ -338,7 +338,7 @@ Provide connection badge, Run/Pause, simulated time, event count, charger table,
 - [ ] **Step 4: Run all data/simulator verification**
 
 ```bash
-.venv/bin/pytest database/tests -v
+python3 -m pytest database/tests -v
 cmake --build --preset debug --target ev_charger_simulator
 ctest --preset debug -R "simulator_" --output-on-failure
 QT_QPA_PLATFORM=offscreen timeout 5s build/debug/simulator/ev_charger_simulator \
@@ -374,10 +374,10 @@ git commit -m "feat(simulator): add visible controls and live telemetry demo"
 #1 records the expected Sep 10 presentation slot; #4 and #5 freeze one explicit `DEMO_FORECAST_ORIGIN` such that horizons 1–24 cover that slot. #4 rebuilds the release base/history with the same cutoff before #5's final ML run:
 
 ```bash
-.venv/bin/python database/build_golden.py \
+python3 database/build_golden.py \
   --output-dir runtime/golden --seed 20260901 \
   --cutoff "$DEMO_FORECAST_ORIGIN" --name base.db
-.venv/bin/python database/export_ml_history.py \
+python3 database/export_ml_history.py \
   --db runtime/golden/base.db --out runtime/ml/station_hourly_history.csv
 ```
 
@@ -386,10 +386,10 @@ If the timetable is not yet published, use a documented candidate time and regen
 - [ ] **Step 2: After ML acknowledgement, run the finalizer and integrity checks**
 
 ```bash
-.venv/bin/python database/finalize_golden.py \
+python3 database/finalize_golden.py \
   --output-dir runtime/golden --base runtime/golden/base.db \
   --forecast runtime/ml/forecast_last_good.json --name demo.db
-.venv/bin/pytest database/tests/test_finalize_golden.py -v
+python3 -m pytest database/tests/test_finalize_golden.py -v
 sqlite3 runtime/golden/demo.db "PRAGMA integrity_check; SELECT count(*) FROM forecast_runs WHERE status='active'; SELECT count(*) FROM forecasts;"
 ```
 
