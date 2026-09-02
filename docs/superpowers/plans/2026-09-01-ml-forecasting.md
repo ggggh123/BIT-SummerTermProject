@@ -23,6 +23,7 @@
 - ML never writes SQLite. It publishes action `forecast.publish` through the v1 4-byte big-endian JSON protocol.
 - Test fixtures may use the fixed Sep 1 cutoff, but release generation must take an explicit recorded `--cutoff/--generated-at` whose 24-hour forecast window covers the Sep 10 presentation slot. No code silently substitutes the current clock.
 - If Ridge validation performance is not better than baseline for a target, deploy the baseline for that target and report the choice honestly.
+- Use Ubuntu's system `python3-sklearn` package (scikit-learn 1.4.x on the demonstration host) as authoritative; Ridge, TimeSeriesSplit, MAE and R² cover the frozen scope. Do not install scikit-learn or other ML dependencies with pip.
 
 ---
 
@@ -118,7 +119,7 @@ CSV columns are `station_id,observed_at,pile_count,rated_power_kw,temperature_c,
 
 - [ ] **Step 5: Run through the repository module path and pass**
 
-Run:
+The editable install uses `--break-system-packages` only to register the project's own `evml` package on the APT-managed system Python; it must never install third-party dependencies (NumPy/pandas/scikit-learn come from Ubuntu's system packages). Run:
 
 ```bash
 PYTHONPATH=ml/src python3 -m pytest ml/tests/test_repository_features.py -v
