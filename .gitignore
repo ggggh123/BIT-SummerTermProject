@@ -20,3 +20,7 @@ dashboard/runtime/
 *.log
 config.local.ini
 .env
+
+# Python 编译产物
+__pycache__/
+*.pyc
