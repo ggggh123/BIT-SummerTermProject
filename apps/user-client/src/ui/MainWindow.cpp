@@ -94,6 +94,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         }
         authoritativeActiveOrder_ = result.order;
         hasActiveOrder_ = result.order.has_value();
+        chargePage_->observeAuthoritativeCurrent(result);
         updateAuthenticatedNavigation();
         if (!guardContext_.has_value() || context != *guardContext_) {
             return;

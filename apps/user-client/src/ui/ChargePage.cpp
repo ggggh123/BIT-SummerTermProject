@@ -107,6 +107,9 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
             factsGateRequired_ = false;
             exitRefreshRequired_ = false;
             exitRefreshFailed_ = false;
+            exitRefreshAttemptId_ = 0;
+            exitRefreshSelectionGeneration_ = 0;
+            exitRefreshStationId_ = 0;
             selection_.reset();
             order_.reset();
             associatedCharger_.reset();
@@ -164,7 +167,8 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
             }
             factsGateRequired_ = false;
             if (exitRefreshRequired_) {
-                emit nearbyDetailRefreshReady(result, exitRefreshSelectionGeneration_);
+                emit nearbyDetailRefreshReady(result, exitRefreshSelectionGeneration_,
+                                              exitRefreshAttemptId_);
             }
         }
         updateChargeFlowBlock();
@@ -185,7 +189,9 @@ void ChargePage::beginPage(quint64 selectionGeneration)
     factsGateRequired_ = false;
     exitRefreshRequired_ = false;
     exitRefreshFailed_ = false;
+    exitRefreshAttemptId_ = 0;
     exitRefreshSelectionGeneration_ = 0;
+    exitRefreshStationId_ = 0;
     reconciledNoOrder_ = false;
     pollTimer_->stop();
     error_->clear();
@@ -231,6 +237,19 @@ void ChargePage::enterGuardOrder(
 void ChargePage::setNearbyRefreshAvailable(bool available)
 {
     nearbyRefreshAvailable_ = available;
+}
+
+void ChargePage::observeAuthoritativeCurrent(const ev::user::CurrentOrderResult &result)
+{
+    if (!pageActive_ || !result.order.has_value() || !selection_.has_value()
+        || matchingSelection(*selection_, *result.order)) {
+        return;
+    }
+    selection_.reset();
+    selectionGeneration_ = 0;
+    associatedCharger_.reset();
+    emit rememberedSelectionInvalidated();
+    render();
 }
 
 void ChargePage::resume()
@@ -422,6 +441,18 @@ void ChargePage::requestFacts(bool gateActions, bool requireNearbyCommit)
         ? order_->stationId : selection_->station.stationId;
     const qint64 chargerId = order_.has_value()
         ? order_->chargerId : selection_->charger.chargerId;
+    const bool originMatches = selection_.has_value()
+        && ((!order_.has_value()) || matchingSelection(*selection_, *order_));
+    if (requireNearbyCommit && !originMatches) {
+        exitRefreshRequired_ = false;
+        exitRefreshAttemptId_ = 0;
+        exitRefreshSelectionGeneration_ = 0;
+        exitRefreshStationId_ = 0;
+    } else if (requireNearbyCommit) {
+        exitRefreshAttemptId_ = ++nextExitRefreshAttemptId_;
+        exitRefreshSelectionGeneration_ = selection_->selectionGeneration;
+        exitRefreshStationId_ = stationId;
+    }
     if (!pendingFactsRequestId_.isEmpty()) {
         api_->cancelSafeRead(pendingFactsRequestId_);
     }
@@ -441,20 +472,10 @@ void ChargePage::requestFacts(bool gateActions, bool requireNearbyCommit)
         reconciliationRequired_ = mustGate;
         error_->setText(QStringLiteral("充电站信息加载失败，请刷新订单"));
     }
-    const bool originMatches = selection_.has_value()
-        && ((!order_.has_value())
-            || matchingSelection(*selection_, *order_));
-    if (requireNearbyCommit && !originMatches) {
-        exitRefreshRequired_ = false;
-        exitRefreshSelectionGeneration_ = 0;
-    }
     if (originMatches) {
-        if (requireNearbyCommit) {
-            exitRefreshRequired_ = true;
-            exitRefreshSelectionGeneration_ = selection_->selectionGeneration;
-        }
         emit nearbyRefreshRequested(selection_->origin, stationId,
-                                    selection_->selectionGeneration);
+                                    selection_->selectionGeneration,
+                                    requireNearbyCommit ? exitRefreshAttemptId_ : 0);
     }
     updateChargeFlowBlock();
     render();
@@ -470,6 +491,9 @@ void ChargePage::invalidateSafeReads()
     pendingFactsRequestId_.clear();
     factsPending_ = false;
     factsGateRequired_ = false;
+    if (exitRefreshRequired_) {
+        exitRefreshAttemptId_ = 0;
+    }
     emit chargeSafeReadsInvalidated();
 }
 
@@ -535,8 +559,9 @@ void ChargePage::acceptMutation(const ev::user::RequestContext &context,
         && matchingSelection(*selection_, order);
     exitRefreshRequired_ = canRefreshNearby;
     exitRefreshFailed_ = false;
-    exitRefreshSelectionGeneration_ = canRefreshNearby
-        ? selection_->selectionGeneration : 0;
+    exitRefreshAttemptId_ = 0;
+    exitRefreshSelectionGeneration_ = canRefreshNearby ? selection_->selectionGeneration : 0;
+    exitRefreshStationId_ = canRefreshNearby ? order.stationId : 0;
     reconciliationRequired_ = canRefreshNearby;
     const bool active = order.status == QStringLiteral("reserved")
         || order.status == QStringLiteral("charging");
@@ -571,7 +596,9 @@ void ChargePage::handleCurrentOrder(const ev::user::RequestContext &context,
             selection_.reset();
             selectionGeneration_ = 0;
             exitRefreshRequired_ = false;
+            exitRefreshAttemptId_ = 0;
             exitRefreshSelectionGeneration_ = 0;
+            exitRefreshStationId_ = 0;
             emit rememberedSelectionInvalidated();
         }
         order_ = result.order;
@@ -661,22 +688,32 @@ bool ChargePage::chargeFlowBlocked() const
         || exitRefreshRequired_ || (factsPending_ && factsGateRequired_);
 }
 
-void ChargePage::nearbyRefreshCommitted(quint64 selectionGeneration)
+void ChargePage::nearbyRefreshCommitted(quint64 refreshAttemptId,
+                                        quint64 selectionGeneration,
+                                        qint64 stationId)
 {
-    if (!exitRefreshRequired_ || selectionGeneration != exitRefreshSelectionGeneration_) {
+    if (!exitRefreshRequired_ || refreshAttemptId != exitRefreshAttemptId_
+        || selectionGeneration != exitRefreshSelectionGeneration_
+        || stationId != exitRefreshStationId_) {
         return;
     }
     exitRefreshRequired_ = false;
     exitRefreshFailed_ = false;
+    exitRefreshAttemptId_ = 0;
     exitRefreshSelectionGeneration_ = 0;
+    exitRefreshStationId_ = 0;
     updateChargeFlowBlock();
     render();
 }
 
-void ChargePage::nearbyRefreshFailed(quint64 selectionGeneration,
+void ChargePage::nearbyRefreshFailed(quint64 refreshAttemptId,
+                                     quint64 selectionGeneration,
+                                     qint64 stationId,
                                      ev::user::ApiError failure)
 {
-    if (!exitRefreshRequired_ || selectionGeneration != exitRefreshSelectionGeneration_) {
+    if (!exitRefreshRequired_ || refreshAttemptId != exitRefreshAttemptId_
+        || selectionGeneration != exitRefreshSelectionGeneration_
+        || stationId != exitRefreshStationId_) {
         return;
     }
     factsFailed_ = true;
@@ -687,14 +724,28 @@ void ChargePage::nearbyRefreshFailed(quint64 selectionGeneration,
     render();
 }
 
-void ChargePage::nearbyRefreshUnavailable(quint64 selectionGeneration)
+void ChargePage::nearbyRefreshUnavailable(quint64 refreshAttemptId,
+                                          quint64 selectionGeneration,
+                                          qint64 stationId)
 {
-    if (!exitRefreshRequired_ || selectionGeneration != exitRefreshSelectionGeneration_) {
+    if (!exitRefreshRequired_ || refreshAttemptId != exitRefreshAttemptId_
+        || selectionGeneration != exitRefreshSelectionGeneration_
+        || stationId != exitRefreshStationId_) {
         return;
     }
+    if (!pendingFactsRequestId_.isEmpty()) {
+        api_->cancelSafeRead(pendingFactsRequestId_);
+    }
+    pendingFactsRequestId_.clear();
+    factsPending_ = false;
+    factsGateRequired_ = false;
+    factsFailed_ = false;
+    reconciliationRequired_ = !connected_;
     exitRefreshRequired_ = false;
     exitRefreshFailed_ = false;
+    exitRefreshAttemptId_ = 0;
     exitRefreshSelectionGeneration_ = 0;
+    exitRefreshStationId_ = 0;
     selection_.reset();
     selectionGeneration_ = 0;
     emit rememberedSelectionInvalidated();

@@ -30,17 +30,21 @@ public:
 
 public slots:
     void setConnectionAvailable(bool available);
-    void nearbyRefreshCommitted(quint64 selectionGeneration);
-    void nearbyRefreshFailed(quint64 selectionGeneration, ev::user::ApiError error);
-    void nearbyRefreshUnavailable(quint64 selectionGeneration);
+    void observeAuthoritativeCurrent(const ev::user::CurrentOrderResult &result);
+    void nearbyRefreshCommitted(quint64 refreshAttemptId, quint64 selectionGeneration,
+                                qint64 stationId);
+    void nearbyRefreshFailed(quint64 refreshAttemptId, quint64 selectionGeneration,
+                             qint64 stationId, ev::user::ApiError error);
+    void nearbyRefreshUnavailable(quint64 refreshAttemptId, quint64 selectionGeneration,
+                                  qint64 stationId);
 
 signals:
     void backRequested();
     void activeOrderResolved(bool active);
     void nearbyRefreshRequested(ev::user::GeoPoint origin, qint64 stationId,
-                                quint64 selectionGeneration);
+                                quint64 selectionGeneration, quint64 refreshAttemptId);
     void nearbyDetailRefreshReady(ev::user::StationDetailResult result,
-                                  quint64 selectionGeneration);
+                                  quint64 selectionGeneration, quint64 refreshAttemptId);
     void rememberedSelectionInvalidated();
     void mutationPendingChanged(bool pending);
     void chargeFlowBlockedChanged(bool blocked);
@@ -95,7 +99,10 @@ private:
     bool exitRefreshRequired_ = false;
     bool exitRefreshFailed_ = false;
     bool nearbyRefreshAvailable_ = false;
+    quint64 nextExitRefreshAttemptId_ = 0;
+    quint64 exitRefreshAttemptId_ = 0;
     quint64 exitRefreshSelectionGeneration_ = 0;
+    qint64 exitRefreshStationId_ = 0;
     quint64 pageGeneration_ = 0;
     quint64 sessionGeneration_ = 0;
     quint64 selectionGeneration_ = 0;
