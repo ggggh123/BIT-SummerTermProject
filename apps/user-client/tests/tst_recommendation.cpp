@@ -1,4 +1,5 @@
 #include "app/UserAppConfig.h"
+#include "domain/ContractTimestamp.h"
 #include "domain/Models.h"
 #include "net/TcpJsonClient.h"
 #include "net/TencentMapClient.h"
@@ -372,6 +373,7 @@ class RecommendationTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void contractTimestampComparatorCoversLongFractionsAndZeroEquivalence();
     void orderListUsesExactPayloadAndCanonicalDecoder();
     void orderListRejectsInvalidRequestPagination_data();
     void orderListRejectsInvalidRequestPagination();
@@ -400,6 +402,61 @@ private slots:
     void mutationDisconnectNeverReplaysWritesAndRefreshesCurrentFirst();
     void historyNavigationObeysTask6MutationGate();
 };
+
+void RecommendationTest::contractTimestampComparatorCoversLongFractionsAndZeroEquivalence()
+{
+    using ev::user::TimestampComparison;
+    using ev::user::compareContractTimestamps;
+
+    const QString later =
+        QStringLiteral("2026-09-01T10:00:00.123456789012345678901+08:00");
+    const QString earlier =
+        QStringLiteral("2026-09-01T10:00:00.123456789012345678900+08:00");
+    const auto laterToEarlier = compareContractTimestamps(later, earlier);
+    const auto earlierToLater = compareContractTimestamps(earlier, later);
+    QVERIFY(laterToEarlier.has_value());
+    QVERIFY(earlierToLater.has_value());
+    QCOMPARE(static_cast<int>(*laterToEarlier),
+             static_cast<int>(TimestampComparison::Later));
+    QCOMPARE(static_cast<int>(*earlierToLater),
+             static_cast<int>(TimestampComparison::Earlier));
+
+    const QList<QString> zeroFractions{
+        QStringLiteral("2026-09-01T10:00:00+08:00"),
+        QStringLiteral("2026-09-01T10:00:00.0+08:00"),
+        QStringLiteral("2026-09-01T10:00:00.00+08:00"),
+        QStringLiteral("2026-09-01T10:00:00.000000+08:00"),
+        QStringLiteral("2026-09-01T10:00:00.000000000000000000000+08:00"),
+    };
+    for (const QString &left : zeroFractions) {
+        for (const QString &right : zeroFractions) {
+            const auto comparison = compareContractTimestamps(left, right);
+            QVERIFY2(comparison.has_value(),
+                     qPrintable(QStringLiteral("comparison rejected %1 and %2")
+                                    .arg(left, right)));
+            QCOMPARE(static_cast<int>(*comparison),
+                     static_cast<int>(TimestampComparison::Equal));
+        }
+    }
+
+    const QString offsetBase =
+        QStringLiteral("2026-09-01T09:00:00.123456789012345678901+08:00");
+    const auto forwardOffset = compareContractTimestamps(later, offsetBase, 3600);
+    const auto reverseOffset = compareContractTimestamps(offsetBase, later, -3600);
+    QVERIFY(forwardOffset.has_value());
+    QVERIFY(reverseOffset.has_value());
+    QCOMPARE(static_cast<int>(*forwardOffset),
+             static_cast<int>(TimestampComparison::Equal));
+    QCOMPARE(static_cast<int>(*reverseOffset),
+             static_cast<int>(TimestampComparison::Equal));
+
+    QVERIFY(!compareContractTimestamps(
+                 QStringLiteral("2026-09-01T10:00:00Z"), later)
+                 .has_value());
+    QVERIFY(!compareContractTimestamps(
+                 later, QStringLiteral("not-a-timestamp"))
+                 .has_value());
+}
 
 void RecommendationTest::orderListUsesExactPayloadAndCanonicalDecoder()
 {
@@ -490,6 +547,8 @@ void RecommendationTest::orderListRejectsInvalidPages_data()
     QTest::newRow("reservedAt ascending") << QStringLiteral("ascending");
     QTest::newRow("reservedAt within millisecond ascending")
         << QStringLiteral("submillisecond-ascending");
+    QTest::newRow("reservedAt long fraction ascending")
+        << QStringLiteral("long-fraction-ascending");
     QTest::newRow("malformed canonical order") << QStringLiteral("bad-order");
 }
 
@@ -542,6 +601,16 @@ void RecommendationTest::orderListRejectsInvalidPages()
                      QStringLiteral("2026-09-01T10:00:00.123455+08:00"));
         second.insert(QStringLiteral("reservedAt"),
                       QStringLiteral("2026-09-01T10:00:00.123456+08:00"));
+        items.replace(0, first);
+        items.replace(1, second);
+        data.insert(QStringLiteral("items"), items);
+    } else if (kind == QStringLiteral("long-fraction-ascending")) {
+        QJsonObject first = items.at(0).toObject();
+        QJsonObject second = items.at(1).toObject();
+        first.insert(QStringLiteral("reservedAt"),
+                     QStringLiteral("2026-09-01T10:00:00.123456789012345678900+08:00"));
+        second.insert(QStringLiteral("reservedAt"),
+                      QStringLiteral("2026-09-01T10:00:00.123456789012345678901+08:00"));
         items.replace(0, first);
         items.replace(1, second);
         data.insert(QStringLiteral("items"), items);
@@ -815,18 +884,30 @@ void RecommendationTest::historyUsesFallbackKeysForEquivalentTimestampInstants()
     const auto request = takeRequest(peer.data());
     const QJsonArray items{
         orderObject(91, QStringLiteral("completed"),
+                    QStringLiteral("2026-09-01T09:00:00+08:00"),
+                    QStringLiteral("2026-09-01T10:00:00+08:00")),
+        orderObject(92, QStringLiteral("completed"),
                     QStringLiteral("2026-09-01T09:00:00.0+08:00"),
                     QStringLiteral("2026-09-01T10:00:00.0+08:00")),
-        orderObject(92, QStringLiteral("completed"),
+        orderObject(93, QStringLiteral("completed"),
                     QStringLiteral("2026-09-01T09:00:00.00+08:00"),
                     QStringLiteral("2026-09-01T10:00:00.00+08:00")),
+        orderObject(94, QStringLiteral("completed"),
+                    QStringLiteral("2026-09-01T09:00:00.000000+08:00"),
+                    QStringLiteral("2026-09-01T10:00:00.000000+08:00")),
+        orderObject(95, QStringLiteral("completed"),
+                    QStringLiteral("2026-09-01T09:00:00.000000000000000000000+08:00"),
+                    QStringLiteral("2026-09-01T10:00:00.000000000000000000000+08:00")),
     };
     reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
-          QJsonObject{{QStringLiteral("items"), items}, {QStringLiteral("total"), 2}});
+          QJsonObject{{QStringLiteral("items"), items}, {QStringLiteral("total"), 5}});
     auto *list = required<QListWidget>(&page, "historyList");
-    QTRY_COMPARE(list->count(), 2);
-    QVERIFY(list->item(0)->text().contains(QStringLiteral("订单 #92")));
-    QVERIFY(list->item(1)->text().contains(QStringLiteral("订单 #91")));
+    QTRY_COMPARE(list->count(), 5);
+    for (int index = 0; index < list->count(); ++index) {
+        const qint64 expectedOrderId = 95 - index;
+        QVERIFY(list->item(index)->text().contains(
+            QStringLiteral("订单 #%1").arg(expectedOrderId)));
+    }
 }
 
 void RecommendationTest::historyOrdersExactEndedAtFractions()
