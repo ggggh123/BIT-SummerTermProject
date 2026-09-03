@@ -291,7 +291,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement services and responsive pages**
 
-Use `QTableView` models, `QChartView` line series, three revenue labels, a state count/percentage view, explicit loading/empty/error states, and confirmation dialogs for restart/freeze. UI calls `ServerController::executeLocal(RequestEnvelope)` so it exercises the same services and transactions as TCP callers.
+Use `QTableView` models, `QChartView` line series, three revenue labels, a state count/percentage view, explicit loading/empty/error states, and confirmation dialogs for restart/freeze. UI calls `ServerController::executeLocal(RequestEnvelope)` so it exercises the same services and transactions as TCP callers. ChargersPage merges the state count/percentage view and the charger table into ONE management view (2026-09-03 PM decision): a clickable status strip filters the full charger table, remote restart stays inline on fault rows; both share the same data source so counts and rows always agree.
 
 - [ ] **Step 4: Add remote restart completion**
 
