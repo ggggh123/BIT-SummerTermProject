@@ -39,13 +39,19 @@ LoginDialog::LoginDialog(AuthService *authService, QWidget *parent)
     layout->addWidget(loginButton);
 }
 
+QString LoginDialog::adminToken() const
+{
+    return m_adminToken;
+}
+
 void LoginDialog::tryLogin()
 {
-    const Result result = m_authService->login(m_usernameEdit->text(), m_passwordEdit->text());
+    const LoginResult result = m_authService->login(m_usernameEdit->text(), m_passwordEdit->text());
     if (!result.ok) {
         QMessageBox::warning(this, QStringLiteral("登录失败"), result.message);
         return;
     }
+    m_adminToken = result.token;
     accept();
 }
 

@@ -6,6 +6,19 @@
 #include <QJsonObject>
 #include <QTcpSocket>
 
+namespace {
+
+bool requiresAdminToken(const QString &action)
+{
+    return action == ev::actions::AdminDashboard
+        || action == ev::actions::AdminStationCreate
+        || action == ev::actions::AdminChargerRestart
+        || action == ev::actions::AdminUserList
+        || action == ev::actions::AdminUserSetStatus;
+}
+
+} // namespace
+
 ApiServer::ApiServer(AuthService *authService, DashboardService *dashboardService, ForecastService *forecastService, QObject *parent)
     : QTcpServer(parent)
     , m_authService(authService)
@@ -71,15 +84,20 @@ ev::protocol::ResponseEnvelope ApiServer::handleRequest(const ev::protocol::Requ
     }
 
     if (request.action == ev::actions::AdminLogin) {
-        const Result result = m_authService->login(
+        const LoginResult result = m_authService->login(
             request.payload.value(QStringLiteral("username")).toString(),
             request.payload.value(QStringLiteral("password")).toString());
         if (!result.ok) {
             return fail(request.requestId, result.code, result.message);
         }
         return ok(request.requestId, result.message, QJsonObject{
-            {QStringLiteral("username"), request.payload.value(QStringLiteral("username")).toString()}
+            {QStringLiteral("username"), request.payload.value(QStringLiteral("username")).toString()},
+            {QStringLiteral("token"), result.token}
         });
+    }
+
+    if (requiresAdminToken(request.action) && !m_authService->isTokenValid(request.token)) {
+        return fail(request.requestId, QStringLiteral("UNAUTHORIZED"), QStringLiteral("admin token is missing or invalid"));
     }
 
     if (request.action == ev::actions::AdminDashboard) {
