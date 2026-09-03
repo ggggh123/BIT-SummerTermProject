@@ -89,6 +89,14 @@ void RouteOperationTracker::invalidatePending()
     pendingRoute_.reset();
 }
 
+void RouteOperationTracker::resetForSession()
+{
+    currentOperationId_.clear();
+    pendingRoute_.reset();
+    retryRoute_.reset();
+    lastSuccessfulRoute_.reset();
+}
+
 NavigationPage::NavigationPage(QString mapKey, QWidget *parent)
     : NavigationPage(std::move(mapKey), {}, parent)
 {
@@ -270,6 +278,13 @@ QString NavigationPage::buildInvalidateRouteScript(const QString &operationId)
         .arg(compactJson(operationId));
 }
 
+QString NavigationPage::buildResetRouteSessionScript()
+{
+    return QStringLiteral(
+        "(()=>typeof window.resetRouteSession==='function'"
+        "?window.resetRouteSession():false)()");
+}
+
 std::optional<LastRoute> NavigationPage::lastSuccessfulRoute() const
 {
     return routeTracker_.lastSuccessfulRoute();
@@ -313,6 +328,19 @@ void NavigationPage::deactivate()
     routeOperationId_.clear();
     retryButton_->hide();
     statusLabel_->setText(QStringLiteral("导航已暂停"));
+}
+
+void NavigationPage::resetForSession()
+{
+    invalidateRouteAttempt();
+    routeTracker_.resetForSession();
+    routeOperationId_.clear();
+    retryButton_->hide();
+    cacheLabel_->setText(QStringLiteral("暂无成功路线"));
+    statusLabel_->setText(QStringLiteral("导航会话已重置"));
+    if (view_ != nullptr && view_->page() != nullptr) {
+        view_->page()->runJavaScript(buildResetRouteSessionScript());
+    }
 }
 
 void NavigationPage::configureForCurrentLoad()

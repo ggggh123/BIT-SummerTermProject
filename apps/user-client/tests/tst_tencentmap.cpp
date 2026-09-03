@@ -1,21 +1,30 @@
 #include "app/WebEngineRuntime.h"
 #include "domain/Models.h"
 #include "net/TencentMapClient.h"
+#include "protocol/FrameCodec.h"
+#include "protocol/JsonEnvelope.h"
 #include "services/UserApi.h"
+#include "ui/MainWindow.h"
 #include "ui/NavigationPage.h"
 #include "ui/NearbyPage.h"
 
 #include <QApplication>
 #include <QComboBox>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
 #include <QJsonDocument>
 #include <QLabel>
+#include <QLineEdit>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QPointer>
 #include <QPushButton>
+#include <QSet>
 #include <QSignalSpy>
+#include <QStackedWidget>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTimer>
 #include <QUrlQuery>
 #include <QVariant>
@@ -23,6 +32,7 @@
 #include <QWebEngineSettings>
 #include <QWebEngineView>
 #include <QtTest>
+#include <QtEndian>
 
 #include <cstring>
 #include <memory>
@@ -171,6 +181,132 @@ QVariant runJavaScriptAndWait(QWebEnginePage *page, const QString &script, bool 
     return result->value;
 }
 
+QString jsonString(const QString &value)
+{
+    return QString::fromUtf8(
+        QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact)).mid(1).chopped(1);
+}
+
+QByteArray responseFrame(const QString &requestId, bool ok, QString code,
+                         QString message, QJsonValue data)
+{
+    return ev::protocol::encodeFrame(ev::protocol::toJson(
+        {requestId, ok, std::move(code), std::move(message), std::move(data)}));
+}
+
+void reply(QTcpSocket *peer, const QString &requestId, bool ok, const QString &code,
+           const QString &message, const QJsonValue &data)
+{
+    const QByteArray frame = responseFrame(requestId, ok, code, message, data);
+    QCOMPARE(peer->write(frame), qint64{frame.size()});
+    QVERIFY(peer->flush());
+}
+
+ev::protocol::RequestEnvelope takeRequest(QTcpSocket *peer, int timeoutMs = 5'000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (peer->bytesAvailable() < 4 && timer.elapsed() < timeoutMs) {
+        QTest::qWait(10);
+    }
+    if (peer->bytesAvailable() < 4) {
+        return {};
+    }
+    const QByteArray header = peer->read(4);
+    const quint32 length = qFromBigEndian<quint32>(header.constData());
+    while (peer->bytesAvailable() < static_cast<qint64>(length)
+           && timer.elapsed() < timeoutMs) {
+        QTest::qWait(10);
+    }
+    if (peer->bytesAvailable() < static_cast<qint64>(length)) {
+        return {};
+    }
+    return ev::protocol::parseRequest(peer->read(length));
+}
+
+QTcpSocket *waitForPeer(QTcpServer &server, int timeoutMs = 5'000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!server.hasPendingConnections() && timer.elapsed() < timeoutMs) {
+        QTest::qWait(10);
+    }
+    return server.nextPendingConnection();
+}
+
+QJsonObject mainUserObject(qint64 userId = 42)
+{
+    return {
+        {QStringLiteral("userId"), userId},
+        {QStringLiteral("mobile"), QStringLiteral("13800138000")},
+        {QStringLiteral("nickname"), QStringLiteral("导航测试用户%1").arg(userId)},
+        {QStringLiteral("avatarPath"), QString()},
+        {QStringLiteral("balanceFen"), 12'345},
+        {QStringLiteral("status"), QStringLiteral("active")},
+        {QStringLiteral("registeredAt"), QStringLiteral("2026-09-01T07:00:00+08:00")},
+    };
+}
+
+void completeMainLogin(MainWindow &window, QTcpSocket *peer, qint64 userId = 42)
+{
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    auto *loginButton = window.findChild<QPushButton *>(QStringLiteral("loginButton"));
+    QVERIFY(phone != nullptr);
+    QVERIFY(loginButton != nullptr);
+    phone->setText(QStringLiteral("13800138000"));
+    loginButton->click();
+    auto request = takeRequest(peer);
+    QCOMPARE(request.action, QStringLiteral("auth.user_login"));
+    reply(peer, request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("navigation-session-%1").arg(userId)},
+                      {QStringLiteral("user"), mainUserObject(userId)}});
+    request = takeRequest(peer);
+    QCOMPARE(request.action, QStringLiteral("order.current"));
+    reply(peer, request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    QTRY_VERIFY(!window.findChild<QWidget *>(QStringLiteral("authenticatedNavigation"))->isHidden());
+}
+
+QString installDeferredRouteHarness()
+{
+    return QStringLiteral(R"JS(
+        (() => {
+          const status = document.getElementById('route-status');
+          window.__hardeningRoute = {active: '', deferred: false, pending: {}, overlay: false, resetCount: 0};
+          window.renderRoute = (route, operationId) => {
+            window.__hardeningRoute.active = operationId;
+            const complete = () => {
+              if (window.__hardeningRoute.active === operationId) {
+                window.__hardeningRoute.overlay = true;
+                status.textContent = `route-success:${route.stationName}`;
+              }
+            };
+            if (!window.__hardeningRoute.deferred) {
+              complete();
+              return Promise.resolve();
+            }
+            return new Promise((resolve) => {
+              window.__hardeningRoute.pending[operationId] = () => { complete(); resolve(); };
+            });
+          };
+          window.invalidateRouteAttempt = (operationId) => {
+            if (window.__hardeningRoute.active !== operationId) return false;
+            window.__hardeningRoute.active = '';
+            return true;
+          };
+          window.resetRouteSession = () => {
+            window.__hardeningRoute.active = '';
+            window.__hardeningRoute.pending = {};
+            window.__hardeningRoute.overlay = false;
+            window.__hardeningRoute.resetCount += 1;
+            status.textContent = 'route-session-reset';
+            return true;
+          };
+          return 'ready';
+        })()
+    )JS");
+}
+
 } // namespace
 
 class TencentMapClientTest final : public QObject {
@@ -183,6 +319,8 @@ private slots:
     void routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess();
     void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
     void navigationPageDestructionIgnoresPendingWebCallbacks();
+    void mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess();
+    void sessionExpiryClearsNavigationCacheBeforeRelogin();
     void resourceAndPageContractsRemainFixedAndDisplayPredictionStates();
     void nearbyChargerButtonsLocalizeEveryWireStatus();
     void nearbySelectionCarriesOriginStationAndChargerWithoutMutation();
@@ -316,6 +454,9 @@ void TencentMapClientTest::navigationScriptsAreJsonEscapedValidatedAndKeyFreeInC
         QStringLiteral("route-8"));
     QVERIFY(invalidate.contains(QStringLiteral("window.invalidateRouteAttempt")));
     QVERIFY(invalidate.contains(QStringLiteral("route-8")));
+    const QString reset = NavigationPage::buildResetRouteSessionScript();
+    QVERIFY(reset.contains(QStringLiteral("window.resetRouteSession")));
+    QVERIFY(!reset.contains(key));
 }
 
 void TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess()
@@ -353,18 +494,25 @@ void TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAnd
     QVERIFY(!page.routeTracker_.complete(
         QStringLiteral("route-old-pending"), QStringLiteral("success"),
         QDateTime::currentDateTime()));
+
+    tracker.resetForSession();
+    QVERIFY(!tracker.lastSuccessfulRoute().has_value());
+    QVERIFY(!tracker.retryRoute().has_value());
+    QVERIFY(!tracker.complete(QStringLiteral("route-2"), QStringLiteral("success"),
+                              QDateTime::currentDateTime()));
 }
 
 void TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOffline()
 {
     const QString bootstrap = QStringLiteral(R"JS(
-        window.__offlineNavigation = {configureCalls: 0, routes: [], failNext: false};
+        window.__offlineNavigation = {configureCalls: 0, routes: [], operationIds: [], failNext: false};
         window.configureMap = function(config) {
             window.__offlineNavigation.configureCalls += 1;
             return Promise.resolve();
         };
-        window.renderRoute = function(route) {
+        window.renderRoute = function(route, operationId) {
             window.__offlineNavigation.routes.push(route);
+            window.__offlineNavigation.operationIds.push(operationId);
             if (window.__offlineNavigation.failNext) {
                 window.__offlineNavigation.failNext = false;
                 return Promise.reject(new Error('offline planned failure'));
@@ -431,6 +579,17 @@ void TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOfflin
                  .toInt(),
              3);
     QVERIFY(completed);
+    const QVariantList operationIds = runJavaScriptAndWait(
+        view->page(), QStringLiteral("window.__offlineNavigation.operationIds"), &completed)
+        .toList();
+    QVERIFY(completed);
+    QCOMPARE(operationIds.size(), 3);
+    QSet<QString> uniqueOperationIds;
+    for (const QVariant &operationId : operationIds) {
+        QVERIFY(!operationId.toString().isEmpty());
+        uniqueOperationIds.insert(operationId.toString());
+    }
+    QCOMPARE(uniqueOperationIds.size(), 3);
     const QString completionState = runJavaScriptAndWait(
         view->page(), QStringLiteral("JSON.stringify(window.__qtOperations)"), &completed).toString();
     QVERIFY(completed);
@@ -483,6 +642,199 @@ void TencentMapClientTest::navigationPageDestructionIgnoresPendingWebCallbacks()
     }
 }
 
+void TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    UserAppConfig config;
+    config.serverHost = QStringLiteral("127.0.0.1");
+    config.serverPort = server.serverPort();
+    config.tencentMapKey.clear(); // Forces local validation failure; no live map request.
+    MainWindow window(config);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    completeMainLogin(window, peer.data());
+
+    auto *nearby = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
+    QVERIFY(nearby != nullptr);
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    ev::user::Station first = station(31, false, 1.0);
+    first.name = QStringLiteral("保留成功路线");
+    first.latitude = 39.968;
+    first.longitude = 116.327;
+    emit nearby->navigationRequested(origin, first);
+    auto *navigation = window.findChild<NavigationPage *>(QStringLiteral("navigationPage"));
+    QVERIFY(navigation != nullptr);
+    auto *view = navigation->findChild<QWebEngineView *>(QStringLiteral("navigationWebView"));
+    auto *status = navigation->findChild<QLabel *>(QStringLiteral("navigationStatus"));
+    auto *cache = navigation->findChild<QLabel *>(QStringLiteral("lastRouteLabel"));
+    QVERIFY(view != nullptr);
+    QVERIFY(status != nullptr);
+    QVERIFY(cache != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(navigation->pageLoaded_, 5'000);
+
+    bool completed = false;
+    QCOMPARE(runJavaScriptAndWait(view->page(), installDeferredRouteHarness(), &completed)
+                 .toString(),
+             QStringLiteral("ready"));
+    QVERIFY(completed);
+    navigation->invalidateRouteAttempt();
+    navigation->routeTracker_.invalidatePending();
+    navigation->routeOperationId_.clear();
+    navigation->configureOperationId_.clear();
+    navigation->configured_ = true;
+
+    navigation->showRoute(origin, first, QStringLiteral("driving"));
+    QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("路线规划成功"), 2'000);
+    QVERIFY(navigation->lastSuccessfulRoute().has_value());
+    QCOMPARE(navigation->lastSuccessfulRoute()->stationName, first.name);
+
+    runJavaScriptAndWait(
+        view->page(), QStringLiteral("window.__hardeningRoute.deferred = true"), &completed);
+    QVERIFY(completed);
+    ev::user::Station pending = first;
+    pending.name = QStringLiteral("隐藏页不得提交路线");
+    pending.latitude = 39.978;
+    pending.longitude = 116.337;
+    navigation->showRoute(origin, pending, QStringLiteral("walking"));
+    QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("正在规划路线…"), 1'000);
+    const QString pendingOperationId = navigation->routeOperationId_;
+    QVERIFY(!pendingOperationId.isEmpty());
+
+    auto *profileButton = window.findChild<QPushButton *>(
+        QStringLiteral("profileNavigationButton"));
+    QVERIFY(profileButton != nullptr);
+    profileButton->click();
+    auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
+    QVERIFY(pages != nullptr);
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("profilePage"));
+    QCOMPARE(status->text(), QStringLiteral("导航已暂停"));
+
+    const QString resolvePending = QStringLiteral(
+        "window.__hardeningRoute.pending[%1]?.(); true")
+        .arg(jsonString(pendingOperationId));
+    QVERIFY(runJavaScriptAndWait(view->page(), resolvePending, &completed).toBool());
+    QVERIFY(completed);
+    QTest::qWait(200);
+    QCOMPARE(status->text(), QStringLiteral("导航已暂停"));
+    QVERIFY(navigation->lastSuccessfulRoute().has_value());
+    QCOMPARE(navigation->lastSuccessfulRoute()->stationName, first.name);
+    QVERIFY(navigation->routeTracker_.retryRoute().has_value());
+    QCOMPARE(navigation->routeTracker_.retryRoute()->stationName, pending.name);
+    QVERIFY(cache->text().contains(first.name));
+    const QString webStatus = runJavaScriptAndWait(
+        view->page(), QStringLiteral("document.getElementById('route-status').textContent"),
+        &completed).toString();
+    QVERIFY(completed);
+    QVERIFY(!webStatus.contains(pending.name));
+}
+
+void TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    UserAppConfig config;
+    config.serverHost = QStringLiteral("127.0.0.1");
+    config.serverPort = server.serverPort();
+    config.tencentMapKey.clear(); // Forces local validation failure; no live map request.
+    MainWindow window(config);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    completeMainLogin(window, peer.data());
+
+    auto *nearby = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
+    auto *api = window.findChild<UserApi *>();
+    QVERIFY(nearby != nullptr);
+    QVERIFY(api != nullptr);
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    ev::user::Station destination = station(41, false, 1.0);
+    destination.name = QStringLiteral("旧账户私有路线");
+    destination.latitude = 39.968;
+    destination.longitude = 116.327;
+    emit nearby->navigationRequested(origin, destination);
+    auto *navigation = window.findChild<NavigationPage *>(QStringLiteral("navigationPage"));
+    QVERIFY(navigation != nullptr);
+    auto *view = navigation->findChild<QWebEngineView *>(QStringLiteral("navigationWebView"));
+    auto *status = navigation->findChild<QLabel *>(QStringLiteral("navigationStatus"));
+    auto *cache = navigation->findChild<QLabel *>(QStringLiteral("lastRouteLabel"));
+    auto *retry = navigation->findChild<QPushButton *>(QStringLiteral("navigationRetryButton"));
+    QVERIFY(view != nullptr);
+    QVERIFY(status != nullptr);
+    QVERIFY(cache != nullptr);
+    QVERIFY(retry != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(navigation->pageLoaded_, 5'000);
+
+    bool completed = false;
+    QCOMPARE(runJavaScriptAndWait(view->page(), installDeferredRouteHarness(), &completed)
+                 .toString(),
+             QStringLiteral("ready"));
+    QVERIFY(completed);
+    navigation->invalidateRouteAttempt();
+    navigation->routeTracker_.invalidatePending();
+    navigation->routeOperationId_.clear();
+    navigation->configureOperationId_.clear();
+    navigation->configured_ = true;
+    navigation->showRoute(origin, destination, QStringLiteral("driving"));
+    QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("路线规划成功"), 2'000);
+    QVERIFY(navigation->lastSuccessfulRoute().has_value());
+    QVERIFY(cache->text().contains(destination.name));
+    QCOMPARE(runJavaScriptAndWait(
+                 view->page(), QStringLiteral("window.__hardeningRoute.overlay"), &completed)
+                 .toBool(),
+             true);
+    QVERIFY(completed);
+
+    auto *nearbyButton = window.findChild<QPushButton *>(
+        QStringLiteral("nearbyNavigationButton"));
+    auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
+    QVERIFY(nearbyButton != nullptr);
+    QVERIFY(pages != nullptr);
+    nearbyButton->click();
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+    QVERIFY(navigation->lastSuccessfulRoute().has_value());
+    QCOMPARE(navigation->lastSuccessfulRoute()->stationName, destination.name);
+    QVERIFY(runJavaScriptAndWait(
+                view->page(), QStringLiteral("window.__hardeningRoute.overlay"), &completed)
+                .toBool());
+    QVERIFY(completed);
+
+    const auto expiryContext = api->loadOrderHistory(20, 0, 99, 101);
+    QVERIFY(!expiryContext.requestId.isEmpty());
+    const auto expiryRequest = takeRequest(peer.data());
+    QCOMPARE(expiryRequest.action, QStringLiteral("order.list"));
+    reply(peer.data(), expiryRequest.requestId, false, QStringLiteral("AUTH_REQUIRED"),
+          QStringLiteral("expired"), QJsonObject{});
+    QTRY_COMPARE_WITH_TIMEOUT(pages->currentWidget()->objectName(),
+                              QStringLiteral("loginPage"), 1'000);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        runJavaScriptAndWait(
+            view->page(), QStringLiteral("window.__hardeningRoute.resetCount"), &completed)
+            .toInt(),
+        1, 2'000);
+    QVERIFY(completed);
+    QVERIFY(!navigation->lastSuccessfulRoute().has_value());
+    QVERIFY(!navigation->routeTracker_.retryRoute().has_value());
+    QCOMPARE(cache->text(), QStringLiteral("暂无成功路线"));
+    QVERIFY(retry->isHidden());
+    QVERIFY(!runJavaScriptAndWait(
+                 view->page(), QStringLiteral("window.__hardeningRoute.overlay"), &completed)
+                 .toBool());
+    QVERIFY(completed);
+
+    completeMainLogin(window, peer.data(), 77);
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+    QVERIFY(!navigation->lastSuccessfulRoute().has_value());
+    QVERIFY(!navigation->routeTracker_.retryRoute().has_value());
+    QCOMPARE(cache->text(), QStringLiteral("暂无成功路线"));
+    QVERIFY(retry->isHidden());
+    QVERIFY(!runJavaScriptAndWait(
+                 view->page(), QStringLiteral("window.__hardeningRoute.overlay"), &completed)
+                 .toBool());
+    QVERIFY(completed);
+}
+
 void TencentMapClientTest::resourceAndPageContractsRemainFixedAndDisplayPredictionStates()
 {
     QCOMPARE(NavigationPage::pageUrl(), QUrl(QStringLiteral("qrc:/map/navigation.html")));
@@ -492,7 +844,10 @@ void TencentMapClientTest::resourceAndPageContractsRemainFixedAndDisplayPredicti
     const QByteArray html = resource.readAll();
     QVERIFY(html.contains("window.configureMap"));
     QVERIFY(html.contains("window.renderRoute"));
+    QVERIFY(html.contains("window.resetRouteSession"));
     QVERIFY(html.contains("window.TMap.MultiMarker"));
+    QVERIFY(!html.contains("id=\"route-retry\""));
+    QVERIFY(!html.contains("retryCurrentOperation"));
 
     QCOMPARE(NearbyPage::presetAddresses(), QStringList({
         QStringLiteral("北京理工大学中关村校区"),

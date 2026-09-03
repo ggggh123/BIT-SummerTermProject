@@ -9,7 +9,6 @@
     #route-panel { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 2; padding: 10px 12px; background: rgba(255, 255, 255, .94); border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, .2); }
     #route-status { color: #222; }
     #route-empty { margin-top: 4px; color: #8a5a00; }
-    #route-retry { margin-top: 8px; padding: 6px 12px; }
   </style>
 </head>
 <body>
@@ -17,14 +16,12 @@
   <section id="route-panel" aria-live="polite">
     <div id="route-status">等待地图配置。</div>
     <div id="route-empty">暂无路线，请配置地图后重试。</div>
-    <button id="route-retry" type="button" style="display:none">重试路线规划</button>
   </section>
   <script>
   (() => {
     const mapElement = document.getElementById('map');
     const statusElement = document.getElementById('route-status');
     const emptyElement = document.getElementById('route-empty');
-    const retryElement = document.getElementById('route-retry');
     let runtimeMapKey = '';
     let map = null;
     let mapLoadPromise = null;
@@ -33,7 +30,6 @@
     let lastSuccessfulLabel = '';
     let currentRouteBundle = null;
     let activeRouteAttemptId = '';
-    let routeAttemptSequence = 0;
 
     window.lastRouteStatus = { state: 'idle' };
 
@@ -62,7 +58,6 @@
     function showSuccess(message) {
       statusElement.textContent = safeText(message);
       emptyElement.textContent = '';
-      retryElement.style.display = 'none';
       publishStatus('success', message);
     }
 
@@ -74,7 +69,6 @@
       } else {
         emptyElement.textContent = '暂无可显示路线，请检查网络和输入后重试。';
       }
-      retryElement.style.display = '';
       publishStatus('error', visibleMessage);
     }
 
@@ -168,12 +162,6 @@
       return paths.every(Boolean) ? paths : null;
     }
 
-    function nextAttemptId(operationId) {
-      if (typeof operationId === 'string' && operationId) return operationId;
-      routeAttemptSequence += 1;
-      return `web-route-${routeAttemptSequence}`;
-    }
-
     function attemptIsActive(operationId) {
       return operationId === activeRouteAttemptId;
     }
@@ -202,8 +190,30 @@
       return false;
     };
 
+    window.resetRouteSession = () => {
+      activeRouteAttemptId = '';
+      const previousBundle = currentRouteBundle;
+      currentRouteBundle = null;
+      if (previousBundle) {
+        detachLayer(previousBundle.route);
+        detachLayer(previousBundle.markers);
+      }
+      lastAttemptedRequest = null;
+      lastSuccessfulRequest = null;
+      lastSuccessfulLabel = '';
+      statusElement.textContent = map ? '地图已加载，请选择路线。' : '等待地图配置。';
+      emptyElement.textContent = map
+        ? '暂无路线，请选择起点和充电站。'
+        : '暂无路线，请配置地图后重试。';
+      window.lastRouteStatus = { state: 'idle' };
+      return true;
+    };
+
     window.renderRoute = async (request = {}, suppliedOperationId = '') => {
-      const operationId = nextAttemptId(suppliedOperationId);
+      if (typeof suppliedOperationId !== 'string' || !suppliedOperationId) {
+        throw new Error('路线操作标识缺失，请由客户端重新发起。');
+      }
+      const operationId = suppliedOperationId;
       activeRouteAttemptId = operationId;
       if (!validCoordinate(request.from) || !validCoordinate(request.to)) {
         return failRoute(operationId, '起点和终点坐标无效，请重新选择。');
@@ -274,16 +284,6 @@
       }
     };
 
-    function retryCurrentOperation() {
-      return configureCurrentMap().then(() => {
-        if (lastAttemptedRequest) return window.renderRoute(lastAttemptedRequest);
-        return map;
-      });
-    }
-
-    retryElement.addEventListener('click', () => {
-      return retryCurrentOperation().catch(() => null);
-    });
   })();
   </script>
 </body>

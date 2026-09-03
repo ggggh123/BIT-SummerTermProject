@@ -86,7 +86,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     pages_->addWidget(historyPage_);
     pages_->addWidget(profilePage_);
     pages_->addWidget(chargePage_);
-    pages_->setCurrentWidget(loginPage_);
+    showPage(loginPage_);
     layout->addWidget(pages_);
 
     connect(loginPage_, &LoginPage::loginRequested, userApi_, &UserApi::loginByPhone);
@@ -115,15 +115,12 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         historyPage_->resetForSessionExpiry(sessionGeneration);
         profilePage_->resetForSessionExpiry();
         chargePage_->resetForSessionExpiry(sessionGeneration);
-        if (navigationPage_ != nullptr) {
-            navigationPage_->deactivate();
-        }
         currentAuthorityStatus_->hide();
         currentAuthorityRetryButton_->hide();
         currentOrderNavigationButton_->hide();
         authenticatedNavigation_->setVisible(false);
         pages_->setEnabled(true);
-        pages_->setCurrentWidget(loginPage_);
+        showPage(loginPage_, NavigationTransition::SessionReset);
         loginPage_->setPending(false);
         loginPage_->setError(QStringLiteral("登录已失效，请重新登录"));
     });
@@ -163,9 +160,9 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             chargePage_->enterGuardOrder(*result.order, matching);
         }
         if (result.order.has_value()) {
-            pages_->setCurrentWidget(chargePage_);
+            showPage(chargePage_);
         } else if (pages_->currentWidget() != chargePage_) {
-            pages_->setCurrentWidget(nearbyPage_);
+            showPage(nearbyPage_);
         }
     });
     connect(userApi_, &UserApi::chargeRequestFailed, this,
@@ -177,7 +174,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         guardContext_.reset();
         clearActiveOrder(0, true);
         authenticatedNavigation_->setVisible(false);
-        pages_->setCurrentWidget(loginPage_);
+        showPage(loginPage_);
         loginPage_->setError(QStringLiteral("当前订单加载失败，请重新登录"));
     });
     connect(nearbyNavigationButton_, &QPushButton::clicked, this, [this] {
@@ -188,7 +185,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             if (pages_->currentWidget() == chargePage_) {
                 chargePage_->leavePage();
             }
-            pages_->setCurrentWidget(nearbyPage_);
+            showPage(nearbyPage_);
         }
     });
     connect(currentOrderNavigationButton_, &QPushButton::clicked, this, [this] {
@@ -206,7 +203,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             }
             chargePage_->enterOrder(*authoritativeActiveOrder_, matching);
             chargePage_->resume();
-            pages_->setCurrentWidget(chargePage_);
+            showPage(chargePage_);
         }
     });
     connect(historyNavigationButton_, &QPushButton::clicked, this, [this] {
@@ -216,7 +213,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         if (pages_->currentWidget() == chargePage_) {
             chargePage_->leavePage();
         }
-        pages_->setCurrentWidget(historyPage_);
+        showPage(historyPage_);
         historyPage_->activate();
     });
     connect(profileNavigationButton_, &QPushButton::clicked, this, [this] {
@@ -229,7 +226,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         if (pages_->currentWidget() == historyPage_) {
             historyPage_->deactivate();
         }
-        pages_->setCurrentWidget(profilePage_);
+        showPage(profilePage_);
         profilePage_->refresh();
     });
     connect(nearbyPage_, &NearbyPage::chargerSelected, this,
@@ -242,7 +239,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             historyPage_->deactivate();
         }
         chargePage_->enterSelection(selection);
-        pages_->setCurrentWidget(chargePage_);
+        showPage(chargePage_);
     });
     connect(nearbyPage_, &NearbyPage::selectionInvalidated, this,
             [this](quint64 selectionGeneration) {
@@ -368,7 +365,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             }
             chargePage_->enterOrder(*authoritativeActiveOrder_, matching);
             chargePage_->resume();
-            pages_->setCurrentWidget(chargePage_);
+            showPage(chargePage_);
             return;
         }
         chargePage_->leavePage();
@@ -378,7 +375,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         nearbyNavigationButton_->setEnabled(true);
         currentOrderNavigationButton_->setVisible(false);
         updateAuthenticatedNavigation();
-        pages_->setCurrentWidget(nearbyPage_);
+        showPage(nearbyPage_);
     });
     connect(nearbyPage_, &NearbyPage::navigationRequested, this,
             [this](ev::user::GeoPoint origin, ev::user::Station station) {
@@ -389,11 +386,11 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             navigationPage_ = new NavigationPage(mapKey_, pages_);
             pages_->addWidget(navigationPage_);
             connect(navigationPage_, &NavigationPage::backRequested, this, [this] {
-                pages_->setCurrentWidget(nearbyPage_);
+                showPage(nearbyPage_);
             });
         }
         navigationPage_->showRoute(origin, station);
-        pages_->setCurrentWidget(navigationPage_);
+        showPage(navigationPage_);
     });
 
     connect(currentAuthorityRetryButton_, &QPushButton::clicked, this, [this] {
@@ -430,6 +427,19 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     }
 
     setCentralWidget(centralWidget);
+}
+
+void MainWindow::showPage(QWidget *page, NavigationTransition transition)
+{
+    if (navigationPage_ != nullptr) {
+        if (transition == NavigationTransition::SessionReset) {
+            navigationPage_->resetForSession();
+        } else if (pages_->currentWidget() == navigationPage_
+                   && page != navigationPage_) {
+            navigationPage_->deactivate();
+        }
+    }
+    pages_->setCurrentWidget(page);
 }
 
 void MainWindow::updateAuthenticatedNavigation()

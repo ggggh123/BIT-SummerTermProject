@@ -104,6 +104,7 @@ private:
     QString pendingDetailRequestId_;
     QSet<QString> supersededSafeReadIds_;
     bool connected_ = false;
+    bool foregroundSearchPending_ = false;
     bool reconnectRefreshPending_ = false;
     bool reconnectStationsPending_ = false;
     quint64 originGeneration_ = 0;

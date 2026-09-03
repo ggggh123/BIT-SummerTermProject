@@ -194,6 +194,9 @@ test('page has no committed key and does not load remote code before configurati
   assert.equal(page.scripts.length, 0);
   assert.equal(typeof page.context.configureMap, 'function');
   assert.equal(typeof page.context.renderRoute, 'function');
+  assert.equal(typeof page.context.resetRouteSession, 'function');
+  assert.doesNotMatch(page.html, /id=["']route-retry["']/);
+  assert.doesNotMatch(page.html, /retryCurrentOperation/);
   assert.equal(page.context.lastRouteStatus.state, 'idle');
 });
 
@@ -204,16 +207,15 @@ test('missing key, invalid coordinates, and unsupported mode fail visibly in Chi
 
   await configureWithFakeMap(page);
   await assert.rejects(
-    page.context.renderRoute({ from: { lat: 'bad', lng: 116.4 }, to: { lat: 39.9, lng: 116.4 }, mode: 'driving', stationName: '测试站' }),
+    page.context.renderRoute({ from: { lat: 'bad', lng: 116.4 }, to: { lat: 39.9, lng: 116.4 }, mode: 'driving', stationName: '测试站' }, 'invalid-coordinate'),
     /坐标/,
   );
   assert.match(page.elements['route-status'].textContent, /坐标/);
   await assert.rejects(
-    page.context.renderRoute({ from: { lat: 39.9, lng: 116.4 }, to: { lat: 39.91, lng: 116.41 }, mode: 'bus', stationName: '测试站' }),
+    page.context.renderRoute({ from: { lat: 39.9, lng: 116.4 }, to: { lat: 39.91, lng: 116.41 }, mode: 'bus', stationName: '测试站' }, 'invalid-mode'),
     /驾车或步行/,
   );
   assert.match(page.elements['route-status'].textContent, /驾车或步行/);
-  assert.equal(page.elements['route-retry'].style.display, '');
 });
 
 test('configureMap requests the official GL service library with only URL-encoded runtime key', async () => {
@@ -239,23 +241,19 @@ test('an unusable successful script load rejects visibly instead of leaving conf
   page.scripts[0].onload();
   await assert.rejects(configuration, /地图加载失败/);
   assert.match(page.elements['route-status'].textContent, /地图加载失败/);
-  assert.equal(page.elements['route-retry'].style.display, '');
+  assert.doesNotMatch(page.html, /id=["']route-retry["']/);
 });
 
-test('Retry recovers API loading with a private key before a pending route', async () => {
+test('HTML exposes no autonomous retry that can bypass the native operation owner', async () => {
   const page = loadPage();
   const runtimeKey = 'private retry +&=';
   const configuration = page.context.configureMap({ key: runtimeKey });
   page.scripts[0].onerror();
   await assert.rejects(configuration, /地图加载失败/);
-  const retry = page.elements['route-retry'].click();
-  assert.equal(typeof retry?.then, 'function', 'Retry must return the retry promise for controlled callers');
-  assert.equal(page.scripts.length, 2, 'Retry must request a fresh API script after API failure');
-  const fake = fakeTMap();
-  page.context.TMap = fake.api;
-  page.scripts[1].onload();
-  await retry;
-  assert.equal(fake.calls.maps.length, 1);
+  assert.doesNotMatch(page.html, /id=["']route-retry["']/);
+  assert.doesNotMatch(page.html, /retryElement\.addEventListener/);
+  assert.equal(page.elements['route-retry'].onclick, null);
+  assert.equal(page.scripts.length, 1);
   const exposed = `${JSON.stringify(page.context.lastRouteStatus)} ${page.elements['route-status'].textContent} ${page.elements['route-empty'].textContent} ${page.logs.join(' ')}`;
   assert.doesNotMatch(exposed, new RegExp(runtimeKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
@@ -266,7 +264,7 @@ test('route runtime keeps the key secret while constructing Tencent driving and 
   const fake = await configureWithFakeMap(page, runtimeKey);
   const from = { lat: 39.9042, lng: 116.4074 };
   const to = { lat: 39.9142, lng: 116.4174 };
-  await page.context.renderRoute({ from, to, mode: 'driving', stationName: '朝阳充电站' });
+  await page.context.renderRoute({ from, to, mode: 'driving', stationName: '朝阳充电站' }, 'native-driving');
   assert.equal(fake.calls.driving.length, 1);
   assert.deepEqual({ ...fake.calls.searches[0].request.from }, from);
   assert.deepEqual({ ...fake.calls.searches[0].request.to }, to);
@@ -289,7 +287,7 @@ test('route runtime keeps the key secret while constructing Tencent driving and 
   assert.equal(page.context.lastRouteStatus.state, 'success');
   assert.match(page.context.lastRouteStatus.label, /朝阳充电站/);
 
-  await page.context.renderRoute({ from, to, mode: 'walking', stationName: '朝阳充电站' });
+  await page.context.renderRoute({ from, to, mode: 'walking', stationName: '朝阳充电站' }, 'native-walking');
   assert.equal(fake.calls.walking.length, 1);
   assert.equal(fake.calls.searches[1].kind, 'walking');
   assert.equal(fake.calls.polylines.length, 2);
@@ -377,36 +375,62 @@ test('route and endpoint markers replace transactionally and survive marker fail
   assert.match(page.elements['route-empty'].textContent, /原路线/);
 });
 
-test('later route failure remains visible and retryable without replacing the last successful route', async () => {
+test('later route failure remains visible for native retry without replacing the last successful route', async () => {
   const page = loadPage();
   const fake = await configureWithFakeMap(page);
   const request = { from: { lat: 39.9, lng: 116.4 }, to: { lat: 39.91, lng: 116.41 }, mode: 'driving', stationName: '保留站' };
-  await page.context.renderRoute(request);
+  await page.context.renderRoute(request, 'native-success');
   const polylinesBefore = fake.calls.polylines.length;
   const successfulRequest = JSON.stringify(page.context.lastRouteStatus.lastSuccessfulRequest);
   fake.setRouteResult({ result: { routes: [] } });
-  await assert.rejects(page.context.renderRoute({ ...request, mode: 'walking' }), /路线/);
+  await assert.rejects(page.context.renderRoute({ ...request, mode: 'walking' }, 'native-failure'), /路线/);
   assert.equal(fake.calls.polylines.length, polylinesBefore, 'failed replacement must keep the rendered successful route');
   assert.equal(JSON.stringify(page.context.lastRouteStatus.lastSuccessfulRequest), successfulRequest);
   assert.equal(page.context.lastRouteStatus.state, 'error');
   assert.match(page.elements['route-status'].textContent, /路线/);
   assert.match(page.elements['route-empty'].textContent, /上次成功路线/);
-  assert.equal(page.elements['route-retry'].style.display, '');
-  fake.setRouteResult({ result: { routes: [{ polyline: [{ lat: 39.9, lng: 116.4 }, { lat: 39.91, lng: 116.41 }] }] } });
-  const retry = page.elements['route-retry'].click();
-  assert.equal(typeof retry?.then, 'function', 'Retry must return the route retry promise');
-  await retry;
-  assert.equal(fake.calls.searches.length, 3, 'Retry must start another route search');
-  assert.equal(page.context.lastRouteStatus.state, 'success');
+  assert.doesNotMatch(page.html, /id=["']route-retry["']/);
+  assert.equal(fake.calls.searches.length, 2, 'HTML must not dispatch an independent retry');
+});
+
+test('renderRoute requires a native operation id and cannot supersede a native attempt without one', async () => {
+  const page = loadPage();
+  const fake = await configureWithFakeMap(page);
+  const request = { from: { lat: 39.9, lng: 116.4 }, to: { lat: 39.91, lng: 116.41 }, mode: 'driving', stationName: '受控路线' };
+  await page.context.renderRoute(request, 'native-owned');
+  const statusBefore = JSON.stringify(page.context.lastRouteStatus);
+  const searchesBefore = fake.calls.searches.length;
+  await assert.rejects(page.context.renderRoute({ ...request, stationName: '绕过路线' }), /操作标识/);
+  assert.equal(fake.calls.searches.length, searchesBefore);
+  assert.equal(JSON.stringify(page.context.lastRouteStatus), statusBefore);
+  assert.match(page.elements['route-status'].textContent, /受控路线/);
+});
+
+test('session reset atomically removes route and endpoint markers and clears all route cache', async () => {
+  const page = loadPage();
+  const fake = await configureWithFakeMap(page);
+  const request = { from: { lat: 39.9, lng: 116.4 }, to: { lat: 39.91, lng: 116.41 }, mode: 'driving', stationName: '旧账户路线' };
+  await page.context.renderRoute(request, 'old-session-route');
+  const oldRoute = fake.calls.polylines.at(-1);
+  const oldMarkers = fake.calls.markers.at(-1);
+
+  assert.equal(page.context.resetRouteSession(), true);
+  assert.ok(fake.calls.detachedLayers.some(({ kind, layer }) => kind === 'route' && layer === oldRoute));
+  assert.ok(fake.calls.detachedLayers.some(({ kind, layer }) => kind === 'marker' && layer === oldMarkers));
+  assert.equal(page.context.lastRouteStatus.state, 'idle');
+  assert.equal(page.context.lastRouteStatus.lastSuccessfulRequest, undefined);
+  assert.doesNotMatch(page.elements['route-status'].textContent, /旧账户路线/);
+  assert.doesNotMatch(page.elements['route-empty'].textContent, /旧账户路线/);
 });
 
 test('empty or malformed Tencent route results fail safely', async () => {
   const page = loadPage();
   const fake = await configureWithFakeMap(page);
   const request = { from: { lat: 39.9, lng: 116.4 }, to: { lat: 39.91, lng: 116.41 }, mode: 'driving', stationName: '测试站' };
+  let index = 0;
   for (const result of [null, {}, { result: {} }, { result: { routes: [{ polyline: [] }] } }]) {
     fake.setRouteResult(result);
-    await assert.rejects(page.context.renderRoute(request), /路线/);
+    await assert.rejects(page.context.renderRoute(request, `malformed-${++index}`), /路线/);
   }
   assert.equal(page.context.lastRouteStatus.state, 'error');
   assert.match(page.elements['route-status'].textContent, /路线/);

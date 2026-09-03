@@ -172,6 +172,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 return;
             }
             pendingGeocodeId_.clear();
+            foregroundSearchPending_ = true;
             abandonChargeRefresh();
             cancelPendingStationList();
             if (!pendingForecastRequestId_.isEmpty()) {
@@ -190,8 +191,13 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 [this](const ev::user::ApiError &error) {
             if (error.requestId == pendingGeocodeId_) {
                 pendingGeocodeId_.clear();
+                foregroundSearchPending_ = false;
                 setSearchPending(false);
-                showError(errorText(error));
+                setDetailControlsEnabled(connected_);
+                const QString message = errorText(error);
+                statusLabel_->setText(stations_.isEmpty()
+                    ? message
+                    : QStringLiteral("定位失败，继续显示缓存：%1").arg(message));
             }
         });
     }
@@ -211,6 +217,9 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 pendingStationsSelectionGeneration_.reset();
                 reconnectStationsPending_ = false;
                 pendingForegroundOrigin_.reset();
+                if (foregroundSearch) {
+                    foregroundSearchPending_ = false;
+                }
                 setSearchPending(false);
                 if (chargeRefresh) {
                     finishChargeRefreshUnavailable();
@@ -223,6 +232,9 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 pendingStationsSelectionGeneration_.reset();
                 reconnectStationsPending_ = false;
                 pendingForegroundOrigin_.reset();
+                if (foregroundSearch) {
+                    foregroundSearchPending_ = false;
+                }
                 setSearchPending(false);
                 finishChargeRefreshUnavailable();
                 return;
@@ -236,6 +248,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 && (result.origin.latitude != pendingForegroundOrigin_->latitude
                     || result.origin.longitude != pendingForegroundOrigin_->longitude)) {
                 pendingForegroundOrigin_.reset();
+                foregroundSearchPending_ = false;
                 setSearchPending(false);
                 setDetailControlsEnabled(connected_);
                 showError(QStringLiteral("服务器响应无效，继续显示缓存"));
@@ -262,6 +275,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                     clearForecastCache();
                 }
                 pendingForegroundOrigin_.reset();
+                foregroundSearchPending_ = false;
                 applyStations(std::move(result), true);
             } else {
                 applyStations(std::move(result), !chargeRefresh && !reconnectRefresh);
@@ -355,6 +369,8 @@ void NearbyPage::setConnectionAvailable(bool available)
 {
     connected_ = available;
     if (!available) {
+        pendingGeocodeId_.clear();
+        foregroundSearchPending_ = false;
         connectionBanner_->setText(stations_.isEmpty()
             ? QStringLiteral("服务器连接不可用")
             : QStringLiteral("服务器连接不可用 · 离线缓存"));
@@ -388,7 +404,7 @@ void NearbyPage::setConnectionAvailable(bool available)
     connectionBanner_->setText(QStringLiteral("服务器已连接"));
     connectionBanner_->setStyleSheet(QString());
     retryButton_->setEnabled(true);
-    if (pendingStationsRequestId_.isEmpty()) {
+    if (pendingStationsRequestId_.isEmpty() && !foregroundSearchPending_) {
         setDetailControlsEnabled(true);
     }
 }
@@ -397,6 +413,9 @@ void NearbyPage::refreshAfterReconnect()
 {
     if (!connected_) {
         reconnectRefreshPending_ = origin_.has_value();
+        return;
+    }
+    if (foregroundSearchPending_) {
         return;
     }
     requestReconnectStations();
@@ -441,13 +460,15 @@ void NearbyPage::cancelPendingStationList()
     pendingStationsSelectionGeneration_.reset();
     pendingForegroundOrigin_.reset();
     reconnectStationsPending_ = false;
-    setSearchPending(false);
+    if (!foregroundSearchPending_) {
+        setSearchPending(false);
+    }
 }
 
 void NearbyPage::refreshAfterCharge(ev::user::GeoPoint origin, qint64 stationId,
                                     quint64 selectionGeneration, quint64 refreshAttemptId)
 {
-    if (pendingForegroundOrigin_.has_value()) {
+    if (foregroundSearchPending_) {
         if (refreshAttemptId != 0) {
             emit chargeRefreshUnavailable(
                 refreshAttemptId, selectionGeneration, stationId);
@@ -511,6 +532,7 @@ void NearbyPage::displayStations(ev::user::StationListResult result)
         && (origin_->latitude != result.origin.latitude
             || origin_->longitude != result.origin.longitude);
     abandonChargeRefresh();
+    foregroundSearchPending_ = false;
     cancelPendingStationList();
     if (!pendingForecastRequestId_.isEmpty()) {
         supersededSafeReadIds_.insert(pendingForecastRequestId_);
@@ -577,6 +599,7 @@ void NearbyPage::displayStationDetail(ev::user::StationDetailResult result)
 void NearbyPage::resetForSessionExpiry()
 {
     pendingGeocodeId_.clear();
+    foregroundSearchPending_ = false;
     cancelChargeRefresh();
     cancelPendingStationList();
     if (!pendingForecastRequestId_.isEmpty()) {
@@ -660,8 +683,27 @@ void NearbyPage::searchCurrentAddress()
         showError(QStringLiteral("地图服务不可用"));
         return;
     }
-    searchButton_->setEnabled(false);
-    statusLabel_->setText(QStringLiteral("正在定位地址…"));
+    ++searchGeneration_;
+    foregroundSearchPending_ = true;
+    pendingForegroundOrigin_.reset();
+    setSearchPending(true);
+    setDetailControlsEnabled(false);
+    statusLabel_->setText(stations_.isEmpty()
+        ? QStringLiteral("正在定位地址…")
+        : QStringLiteral("正在定位新地址（保留当前缓存）…"));
+    abandonChargeRefresh();
+    cancelPendingStationList();
+    if (!pendingForecastRequestId_.isEmpty()) {
+        userApi_->cancelSafeRead(pendingForecastRequestId_);
+        pendingForecastRequestId_.clear();
+    }
+    pendingForecastSelectionGeneration_.reset();
+    pendingForecastRefreshAttemptId_.reset();
+    if (!pendingDetailRequestId_.isEmpty()) {
+        userApi_->cancelSafeRead(pendingDetailRequestId_);
+        pendingDetailRequestId_.clear();
+    }
+    pendingDetailOrigin_.reset();
     pendingGeocodeId_ = mapClient_->geocode(address);
 }
 
@@ -723,6 +765,9 @@ void NearbyPage::requestNearbyStations(
     if (pendingStationsRequestId_.isEmpty()) {
         pendingStationsSelectionGeneration_.reset();
         pendingForegroundOrigin_.reset();
+        if (foregroundSearch) {
+            foregroundSearchPending_ = false;
+        }
         setSearchPending(false);
         setDetailControlsEnabled(connected_);
         showError(stations_.isEmpty() ? QStringLiteral("请求失败，请重试")
@@ -756,7 +801,7 @@ void NearbyPage::requestStationDetail(const ev::user::Station &station)
 void NearbyPage::requestReconnectStations()
 {
     if (userApi_ == nullptr || !connected_ || !origin_.has_value()
-        || chargeRefreshAttemptId_.has_value()) {
+        || chargeRefreshAttemptId_.has_value() || foregroundSearchPending_) {
         return;
     }
     reconnectRefreshPending_ = false;
@@ -934,6 +979,9 @@ void NearbyPage::handleApiFailure(const ev::user::ApiError &error)
         pendingStationsRequestId_.clear();
         pendingStationsSelectionGeneration_.reset();
         pendingForegroundOrigin_.reset();
+        if (foregroundSearch) {
+            foregroundSearchPending_ = false;
+        }
         reconnectStationsPending_ = false;
         setSearchPending(false);
         setDetailControlsEnabled(connected_);

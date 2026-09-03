@@ -13,12 +13,16 @@ public:
     explicit MainWindow(UserAppConfig config, QWidget *parent = nullptr);
 
 private:
+    enum class NavigationTransition { OrdinaryLeave, SessionReset };
+
     struct MutationAuthorityStamp final {
         quint64 revisionAtDispatch = 0;
         qint64 subjectOrderId = 0;
     };
 
     void updateAuthenticatedNavigation();
+    void showPage(QWidget *page,
+                  NavigationTransition transition = NavigationTransition::OrdinaryLeave);
     void applySelectionInvalidation(quint64 selectionGeneration);
     void adoptActiveOrder(const ev::user::Order &order);
     void clearActiveOrder(qint64 resolvedOwnerOrderId, bool force = false);

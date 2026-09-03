@@ -26,6 +26,7 @@ public:
     [[nodiscard]] std::optional<LastRoute> lastSuccessfulRoute() const;
     [[nodiscard]] std::optional<LastRoute> retryRoute() const;
     void invalidatePending();
+    void resetForSession();
 
 private:
     QString currentOperationId_;
@@ -50,12 +51,14 @@ public:
         const QString &stationName, const QString &operationId = {}, QString *error = nullptr);
     [[nodiscard]] static QString buildOperationStatusScript(const QString &operationId);
     [[nodiscard]] static QString buildInvalidateRouteScript(const QString &operationId);
+    [[nodiscard]] static QString buildResetRouteSessionScript();
     [[nodiscard]] std::optional<LastRoute> lastSuccessfulRoute() const;
 
 public slots:
     void showRoute(ev::user::GeoPoint origin, ev::user::Station station,
                    QString mode = QStringLiteral("driving"));
     void deactivate();
+    void resetForSession();
 
 signals:
     void backRequested();
