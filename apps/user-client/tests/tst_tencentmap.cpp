@@ -12,6 +12,7 @@
 #include <QComboBox>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QEvent>
 #include <QFile>
 #include <QJsonDocument>
 #include <QLabel>
@@ -35,15 +36,23 @@
 #include <QtEndian>
 
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <utility>
 
 namespace {
 
+struct ReplyObservation final {
+    bool inFinished = false;
+    bool inTimerEvent = false;
+};
+
 struct ReplyPlan final {
     QByteArray body;
     QNetworkReply::NetworkError error = QNetworkReply::NoError;
     bool neverFinish = false;
+    std::shared_ptr<ReplyObservation> observation;
+    std::function<void()> abortHook;
 };
 
 class FakeReply final : public QNetworkReply {
@@ -53,6 +62,8 @@ public:
         , body_(std::move(plan.body))
         , plannedError_(plan.error)
         , neverFinish_(plan.neverFinish)
+        , observation_(std::move(plan.observation))
+        , abortHook_(std::move(plan.abortHook))
     {
         setRequest(request);
         setUrl(request.url());
@@ -67,9 +78,21 @@ public:
                     emit readyRead();
                 }
                 setFinished(true);
+                const auto observation = observation_;
+                if (observation) {
+                    observation->inFinished = true;
+                }
                 emit finished();
+                if (observation) {
+                    observation->inFinished = false;
+                }
             });
         }
+    }
+
+    void setAbortHook(std::function<void()> hook)
+    {
+        abortHook_ = std::move(hook);
     }
 
     void abort() override
@@ -77,10 +100,28 @@ public:
         if (isFinished()) {
             return;
         }
+        const auto hook = std::exchange(abortHook_, {});
+        QPointer<FakeReply> guardedSelf(this);
+        if (hook) {
+            hook();
+        }
+        if (guardedSelf == nullptr) {
+            return;
+        }
         setFinished(true);
         setError(QNetworkReply::OperationCanceledError, QStringLiteral("cancelled"));
         emit errorOccurred(QNetworkReply::OperationCanceledError);
+        if (guardedSelf == nullptr) {
+            return;
+        }
+        const auto observation = observation_;
+        if (observation) {
+            observation->inFinished = true;
+        }
         emit finished();
+        if (observation) {
+            observation->inFinished = false;
+        }
     }
 
     qint64 bytesAvailable() const override
@@ -104,11 +145,18 @@ private:
     QByteArray body_;
     QNetworkReply::NetworkError plannedError_;
     bool neverFinish_;
+    std::shared_ptr<ReplyObservation> observation_;
+    std::function<void()> abortHook_;
     qint64 offset_ = 0;
 };
 
 class FakeNetworkAccessManager final : public QNetworkAccessManager {
 public:
+    explicit FakeNetworkAccessManager(QObject *parent = nullptr)
+        : QNetworkAccessManager(parent)
+    {
+    }
+
     QList<ReplyPlan> plans;
     QList<QNetworkRequest> requests;
     QList<QPointer<QNetworkReply>> replies;
@@ -127,6 +175,36 @@ protected:
         lastReply = reply;
         return reply;
     }
+};
+
+class TimerStackProbe final : public QObject
+{
+public:
+    TimerStackProbe(QTimer *timer, std::shared_ptr<ReplyObservation> observation,
+                    QObject *parent = nullptr)
+        : QObject(parent)
+        , timer_(timer)
+        , observation_(std::move(observation))
+    {
+        timer_->installEventFilter(this);
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == timer_ && event->type() == QEvent::Timer) {
+            observation_->inTimerEvent = true;
+            const auto observation = observation_;
+            QMetaObject::invokeMethod(this, [observation] {
+                observation->inTimerEvent = false;
+            }, Qt::QueuedConnection);
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QPointer<QTimer> timer_;
+    std::shared_ptr<ReplyObservation> observation_;
 };
 
 ev::user::Station station(qint64 stationId, bool forecastEnabled, double distanceKm)
@@ -324,6 +402,7 @@ private slots:
     void destructionSurvivesManagerDeletingAllRepliesDuringFirstAbort();
     void terminalSignalReceiverMayDestroyClientAndExternalManager_data();
     void terminalSignalReceiverMayDestroyClientAndExternalManager();
+    void timeoutSignalIsQueuedOutsideTimerEvent();
     void navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState();
     void routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess();
     void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
@@ -469,7 +548,6 @@ void TencentMapClientTest::destructionSurvivesManagerDeletingAllRepliesDuringFir
     QVERIFY(firstReply != nullptr);
     QVERIFY(secondReply != nullptr);
 
-    QObject observer;
     bool managerDestroyedByAbort = false;
     const auto destroyManager = [&guardedManager, &managerDestroyedByAbort] {
         if (guardedManager != nullptr) {
@@ -477,10 +555,9 @@ void TencentMapClientTest::destructionSurvivesManagerDeletingAllRepliesDuringFir
             delete guardedManager.data();
         }
     };
-    connect(firstReply.data(), &QNetworkReply::finished, &observer, destroyManager,
-            Qt::DirectConnection);
-    connect(secondReply.data(), &QNetworkReply::finished, &observer, destroyManager,
-            Qt::DirectConnection);
+    for (const QPointer<QNetworkReply> &reply : std::as_const(manager->replies)) {
+        static_cast<FakeReply *>(reply.data())->setAbortHook(destroyManager);
+    }
 
     delete client;
 
@@ -503,21 +580,29 @@ void TencentMapClientTest::terminalSignalReceiverMayDestroyClientAndExternalMana
 void TencentMapClientTest::terminalSignalReceiverMayDestroyClientAndExternalManager()
 {
     QFETCH(int, networkError);
-    auto *manager = new FakeNetworkAccessManager;
+    QObject owners;
+    const auto observation = std::make_shared<ReplyObservation>();
+    auto *manager = new FakeNetworkAccessManager(&owners);
     manager->plans = {{
         networkError == QNetworkReply::NoError
             ? QByteArray(R"({"status":0,"result":{"location":{"lat":39.958,"lng":116.317}}})")
             : QByteArray{},
-        static_cast<QNetworkReply::NetworkError>(networkError), false}};
+        static_cast<QNetworkReply::NetworkError>(networkError), false, observation}};
     QPointer<FakeNetworkAccessManager> guardedManager(manager);
     auto *client = new TencentMapClient(
         QStringLiteral("test-only-key"), manager,
-        QUrl(QStringLiteral("https://offline.invalid/geocode")), 1'000);
+        QUrl(QStringLiteral("https://offline.invalid/geocode")), 1'000, &owners);
     QPointer<TencentMapClient> guardedClient(client);
     QObject observer;
     int successCount = 0;
     int failureCount = 0;
-    const auto destroyOwners = [&guardedManager, &guardedClient] {
+    bool deliveredInsideFinished = false;
+    const auto observeAndDestroy = [&guardedManager, &guardedClient, &observation,
+                                    &deliveredInsideFinished] {
+        deliveredInsideFinished = observation->inFinished;
+        if (deliveredInsideFinished) {
+            return;
+        }
         if (guardedManager != nullptr) {
             delete guardedManager.data();
         }
@@ -526,20 +611,23 @@ void TencentMapClientTest::terminalSignalReceiverMayDestroyClientAndExternalMana
         }
     };
     connect(client, &TencentMapClient::geocodeSucceeded, &observer,
-            [&successCount, destroyOwners](const QString &, const ev::user::GeoPoint &) {
+            [&successCount, observeAndDestroy](const QString &, const ev::user::GeoPoint &) {
                 ++successCount;
-                destroyOwners();
+                observeAndDestroy();
             }, Qt::DirectConnection);
     connect(client, &TencentMapClient::geocodeFailed, &observer,
-            [&failureCount, destroyOwners](const ev::user::ApiError &) {
+            [&failureCount, observeAndDestroy](const ev::user::ApiError &) {
                 ++failureCount;
-                destroyOwners();
+                observeAndDestroy();
             }, Qt::DirectConnection);
 
     (void)client->geocode(QStringLiteral("同步销毁测试地址"));
     QPointer<QNetworkReply> guardedReply = manager->lastReply;
     QVERIFY(guardedReply != nullptr);
 
+    QTRY_COMPARE_WITH_TIMEOUT(successCount + failureCount, 1, 500);
+    QVERIFY2(!deliveredInsideFinished,
+             "public terminal signal was delivered inside QNetworkReply::finished");
     QTRY_VERIFY_WITH_TIMEOUT(guardedClient.isNull(), 500);
     QVERIFY(guardedManager.isNull());
     QVERIFY(guardedReply.isNull());
@@ -548,6 +636,56 @@ void TencentMapClientTest::terminalSignalReceiverMayDestroyClientAndExternalMana
     QCOMPARE(failureCount, networkError == QNetworkReply::NoError ? 0 : 1);
     QTest::qWait(30);
     QCOMPARE(successCount + failureCount, 1);
+}
+
+void TencentMapClientTest::timeoutSignalIsQueuedOutsideTimerEvent()
+{
+    QObject owners;
+    const auto observation = std::make_shared<ReplyObservation>();
+    auto *manager = new FakeNetworkAccessManager(&owners);
+    manager->plans = {{{}, QNetworkReply::NoError, true, observation}};
+    QPointer<FakeNetworkAccessManager> guardedManager(manager);
+    auto *client = new TencentMapClient(
+        QStringLiteral("test-only-key"), manager,
+        QUrl(QStringLiteral("https://offline.invalid/geocode")), 20, &owners);
+    QPointer<TencentMapClient> guardedClient(client);
+    QObject observer;
+    int failureCount = 0;
+    bool deliveredInsideTimerEvent = false;
+    QString failureCode;
+    connect(client, &TencentMapClient::geocodeFailed, &observer,
+            [&failureCount, &deliveredInsideTimerEvent, &failureCode, observation,
+             &guardedManager, &guardedClient](const ev::user::ApiError &error) {
+                ++failureCount;
+                failureCode = error.code;
+                deliveredInsideTimerEvent = observation->inTimerEvent;
+                if (deliveredInsideTimerEvent) {
+                    return;
+                }
+                if (guardedManager != nullptr) {
+                    delete guardedManager.data();
+                }
+                if (guardedClient != nullptr) {
+                    delete guardedClient.data();
+                }
+            }, Qt::DirectConnection);
+
+    (void)client->geocode(QStringLiteral("超时发射栈测试地址"));
+    QPointer<QNetworkReply> guardedReply = manager->lastReply;
+    QVERIFY(guardedReply != nullptr);
+    auto *deadline = guardedReply->findChild<QTimer *>();
+    QVERIFY(deadline != nullptr);
+    TimerStackProbe timerProbe(deadline, observation);
+
+    QTRY_COMPARE_WITH_TIMEOUT(failureCount, 1, 500);
+    QCOMPARE(failureCode, QStringLiteral("MAP_TIMEOUT"));
+    QVERIFY2(!deliveredInsideTimerEvent,
+             "public timeout signal was delivered inside QTimer::timeout dispatch");
+    QTRY_VERIFY_WITH_TIMEOUT(guardedClient.isNull(), 500);
+    QVERIFY(guardedManager.isNull());
+    QVERIFY(guardedReply.isNull());
+    QTest::qWait(30);
+    QCOMPARE(failureCount, 1);
 }
 
 void TencentMapClientTest::navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState()

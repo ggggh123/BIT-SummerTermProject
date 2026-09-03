@@ -168,12 +168,18 @@ QString TencentMapClient::geocode(const QString &address)
         if (guardedClient == nullptr) {
             return;
         }
-        emit guardedClient->geocodeFailed(
-            {requestId, QStringLiteral("MAP_TIMEOUT"),
-             QStringLiteral("腾讯地图请求超时，请重试")});
         if (replyGuard != nullptr) {
             replyGuard->deleteLater();
         }
+        const ev::user::ApiError error{
+            requestId, QStringLiteral("MAP_TIMEOUT"),
+            QStringLiteral("腾讯地图请求超时，请重试")};
+        QMetaObject::invokeMethod(
+            guardedClient.data(), [guardedClient, error] {
+                if (guardedClient != nullptr) {
+                    emit guardedClient->geocodeFailed(error);
+                }
+            }, Qt::QueuedConnection);
     });
     connect(reply, &QNetworkReply::finished, this, [this, guardedReply, requestId] {
         QPointer<QNetworkReply> replyGuard = guardedReply;
@@ -185,26 +191,33 @@ QString TencentMapClient::geocode(const QString &address)
             return;
         }
         QPointer<QTimer> deadline = it.value();
+        ParsedGeocode terminal;
+        if (replyGuard->error() != QNetworkReply::NoError) {
+            terminal = {false, {}, QStringLiteral("NETWORK_ERROR"),
+                        QStringLiteral("腾讯地图网络请求失败，请重试")};
+        } else {
+            terminal = parseResponse(replyGuard->readAll());
+        }
         outstandingReplies_.erase(it);
         if (deadline != nullptr) {
             deadline->stop();
         }
-        if (replyGuard->error() != QNetworkReply::NoError) {
-            emit geocodeFailed({requestId, QStringLiteral("NETWORK_ERROR"), QStringLiteral("腾讯地图网络请求失败，请重试")});
-            if (replyGuard != nullptr) {
-                replyGuard->deleteLater();
-            }
-            return;
-        }
-        const ParsedGeocode parsed = parseResponse(replyGuard->readAll());
-        if (parsed.success) {
-            emit geocodeSucceeded(requestId, parsed.coordinate);
-        } else {
-            emit geocodeFailed({requestId, parsed.code, parsed.message});
-        }
         if (replyGuard != nullptr) {
             replyGuard->deleteLater();
         }
+        QPointer<TencentMapClient> guardedClient(this);
+        QMetaObject::invokeMethod(
+            this, [guardedClient, requestId, terminal = std::move(terminal)] {
+                if (guardedClient == nullptr) {
+                    return;
+                }
+                if (terminal.success) {
+                    emit guardedClient->geocodeSucceeded(requestId, terminal.coordinate);
+                    return;
+                }
+                emit guardedClient->geocodeFailed(
+                    {requestId, terminal.code, terminal.message});
+            }, Qt::QueuedConnection);
     });
     deadline->start();
     return requestId;
