@@ -50,6 +50,11 @@ signals:
 private:
     friend class UserApiTest;
 
+    struct ForecastStationFacts final {
+        qint64 chargerCount = 0;
+        bool forecastEnabled = false;
+    };
+
     void searchCurrentAddress();
     void requestNearbyStations(
         const ev::user::GeoPoint &origin,
@@ -69,6 +74,11 @@ private:
     void resetChargeRefresh();
     void invalidateSelection();
     void rebuildStationCards();
+    void clearForecastCache();
+    [[nodiscard]] const ev::user::ForecastRecord *compatibleHorizonOneRecord(
+        const ev::user::Station &station) const;
+    [[nodiscard]] QString forecastTextForStation(
+        const ev::user::Station &station) const;
     void showError(const QString &message);
     void setSearchPending(bool pending);
     void setDetailPending(bool pending);
@@ -121,4 +131,5 @@ private:
     std::optional<ev::user::GeoPoint> displayedDetailOrigin_;
     QVector<ev::user::Station> stations_;
     ev::user::ForecastLatestResult forecast_;
+    QHash<qint64, ForecastStationFacts> forecastStationFacts_;
 };

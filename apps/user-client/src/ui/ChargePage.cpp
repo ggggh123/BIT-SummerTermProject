@@ -205,7 +205,7 @@ void ChargePage::beginPage(quint64 selectionGeneration)
 {
     ++pageGeneration_;
     selectionGeneration_ = selectionGeneration;
-    invalidateSafeReads();
+    cancelOwnedSafeReads();
     pageActive_ = true;
     reconciliationRequired_ = false;
     factsFailed_ = false;
@@ -324,7 +324,7 @@ void ChargePage::leavePage()
     }
     pageActive_ = false;
     ++pageGeneration_;
-    invalidateSafeReads();
+    cancelOwnedSafeReads();
     pollTimer_->stop();
     render();
 }
@@ -342,7 +342,7 @@ void ChargePage::invalidateSelection(quint64 selectionGeneration)
     if (!order_.has_value()) {
         selectionGeneration_ = selectionGeneration;
         associatedCharger_.reset();
-        invalidateSafeReads();
+        cancelOwnedSafeReads();
         reconciledNoOrder_ = true;
         reconciliationRequired_ = false;
         factsFailed_ = false;
@@ -480,7 +480,7 @@ void ChargePage::requestReconciliation()
     reconciliationRequired_ = true;
     factsFailed_ = false;
     exitRefreshFailed_ = false;
-    invalidateSafeReads();
+    cancelOwnedSafeReads();
     pendingRead_ = api_->loadCurrentOrder(
         pageGeneration_, selectionGeneration_, ev::user::ChargeOperation::Reconcile);
     if (pendingRead_->requestId.isEmpty()) {
@@ -549,9 +549,11 @@ void ChargePage::requestFacts(bool gateActions, bool requireNearbyCommit)
     render();
 }
 
-void ChargePage::invalidateSafeReads()
+void ChargePage::cancelOwnedSafeReads()
 {
-    readEpoch_ = api_->invalidateChargeReads();
+    if (pendingRead_.has_value() && !pendingRead_->requestId.isEmpty()) {
+        api_->cancelSafeRead(pendingRead_->requestId);
+    }
     pendingRead_.reset();
     pendingReadOwnerOrderId_ = 0;
     if (!pendingFactsRequestId_.isEmpty()) {
@@ -563,7 +565,14 @@ void ChargePage::invalidateSafeReads()
     if (exitRefreshRequired_) {
         exitRefreshAttemptId_ = 0;
     }
+    readEpoch_ = api_->currentChargeReadEpoch();
     emit chargeSafeReadsInvalidated();
+}
+
+void ChargePage::invalidateSafeReads()
+{
+    (void)api_->invalidateChargeReads();
+    cancelOwnedSafeReads();
 }
 
 void ChargePage::adoptMutationReadEpoch()
@@ -640,7 +649,7 @@ void ChargePage::acceptMutation(const ev::user::RequestContext &context,
         render();
         return;
     }
-    invalidateSafeReads();
+    cancelOwnedSafeReads();
     pollTimer_->stop();
     readEpoch_ = api_->currentChargeReadEpoch();
     reconciliationRequired_ = false;
@@ -780,7 +789,7 @@ void ChargePage::handleChargeFailure(const ev::user::RequestContext &context,
         return;
     }
     reconciliationRequired_ = true;
-    invalidateSafeReads();
+    cancelOwnedSafeReads();
     pollTimer_->stop();
     readEpoch_ = api_->currentChargeReadEpoch();
     error_->setText(uncertain ? kUncertain : localizedError(failure));

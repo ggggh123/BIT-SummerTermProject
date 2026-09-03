@@ -32,7 +32,7 @@ private:
     void updateControls();
     void showFailure(const ev::user::ApiError &error);
     [[nodiscard]] static QString orderText(const ev::user::Order &order);
-    [[nodiscard]] static QString statusText(const QString &status);
+    [[nodiscard]] static QString statusText(const ev::user::Order &order);
 
     UserApi *userApi_;
     class QListWidget *list_;

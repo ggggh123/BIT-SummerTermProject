@@ -72,6 +72,18 @@ const ev::user::ForecastRecord *horizonOneRecord(
     return it == forecast.records.cend() ? nullptr : &*it;
 }
 
+QString forecastRecordText(const ev::user::ForecastRecord &record, bool stale)
+{
+    QString text = QStringLiteral("1小时预测：繁忙 %1 / 空闲 %2，拥堵%3")
+                       .arg(record.predictedBusyCount)
+                       .arg(record.predictedIdleCount)
+                       .arg(congestionText(record.congestionLevel));
+    if (stale) {
+        text += QStringLiteral("（预测已过期）");
+    }
+    return text;
+}
+
 int congestionRank(const QString &level)
 {
     if (level == QStringLiteral("low")) {
@@ -158,6 +170,9 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 return;
             }
             pendingGeocodeId_.clear();
+            const bool newOrigin = !origin_.has_value()
+                || origin_->latitude != origin.latitude
+                || origin_->longitude != origin.longitude;
             abandonChargeRefresh();
             cancelPendingStationList();
             ++originGeneration_;
@@ -174,8 +189,9 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
             pendingDetailRequestId_.clear();
             pendingDetailOrigin_.reset();
             displayedDetailOrigin_.reset();
-            forecast_ = {};
-            forecastSource_->setText(QStringLiteral("暂无预测来源"));
+            if (newOrigin) {
+                clearForecastCache();
+            }
             stations_.clear();
             rebuildStationCards();
             clearLayout(detailLayout_);
@@ -322,14 +338,7 @@ QString NearbyPage::forecastText(const ev::user::Station &station,
     if (record == nullptr) {
         return QStringLiteral("暂无预测");
     }
-    QString text = QStringLiteral("1小时预测：繁忙 %1 / 空闲 %2，拥堵%3")
-                       .arg(record->predictedBusyCount)
-                       .arg(record->predictedIdleCount)
-                       .arg(congestionText(record->congestionLevel));
-    if (forecast.forecastRun->stale) {
-        text += QStringLiteral("（预测已过期）");
-    }
-    return text;
+    return forecastRecordText(*record, forecast.forecastRun->stale);
 }
 
 void NearbyPage::setConnectionAvailable(bool available)
@@ -477,6 +486,9 @@ void NearbyPage::failChargeStationDetail(quint64 refreshAttemptId,
 
 void NearbyPage::displayStations(ev::user::StationListResult result)
 {
+    const bool newOrigin = origin_.has_value()
+        && (origin_->latitude != result.origin.latitude
+            || origin_->longitude != result.origin.longitude);
     abandonChargeRefresh();
     cancelPendingStationList();
     if (!pendingForecastRequestId_.isEmpty()) {
@@ -486,6 +498,9 @@ void NearbyPage::displayStations(ev::user::StationListResult result)
     if (!pendingDetailRequestId_.isEmpty()) {
         supersededSafeReadIds_.insert(pendingDetailRequestId_);
         pendingDetailRequestId_.clear();
+    }
+    if (newOrigin) {
+        clearForecastCache();
     }
     applyStations(std::move(result), true);
     clearLayout(detailLayout_);
@@ -510,6 +525,12 @@ void NearbyPage::applyStations(ev::user::StationListResult result,
 void NearbyPage::displayForecast(ev::user::ForecastLatestResult result)
 {
     forecast_ = std::move(result);
+    forecastStationFacts_.clear();
+    for (const auto &station : std::as_const(stations_)) {
+        forecastStationFacts_.insert(
+            station.stationId,
+            {station.chargerCount, station.forecastEnabled});
+    }
     if (!forecast_.forecastRun.has_value()) {
         forecastSource_->setText(QStringLiteral("暂无预测来源"));
     } else {
@@ -622,9 +643,6 @@ void NearbyPage::requestNearbyStations(
     pendingForecastRequestId_.clear();
     pendingForecastSelectionGeneration_.reset();
     pendingForecastRefreshAttemptId_.reset();
-    forecast_ = {};
-    forecastSource_->setText(QStringLiteral("暂无预测来源"));
-    rebuildStationCards();
     if (!pendingDetailRequestId_.isEmpty()) {
         invalidateSelection();
         supersededSafeReadIds_.insert(pendingDetailRequestId_);
@@ -703,8 +721,8 @@ void NearbyPage::rebuildStationCards()
         && !forecast_.forecastRun->stale;
     std::sort(displayStations.begin(), displayStations.end(),
               [this, freshRun](const auto &left, const auto &right) {
-        const auto *leftRecord = freshRun ? horizonOneRecord(left, forecast_) : nullptr;
-        const auto *rightRecord = freshRun ? horizonOneRecord(right, forecast_) : nullptr;
+        const auto *leftRecord = freshRun ? compatibleHorizonOneRecord(left) : nullptr;
+        const auto *rightRecord = freshRun ? compatibleHorizonOneRecord(right) : nullptr;
         if ((leftRecord != nullptr) != (rightRecord != nullptr)) {
             return leftRecord != nullptr;
         }
@@ -736,7 +754,7 @@ void NearbyPage::rebuildStationCards()
                 .arg(station.chargerCount)
                 .arg(station.idleCount)
                 .arg(station.distanceKm.value_or(0.0), 0, 'f', 2), card));
-        auto *prediction = new QLabel(forecastText(station, forecast_), card);
+        auto *prediction = new QLabel(forecastTextForStation(station), card);
         prediction->setObjectName(QStringLiteral("forecastLabel_%1").arg(station.stationId));
         layout->addWidget(prediction);
         auto *open = new QPushButton(QStringLiteral("查看充电桩"), card);
@@ -748,6 +766,34 @@ void NearbyPage::rebuildStationCards()
         stationLayout_->addWidget(card);
     }
     stationLayout_->addStretch();
+}
+
+void NearbyPage::clearForecastCache()
+{
+    forecast_ = {};
+    forecastStationFacts_.clear();
+    forecastSource_->setText(QStringLiteral("暂无预测来源"));
+}
+
+const ev::user::ForecastRecord *NearbyPage::compatibleHorizonOneRecord(
+    const ev::user::Station &station) const
+{
+    const auto facts = forecastStationFacts_.constFind(station.stationId);
+    if (facts == forecastStationFacts_.cend()
+        || facts->chargerCount != station.chargerCount
+        || facts->forecastEnabled != station.forecastEnabled) {
+        return nullptr;
+    }
+    return horizonOneRecord(station, forecast_);
+}
+
+QString NearbyPage::forecastTextForStation(const ev::user::Station &station) const
+{
+    const auto *record = compatibleHorizonOneRecord(station);
+    if (record == nullptr || !forecast_.forecastRun.has_value()) {
+        return QStringLiteral("暂无预测");
+    }
+    return forecastRecordText(*record, forecast_.forecastRun->stale);
 }
 
 void NearbyPage::showError(const QString &message)

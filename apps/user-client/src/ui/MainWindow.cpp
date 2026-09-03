@@ -39,6 +39,20 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     }
     layout->addWidget(configurationMessage);
 
+    currentAuthorityStatus_ = new QLabel(centralWidget);
+    currentAuthorityStatus_->setObjectName(QStringLiteral("currentAuthorityStatus"));
+    currentAuthorityStatus_->setWordWrap(true);
+    currentAuthorityStatus_->setStyleSheet(
+        QStringLiteral("color: red; font-weight: bold;"));
+    currentAuthorityStatus_->hide();
+    currentAuthorityRetryButton_ = new QPushButton(
+        QStringLiteral("重试订单校验"), centralWidget);
+    currentAuthorityRetryButton_->setObjectName(
+        QStringLiteral("currentAuthorityRetryButton"));
+    currentAuthorityRetryButton_->hide();
+    layout->addWidget(currentAuthorityStatus_);
+    layout->addWidget(currentAuthorityRetryButton_);
+
     authenticatedNavigation_ = new QWidget(centralWidget);
     authenticatedNavigation_->setObjectName(QStringLiteral("authenticatedNavigation"));
     auto *navigationLayout = new QHBoxLayout(authenticatedNavigation_);
@@ -91,9 +105,12 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         mutationAuthorityStamps_.clear();
         reconnectCurrentContext_.reset();
         reconnectCurrentOwnerOrderId_ = 0;
+        reconnectCurrentRequired_ = false;
+        reconnectReadsQueued_ = false;
         authoritativeActiveOrder_.reset();
         hasActiveOrder_ = false;
         ++authorityRevision_;
+        updateReconnectAuthorityUi();
         updateAuthenticatedNavigation();
         guardContext_ = userApi_->loadCurrentOrder(
             0, 0, ev::user::ChargeOperation::Guard);
@@ -119,7 +136,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         }
         if (result.order.has_value()) {
             pages_->setCurrentWidget(chargePage_);
-        } else {
+        } else if (pages_->currentWidget() != chargePage_) {
             pages_->setCurrentWidget(nearbyPage_);
         }
     });
@@ -136,7 +153,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         loginPage_->setError(QStringLiteral("当前订单加载失败，请重新登录"));
     });
     connect(nearbyNavigationButton_, &QPushButton::clicked, this, [this] {
-        if (!hasActiveOrder_ && !chargeFlowBlocked_) {
+        if (!hasActiveOrder_ && !chargeFlowBlocked_ && !reconnectCurrentRequired_) {
             if (pages_->currentWidget() == historyPage_) {
                 historyPage_->deactivate();
             }
@@ -147,7 +164,8 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         }
     });
     connect(currentOrderNavigationButton_, &QPushButton::clicked, this, [this] {
-        if (hasActiveOrder_ && !chargeFlowBlocked_ && authoritativeActiveOrder_.has_value()) {
+        if (hasActiveOrder_ && !chargeFlowBlocked_ && !reconnectCurrentRequired_
+            && authoritativeActiveOrder_.has_value()) {
             cancelReconnectCurrent();
             if (pages_->currentWidget() == historyPage_) {
                 historyPage_->deactivate();
@@ -164,7 +182,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         }
     });
     connect(historyNavigationButton_, &QPushButton::clicked, this, [this] {
-        if (chargeFlowBlocked_) {
+        if (chargeFlowBlocked_ || reconnectCurrentRequired_) {
             return;
         }
         if (pages_->currentWidget() == chargePage_) {
@@ -174,7 +192,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         historyPage_->activate();
     });
     connect(profileNavigationButton_, &QPushButton::clicked, this, [this] {
-        if (chargeFlowBlocked_) {
+        if (chargeFlowBlocked_ || reconnectCurrentRequired_) {
             return;
         }
         if (pages_->currentWidget() == chargePage_) {
@@ -188,7 +206,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     });
     connect(nearbyPage_, &NearbyPage::chargerSelected, this,
             [this](const ev::user::StationSelection &selection) {
-        if (hasActiveOrder_ || chargeFlowBlocked_ || reconnectCurrentContext_.has_value()) {
+        if (hasActiveOrder_ || chargeFlowBlocked_ || reconnectCurrentRequired_) {
             return;
         }
         rememberedSelection_ = selection;
@@ -240,6 +258,9 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         }
         if (result.order.has_value()) {
             adoptActiveOrder(*result.order);
+            if (reconnectOwned) {
+                resolveReconnectCurrent();
+            }
             return;
         }
         const bool guardOwned = guardContext_.has_value() && context == *guardContext_;
@@ -250,14 +271,19 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         } else if (pageOwned) {
             clearActiveOrder(resolvedOwnerOrderId);
         }
+        if (reconnectOwned) {
+            resolveReconnectCurrent();
+        }
     });
     connect(userApi_, &UserApi::chargeRequestFailed, this,
             [this](const ev::user::RequestContext &context,
-                   const ev::user::ApiError &, bool) {
+                   const ev::user::ApiError &failure, bool) {
         if (reconnectCurrentContext_.has_value()
             && context == *reconnectCurrentContext_) {
             reconnectCurrentContext_.reset();
             reconnectCurrentOwnerOrderId_ = 0;
+            updateReconnectAuthorityUi(reconnectErrorText(failure));
+            updateAuthenticatedNavigation();
         }
     });
     connect(chargePage_, &ChargePage::mutationDispatched, this,
@@ -328,7 +354,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     });
     connect(nearbyPage_, &NearbyPage::navigationRequested, this,
             [this](ev::user::GeoPoint origin, ev::user::Station station) {
-        if (chargeFlowBlocked_) {
+        if (chargeFlowBlocked_ || reconnectCurrentRequired_) {
             return;
         }
         if (navigationPage_ == nullptr) {
@@ -342,22 +368,32 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         pages_->setCurrentWidget(navigationPage_);
     });
 
-    connect(userApi_, &UserApi::connectionChanged, this, [this](bool connected) {
-        if (!connected || !userApi_->sessionUser().has_value()
-            || pages_->currentWidget() == chargePage_
-            || guardContext_.has_value()
-            || reconnectCurrentContext_.has_value()) {
+    connect(currentAuthorityRetryButton_, &QPushButton::clicked, this, [this] {
+        if (!connected_) {
+            userApi_->retryConnection();
             return;
         }
-        reconnectCurrentOwnerOrderId_ = authoritativeActiveOrder_.has_value()
-            ? authoritativeActiveOrder_->orderId : 0;
-        reconnectCurrentContext_ = userApi_->loadCurrentOrder(
-            0, 0, ev::user::ChargeOperation::Reconcile);
-        if (reconnectCurrentContext_->requestId.isEmpty()) {
-            reconnectCurrentContext_.reset();
-            reconnectCurrentOwnerOrderId_ = 0;
+        requestReconnectCurrent();
+    });
+
+    connect(userApi_, &UserApi::connectionChanged, this, [this](bool connected) {
+        connected_ = connected;
+        if (!userApi_->sessionUser().has_value()
+            || guardContext_.has_value()
+            || pages_->currentWidget() == chargePage_
+            || chargeFlowBlocked_) {
+            updateReconnectAuthorityUi();
+            return;
         }
-        nearbyPage_->refreshAfterReconnect();
+        reconnectCurrentRequired_ = true;
+        reconnectReadsQueued_ = true;
+        updateAuthenticatedNavigation();
+        if (!connected_) {
+            updateReconnectAuthorityUi(
+                QStringLiteral("服务器连接不可用，当前订单状态未确认"));
+            return;
+        }
+        requestReconnectCurrent();
     });
 
     if (!config.serverHost.isEmpty() && config.serverPort != 0) {
@@ -370,12 +406,14 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
 
 void MainWindow::updateAuthenticatedNavigation()
 {
-    authenticatedNavigation_->setEnabled(!chargeFlowBlocked_);
-    nearbyNavigationButton_->setEnabled(!chargeFlowBlocked_ && !hasActiveOrder_);
+    const bool authorityGate = chargeFlowBlocked_ || reconnectCurrentRequired_;
+    authenticatedNavigation_->setEnabled(!authorityGate);
+    nearbyNavigationButton_->setEnabled(!authorityGate && !hasActiveOrder_);
     currentOrderNavigationButton_->setVisible(hasActiveOrder_);
-    currentOrderNavigationButton_->setEnabled(!chargeFlowBlocked_ && hasActiveOrder_);
-    historyNavigationButton_->setEnabled(!chargeFlowBlocked_);
-    profileNavigationButton_->setEnabled(!chargeFlowBlocked_);
+    currentOrderNavigationButton_->setEnabled(!authorityGate && hasActiveOrder_);
+    historyNavigationButton_->setEnabled(!authorityGate);
+    profileNavigationButton_->setEnabled(!authorityGate);
+    pages_->setEnabled(!reconnectCurrentRequired_);
 }
 
 void MainWindow::applySelectionInvalidation(quint64 selectionGeneration)
@@ -421,4 +459,100 @@ void MainWindow::cancelReconnectCurrent()
     }
     reconnectCurrentContext_.reset();
     reconnectCurrentOwnerOrderId_ = 0;
+    updateReconnectAuthorityUi();
+    updateAuthenticatedNavigation();
+}
+
+void MainWindow::requestReconnectCurrent()
+{
+    if (!reconnectCurrentRequired_ || !connected_
+        || reconnectCurrentContext_.has_value()
+        || guardContext_.has_value()
+        || pages_->currentWidget() == chargePage_
+        || !userApi_->sessionUser().has_value()) {
+        updateReconnectAuthorityUi();
+        return;
+    }
+    reconnectCurrentOwnerOrderId_ = authoritativeActiveOrder_.has_value()
+        ? authoritativeActiveOrder_->orderId : 0;
+    reconnectCurrentContext_ = userApi_->loadCurrentOrder(
+        0, 0, ev::user::ChargeOperation::Reconcile);
+    if (reconnectCurrentContext_->requestId.isEmpty()) {
+        reconnectCurrentContext_.reset();
+        reconnectCurrentOwnerOrderId_ = 0;
+        updateReconnectAuthorityUi(
+            QStringLiteral("当前订单状态校验未发出，请重试"));
+        return;
+    }
+    updateReconnectAuthorityUi();
+}
+
+void MainWindow::resolveReconnectCurrent()
+{
+    reconnectCurrentRequired_ = false;
+    updateReconnectAuthorityUi();
+    updateAuthenticatedNavigation();
+    runQueuedReconnectReads();
+}
+
+void MainWindow::runQueuedReconnectReads()
+{
+    if (!reconnectReadsQueued_ || reconnectCurrentRequired_ || !connected_) {
+        return;
+    }
+    reconnectReadsQueued_ = false;
+    nearbyPage_->refreshAfterReconnect();
+    historyPage_->refreshAfterReconnect();
+}
+
+void MainWindow::updateReconnectAuthorityUi(const QString &message)
+{
+    const bool visible = reconnectCurrentRequired_
+        && userApi_->sessionUser().has_value();
+    currentAuthorityStatus_->setVisible(visible);
+    currentAuthorityRetryButton_->setVisible(visible);
+    if (!visible) {
+        currentAuthorityStatus_->clear();
+        return;
+    }
+    if (!message.isEmpty()) {
+        currentAuthorityStatus_->setText(message);
+    } else if (!connected_) {
+        currentAuthorityStatus_->setText(
+            QStringLiteral("服务器连接不可用，当前订单状态未确认"));
+    } else if (reconnectCurrentContext_.has_value()) {
+        currentAuthorityStatus_->setText(QStringLiteral("正在校验当前订单状态…"));
+    } else {
+        currentAuthorityStatus_->setText(
+            QStringLiteral("当前订单状态未确认，请重试校验"));
+    }
+    currentAuthorityRetryButton_->setText(
+        !connected_ ? QStringLiteral("重试连接")
+                    : (reconnectCurrentContext_.has_value()
+                           ? QStringLiteral("正在校验…")
+                           : QStringLiteral("重试订单校验")));
+    currentAuthorityRetryButton_->setEnabled(
+        !connected_ || !reconnectCurrentContext_.has_value());
+}
+
+QString MainWindow::reconnectErrorText(const ev::user::ApiError &error)
+{
+    if (error.code == QStringLiteral("DB_BUSY")
+        || error.code == QStringLiteral("SERVER_BUSY")) {
+        return QStringLiteral("服务繁忙，当前订单状态未确认，请重试校验");
+    }
+    if (error.code == QStringLiteral("TIMEOUT")) {
+        return QStringLiteral("当前订单校验超时，请重试");
+    }
+    if (error.code == QStringLiteral("NOT_CONNECTED")
+        || error.code == QStringLiteral("TRANSPORT_ERROR")) {
+        return QStringLiteral("服务器连接不可用，当前订单状态未确认");
+    }
+    if (error.code == QStringLiteral("PROTOCOL_ERROR")) {
+        return QStringLiteral("服务器通信异常，当前订单状态未确认，请重试");
+    }
+    if (error.code == QStringLiteral("INVALID_RESPONSE")) {
+        return QStringLiteral("当前订单响应无效，请重试校验");
+    }
+    return QStringLiteral("当前订单状态未确认，请重试校验");
 }

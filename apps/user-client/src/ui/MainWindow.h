@@ -23,6 +23,11 @@ private:
     void adoptActiveOrder(const ev::user::Order &order);
     void clearActiveOrder(qint64 resolvedOwnerOrderId, bool force = false);
     void cancelReconnectCurrent();
+    void requestReconnectCurrent();
+    void resolveReconnectCurrent();
+    void runQueuedReconnectReads();
+    void updateReconnectAuthorityUi(const QString &message = {});
+    [[nodiscard]] static QString reconnectErrorText(const ev::user::ApiError &error);
 
     class TcpJsonClient *client_;
     class UserApi *userApi_;
@@ -34,6 +39,8 @@ private:
     class ProfilePage *profilePage_;
     class NavigationPage *navigationPage_ = nullptr;
     QWidget *authenticatedNavigation_;
+    class QLabel *currentAuthorityStatus_;
+    class QPushButton *currentAuthorityRetryButton_;
     class QPushButton *nearbyNavigationButton_;
     class QPushButton *currentOrderNavigationButton_;
     class QPushButton *historyNavigationButton_;
@@ -42,6 +49,9 @@ private:
     QString mapKey_;
     bool hasActiveOrder_ = false;
     bool chargeFlowBlocked_ = false;
+    bool connected_ = false;
+    bool reconnectCurrentRequired_ = false;
+    bool reconnectReadsQueued_ = false;
     quint64 authorityRevision_ = 0;
     std::optional<ev::user::Order> authoritativeActiveOrder_;
     std::optional<ev::user::StationSelection> rememberedSelection_;

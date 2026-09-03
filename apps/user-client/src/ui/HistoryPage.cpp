@@ -1,5 +1,6 @@
 #include "ui/HistoryPage.h"
 
+#include "domain/Formatters.h"
 #include "services/UserApi.h"
 
 #include <QDateTime>
@@ -154,6 +155,7 @@ void HistoryPage::refresh()
 void HistoryPage::refreshAfterReconnect()
 {
     if (active_ && connected_) {
+        reconnectRefreshPending_ = false;
         requestPage(committedPage_.has_value() ? committedPageIndex_ : 0);
     } else if (active_) {
         reconnectRefreshPending_ = true;
@@ -162,7 +164,6 @@ void HistoryPage::refreshAfterReconnect()
 
 void HistoryPage::setConnectionAvailable(bool available)
 {
-    const bool wasConnected = connected_;
     connected_ = available;
     if (!connected_) {
         connectionBanner_->setText(QStringLiteral("离线：正在显示最近一次成功缓存"));
@@ -179,10 +180,6 @@ void HistoryPage::setConnectionAvailable(bool available)
     }
     connectionBanner_->setText(QStringLiteral("服务器已连接"));
     connectionBanner_->setStyleSheet(QString());
-    if (!wasConnected && reconnectRefreshPending_ && active_) {
-        reconnectRefreshPending_ = false;
-        requestPage(committedPage_.has_value() ? committedPageIndex_ : 0);
-    }
     updateControls();
 }
 
@@ -245,13 +242,17 @@ void HistoryPage::renderCommittedPage()
         if (leftEnded != rightEnded) {
             return leftEnded;
         }
-        if (leftEnded && left.endedAt != right.endedAt) {
-            return QDateTime::fromString(left.endedAt, Qt::ISODate)
-                > QDateTime::fromString(right.endedAt, Qt::ISODate);
+        if (leftEnded) {
+            const QDateTime leftEndedAt = QDateTime::fromString(left.endedAt, Qt::ISODate);
+            const QDateTime rightEndedAt = QDateTime::fromString(right.endedAt, Qt::ISODate);
+            if (leftEndedAt != rightEndedAt) {
+                return leftEndedAt > rightEndedAt;
+            }
         }
-        if (left.reservedAt != right.reservedAt) {
-            return QDateTime::fromString(left.reservedAt, Qt::ISODate)
-                > QDateTime::fromString(right.reservedAt, Qt::ISODate);
+        const QDateTime leftReservedAt = QDateTime::fromString(left.reservedAt, Qt::ISODate);
+        const QDateTime rightReservedAt = QDateTime::fromString(right.reservedAt, Qt::ISODate);
+        if (leftReservedAt != rightReservedAt) {
+            return leftReservedAt > rightReservedAt;
         }
         return left.orderId > right.orderId;
     });
@@ -285,12 +286,17 @@ void HistoryPage::showFailure(const ev::user::ApiError &failure)
         error_->setText(QStringLiteral("服务器连接不可用，已保留历史缓存"));
     } else if (failure.code == QStringLiteral("TIMEOUT")) {
         error_->setText(QStringLiteral("历史订单加载超时，已保留原页面"));
-    } else if (failure.code == QStringLiteral("INVALID_RESPONSE")) {
-        error_->setText(QStringLiteral("服务器响应无效，已保留原页面"));
+    } else if (failure.code == QStringLiteral("PROTOCOL_ERROR")
+               || failure.code == QStringLiteral("INVALID_RESPONSE")) {
+        error_->setText(QStringLiteral("服务器通信异常，已保留原页面"));
+    } else if (failure.code == QStringLiteral("DB_BUSY")
+               || failure.code == QStringLiteral("SERVER_BUSY")) {
+        error_->setText(QStringLiteral("服务繁忙，请稍后重试，已保留原页面"));
+    } else if (failure.code == QStringLiteral("AUTH_REQUIRED")
+               || failure.code == QStringLiteral("FORBIDDEN")) {
+        error_->setText(QStringLiteral("登录状态已失效，请重新登录"));
     } else {
-        error_->setText(failure.message.isEmpty()
-                            ? QStringLiteral("历史订单加载失败，已保留原页面")
-                            : failure.message);
+        error_->setText(QStringLiteral("历史订单加载失败，已保留原页面"));
     }
 }
 
@@ -298,26 +304,27 @@ QString HistoryPage::orderText(const ev::user::Order &order)
 {
     return QStringLiteral("订单 #%1 · %2\n充电站：%3 · 充电桩：%4\n预约：%5 · 开始：%6 · 结束：%7\n%8 kWh · %9 元")
         .arg(order.orderId)
-        .arg(statusText(order.status))
+        .arg(statusText(order))
         .arg(order.stationName, order.chargerCode)
         .arg(timestampText(order.reservedAt), timestampText(order.startedAt),
              timestampText(order.endedAt))
         .arg(order.energyKwh, 0, 'f', 3)
-        .arg(order.amountFen / 100.0, 0, 'f', 2);
+        .arg(formatFen(order.amountFen));
 }
 
-QString HistoryPage::statusText(const QString &status)
+QString HistoryPage::statusText(const ev::user::Order &order)
 {
-    if (status == QStringLiteral("reserved")) {
+    if (order.status == QStringLiteral("reserved")) {
         return QStringLiteral("已预约");
     }
-    if (status == QStringLiteral("charging")) {
-        return QStringLiteral("充电中");
+    if (order.status == QStringLiteral("charging")) {
+        return order.endedAt.isEmpty() ? QStringLiteral("充电中")
+                                       : QStringLiteral("已停止待结算");
     }
-    if (status == QStringLiteral("completed")) {
+    if (order.status == QStringLiteral("completed")) {
         return QStringLiteral("已完成");
     }
-    if (status == QStringLiteral("cancelled")) {
+    if (order.status == QStringLiteral("cancelled")) {
         return QStringLiteral("已取消");
     }
     return QStringLiteral("状态未知");

@@ -101,7 +101,8 @@ QJsonObject forecastRunObject(bool stale)
     };
 }
 
-QJsonArray forecastRecords(const QHash<qint64, qint64> &horizonOneBusy)
+QJsonArray forecastRecords(const QHash<qint64, qint64> &horizonOneBusy,
+                           const QHash<qint64, qint64> &chargerCounts = {})
 {
     QJsonArray records;
     const QDateTime cutoff = QDateTime::fromString(
@@ -109,9 +110,12 @@ QJsonArray forecastRecords(const QHash<qint64, qint64> &horizonOneBusy)
     for (qint64 stationId = 1; stationId <= 6; ++stationId) {
         for (qint64 horizon = 1; horizon <= 24; ++horizon) {
             const qint64 busy = horizon == 1 ? horizonOneBusy.value(stationId, 2) : 2;
-            const qint64 idle = 4 - busy;
-            const QString congestion = busy < 2 ? QStringLiteral("low")
-                : (busy < 4 ? QStringLiteral("medium") : QStringLiteral("high"));
+            const qint64 chargerCount = chargerCounts.value(stationId, 4);
+            const qint64 idle = chargerCount - busy;
+            const long double ratio = static_cast<long double>(busy)
+                / static_cast<long double>(chargerCount);
+            const QString congestion = ratio < 0.5L ? QStringLiteral("low")
+                : (ratio < 0.8L ? QStringLiteral("medium") : QStringLiteral("high"));
             records.append(QJsonObject{
                 {QStringLiteral("stationId"), stationId},
                 {QStringLiteral("forecastAt"), cutoff.addSecs(horizon * 3600).toString(Qt::ISODate)},
@@ -265,6 +269,95 @@ QJsonArray encodedStations()
     return result;
 }
 
+QJsonArray encodedStationsWithFirstCount(qint64 chargerCount)
+{
+    QJsonArray result = encodedStations();
+    QJsonObject first = result.at(0).toObject();
+    first.insert(QStringLiteral("chargerCount"), chargerCount);
+    first.insert(QStringLiteral("idleCount"), qMin<qint64>(2, chargerCount));
+    result.replace(0, first);
+    return result;
+}
+
+QJsonArray encodedStationsWithSwappedForecastEnablement()
+{
+    QJsonArray result = encodedStations();
+    QJsonObject first = result.at(0).toObject();
+    first.insert(QStringLiteral("forecastEnabled"), false);
+    result.replace(0, first);
+    QJsonObject seventh = result.at(6).toObject();
+    seventh.insert(QStringLiteral("forecastEnabled"), true);
+    result.replace(6, seventh);
+    return result;
+}
+
+ev::user::StationDetailResult selectableDetail(
+    const ev::user::Station &source, qint64 chargerId = 1001)
+{
+    ev::user::StationDetailResult detail;
+    detail.station = source;
+    detail.station.chargerCount = 1;
+    detail.station.idleCount = 1;
+    ev::user::Charger charger;
+    charger.chargerId = chargerId;
+    charger.stationId = detail.station.stationId;
+    charger.code = QStringLiteral("C-%1").arg(chargerId);
+    charger.type = QStringLiteral("fast");
+    charger.powerKw = 60.0;
+    charger.status = QStringLiteral("idle");
+    charger.updatedAt = QStringLiteral("2026-09-01T08:00:00+08:00");
+    detail.chargers.append(charger);
+    return detail;
+}
+
+QJsonObject stationDetailData(qint64 stationId = 1, qint64 chargerId = 1001)
+{
+    QJsonObject station = stationObject(stationId, 0.5);
+    station.remove(QStringLiteral("distanceKm"));
+    station.insert(QStringLiteral("chargerCount"), 1);
+    station.insert(QStringLiteral("idleCount"), 1);
+    return {
+        {QStringLiteral("station"), station},
+        {QStringLiteral("chargers"), QJsonArray{QJsonObject{
+             {QStringLiteral("chargerId"), chargerId},
+             {QStringLiteral("stationId"), stationId},
+             {QStringLiteral("code"), QStringLiteral("C-%1").arg(chargerId)},
+             {QStringLiteral("type"), QStringLiteral("fast")},
+             {QStringLiteral("powerKw"), 60.0},
+             {QStringLiteral("status"), QStringLiteral("idle")},
+             {QStringLiteral("chargeCount"), 0},
+             {QStringLiteral("totalDurationSec"), 0},
+             {QStringLiteral("updatedAt"), QStringLiteral("2026-09-01T08:00:00+08:00")},
+         }}},
+    };
+}
+
+void completeMainLoginWithoutOrder(MainWindow &window, QTcpSocket *peer)
+{
+    required<QLineEdit>(&window, "phoneEdit")->setText(QString::fromLatin1(kMobile));
+    required<QPushButton>(&window, "loginButton")->click();
+    auto request = takeRequest(peer);
+    QCOMPARE(request.action, QStringLiteral("auth.user_login"));
+    reply(peer, request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("main-task7-token")},
+                      {QStringLiteral("user"), userObject()}});
+    request = takeRequest(peer);
+    QCOMPARE(request.action, QStringLiteral("order.current"));
+    reply(peer, request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    QTRY_VERIFY(!required<QWidget>(&window, "authenticatedNavigation")->isHidden());
+}
+
+QTcpSocket *waitForPeer(QTcpServer &server, int timeoutMs = 3'000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!server.hasPendingConnections() && timer.elapsed() < timeoutMs) {
+        QTest::qWait(10);
+    }
+    return server.nextPendingConnection();
+}
+
 } // namespace
 
 class RecommendationTest final : public QObject
@@ -280,10 +373,20 @@ private slots:
     void historyRendersOnlyReceivedPageWithExactPagination();
     void historyDropsSupersededAndSessionForeignResponses();
     void historyFailureAndDisconnectPreserveCommittedCache();
+    void historyLabelsStoppedChargingFromEndedAt();
+    void historyUsesFallbackKeysForEquivalentTimestampInstants();
+    void historyFormatsLargeFenExactly();
+    void historyNeverExposesRawFailureMessages();
     void freshForecastUsesRealTransportAndDeterministicRanking();
     void staleNullDisabledAndNoMatchLoseRecommendationPriority();
     void nearbyDisconnectKeepsSelectableCacheAndRedBanner();
+    void chargeRefreshPreservesForecastUntilReplacement();
+    void forecastCacheRequiresCompatibleStationFacts();
     void retryWaitsForRealConnectionAndEmitsOnlySafeReads();
+    void globalCurrentSurvivesInactiveChargeSelectionInvalidation();
+    void globalCurrentFailureRequiresVisibleRetryBeforeQueuedReads();
+    void pendingGlobalCurrentReplaysOnceAcrossSecondReconnect();
+    void mutationDisconnectNeverReplaysWritesAndRefreshesCurrentFirst();
     void historyNavigationObeysTask6MutationGate();
 };
 
@@ -604,6 +707,111 @@ void RecommendationTest::historyFailureAndDisconnectPreserveCommittedCache()
     QVERIFY(required<QLabel>(&page, "historyStatus")->text().contains(QStringLiteral("缓存")));
 }
 
+void RecommendationTest::historyLabelsStoppedChargingFromEndedAt()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    HistoryPage page(&api);
+    page.setConnectionAvailable(true);
+    page.activate();
+    const auto request = takeRequest(peer.data());
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{
+                           orderObject(61, QStringLiteral("charging"),
+                                       QStringLiteral("2026-09-01T09:00:00+08:00"),
+                                       QStringLiteral("2026-09-01T10:00:00+08:00"))}},
+                      {QStringLiteral("total"), 1}});
+    auto *list = required<QListWidget>(&page, "historyList");
+    QTRY_COMPARE(list->count(), 1);
+    QVERIFY(list->item(0)->text().contains(QStringLiteral("已停止待结算")));
+    QVERIFY(!list->item(0)->text().contains(QStringLiteral("· 充电中")));
+}
+
+void RecommendationTest::historyUsesFallbackKeysForEquivalentTimestampInstants()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    HistoryPage page(&api);
+    page.setConnectionAvailable(true);
+    page.activate();
+    const auto request = takeRequest(peer.data());
+    const QJsonArray items{
+        orderObject(91, QStringLiteral("completed"),
+                    QStringLiteral("2026-09-01T09:00:00.0+08:00"),
+                    QStringLiteral("2026-09-01T10:00:00.0+08:00")),
+        orderObject(92, QStringLiteral("completed"),
+                    QStringLiteral("2026-09-01T09:00:00.00+08:00"),
+                    QStringLiteral("2026-09-01T10:00:00.00+08:00")),
+    };
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), items}, {QStringLiteral("total"), 2}});
+    auto *list = required<QListWidget>(&page, "historyList");
+    QTRY_COMPARE(list->count(), 2);
+    QVERIFY(list->item(0)->text().contains(QStringLiteral("订单 #92")));
+    QVERIFY(list->item(1)->text().contains(QStringLiteral("订单 #91")));
+}
+
+void RecommendationTest::historyFormatsLargeFenExactly()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    HistoryPage page(&api);
+    page.setConnectionAvailable(true);
+    page.activate();
+    const auto request = takeRequest(peer.data());
+    QJsonObject order = orderObject(
+        62, QStringLiteral("completed"),
+        QStringLiteral("2026-09-01T09:00:00+08:00"),
+        QStringLiteral("2026-09-01T10:00:00+08:00"));
+    order.insert(QStringLiteral("amountFen"), 9'007'199'254'740'901.0);
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{order}},
+                      {QStringLiteral("total"), 1}});
+    auto *list = required<QListWidget>(&page, "historyList");
+    QTRY_COMPARE(list->count(), 1);
+    QVERIFY(list->item(0)->text().contains(QStringLiteral("90071992547409.01 元")));
+}
+
+void RecommendationTest::historyNeverExposesRawFailureMessages()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    HistoryPage page(&api);
+    page.setConnectionAvailable(true);
+    page.activate();
+    const auto request = takeRequest(peer.data());
+    reply(peer.data(), request.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("raw english database failure"), QJsonObject{});
+    auto *error = required<QLabel>(&page, "historyError");
+    QTRY_VERIFY(!error->text().isEmpty());
+    QVERIFY(!error->text().contains(QStringLiteral("raw english")));
+    QVERIFY(error->text().contains(QStringLiteral("服务繁忙")));
+}
+
 void RecommendationTest::freshForecastUsesRealTransportAndDeterministicRanking()
 {
     QTcpServer server;
@@ -732,6 +940,164 @@ void RecommendationTest::nearbyDisconnectKeepsSelectableCacheAndRedBanner()
     QVERIFY(required<QPushButton>(&page, "nearbyRetryButton")->isEnabled());
 }
 
+void RecommendationTest::chargeRefreshPreservesForecastUntilReplacement()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    NearbyPage page(&api, nullptr);
+    page.setConnectionAvailable(true);
+    const auto stations = decodedStations();
+    page.displayStations(stations);
+
+    ev::user::ForecastLatestResult forecast;
+    ev::user::ForecastRun run;
+    run.runId = QStringLiteral("charge-cache");
+    run.generatedAt = QStringLiteral("2026-09-01T08:00:00+08:00");
+    run.dataCutoff = QStringLiteral("2026-09-01T07:00:00+08:00");
+    run.activatedAt = QStringLiteral("2026-09-01T08:01:00+08:00");
+    run.modelVersion = QStringLiteral("ridge-v1");
+    run.payloadHash = QString(64, QLatin1Char('a'));
+    forecast.forecastRun = run;
+    ev::user::ForecastRecord record;
+    record.stationId = 1;
+    record.horizonH = 1;
+    record.predictedBusyCount = 1;
+    record.predictedIdleCount = 3;
+    record.congestionLevel = QStringLiteral("low");
+    forecast.records.append(record);
+    page.displayForecast(forecast);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY(required<QLabel>(&page, "forecastLabel_1")->text()
+                .contains(QStringLiteral("空闲 3")));
+
+    page.displayStationDetail(selectableDetail(stations.stations.constFirst()));
+    QVERIFY(required<QLabel>(&page, "forecastLabel_1")->text()
+                .contains(QStringLiteral("空闲 3")));
+    QSignalSpy selected(&page, &NearbyPage::chargerSelected);
+    required<QPushButton>(&page, "chargerButton_1001")->click();
+    QCOMPARE(selected.size(), 1);
+    QVERIFY(required<QLabel>(&page, "forecastLabel_1")->text()
+                .contains(QStringLiteral("空闲 3")));
+    const auto selection = selected.constFirst().constFirst()
+                               .value<ev::user::StationSelection>();
+    page.refreshAfterCharge(selection.origin, selection.station.stationId,
+                            selection.selectionGeneration, 77);
+    QVERIFY(required<QLabel>(&page, "forecastLabel_1")->text()
+                .contains(QStringLiteral("空闲 3")));
+    const auto list = takeRequest(peer.data());
+    QCOMPARE(list.action, QStringLiteral("station.list"));
+    reply(peer.data(), list.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("busy"), QJsonObject{});
+    QTRY_VERIFY(required<QLabel>(&page, "forecastLabel_1")->text()
+                    .contains(QStringLiteral("空闲 3")));
+    QCOMPARE(visibleStationOrder(page).constFirst(), qint64{1});
+}
+
+void RecommendationTest::forecastCacheRequiresCompatibleStationFacts()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    NearbyPage page(&api, nullptr);
+    page.setConnectionAvailable(true);
+    page.displayStations(decodedStations());
+
+    ev::user::ForecastLatestResult cached;
+    ev::user::ForecastRun run;
+    run.runId = QStringLiteral("compatible-cache");
+    run.generatedAt = QStringLiteral("2026-09-01T08:00:00+08:00");
+    run.dataCutoff = QStringLiteral("2026-09-01T07:00:00+08:00");
+    run.activatedAt = QStringLiteral("2026-09-01T08:01:00+08:00");
+    run.modelVersion = QStringLiteral("ridge-v1");
+    run.payloadHash = QString(64, QLatin1Char('a'));
+    cached.forecastRun = run;
+    ev::user::ForecastRecord first;
+    first.stationId = 1;
+    first.horizonH = 1;
+    first.predictedBusyCount = 1;
+    first.predictedIdleCount = 3;
+    first.congestionLevel = QStringLiteral("low");
+    cached.records.append(first);
+    page.displayForecast(cached);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    page.refreshAfterReconnect();
+    auto list = takeRequest(peer.data());
+    reply(peer.data(), list.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("busy"), QJsonObject{});
+    QTRY_VERIFY(required<QLabel>(&page, "forecastLabel_1")->text()
+                    .contains(QStringLiteral("空闲 3")));
+
+    page.refreshAfterReconnect();
+    list = takeRequest(peer.data());
+    reply(peer.data(), list.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), encodedStations()}});
+    auto forecast = takeRequest(peer.data());
+    QCOMPARE(forecast.action, QStringLiteral("forecast.latest"));
+    reply(peer.data(), forecast.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("busy"), QJsonObject{});
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QTRY_VERIFY(required<QLabel>(&page, "forecastLabel_1")->text()
+                    .contains(QStringLiteral("空闲 3")));
+    QCOMPARE(visibleStationOrder(page).constFirst(), qint64{1});
+
+    page.refreshAfterReconnect();
+    list = takeRequest(peer.data());
+    reply(peer.data(), list.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"),
+                       encodedStationsWithSwappedForecastEnablement()}});
+    forecast = takeRequest(peer.data());
+    QCOMPARE(forecast.action, QStringLiteral("forecast.latest"));
+    reply(peer.data(), forecast.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("busy"), QJsonObject{});
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QTRY_COMPARE(required<QLabel>(&page, "forecastLabel_1")->text(),
+                 QStringLiteral("暂无预测"));
+    QCOMPARE(required<QLabel>(&page, "forecastLabel_7")->text(),
+             QStringLiteral("暂无预测"));
+    QVERIFY(visibleStationOrder(page).indexOf(1)
+            > visibleStationOrder(page).indexOf(7));
+
+    page.refreshAfterReconnect();
+    list = takeRequest(peer.data());
+    reply(peer.data(), list.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), encodedStationsWithFirstCount(5)}});
+    forecast = takeRequest(peer.data());
+    reply(peer.data(), forecast.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("busy"), QJsonObject{});
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QTRY_COMPARE(required<QLabel>(&page, "forecastLabel_1")->text(),
+                 QStringLiteral("暂无预测"));
+    const auto fallbackOrder = visibleStationOrder(page);
+    QVERIFY(fallbackOrder.indexOf(1) > fallbackOrder.indexOf(7));
+
+    page.refreshAfterReconnect();
+    list = takeRequest(peer.data());
+    reply(peer.data(), list.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), encodedStationsWithFirstCount(5)}});
+    forecast = takeRequest(peer.data());
+    const QHash<qint64, qint64> busy{{1, 1}, {2, 3}, {3, 4}, {4, 1}, {5, 2}, {6, 2}};
+    reply(peer.data(), forecast.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), forecastRunObject(false)},
+                      {QStringLiteral("records"),
+                       forecastRecords(busy, QHash<qint64, qint64>{{1, 5}})}});
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QTRY_VERIFY(required<QLabel>(&page, "forecastLabel_1")->text()
+                    .contains(QStringLiteral("空闲 4")));
+    QCOMPARE(visibleStationOrder(page).constFirst(), qint64{1});
+}
+
 void RecommendationTest::retryWaitsForRealConnectionAndEmitsOnlySafeReads()
 {
     QTcpServer server;
@@ -747,9 +1113,10 @@ void RecommendationTest::retryWaitsForRealConnectionAndEmitsOnlySafeReads()
     QObject::connect(&api, &UserApi::connectionChanged,
                      &nearby, &NearbyPage::setConnectionAvailable);
     QObject::connect(&api, &UserApi::connectionChanged, &nearby,
-                     [&nearby](bool connected) {
+                     [&nearby, &history](bool connected) {
         if (connected) {
             nearby.refreshAfterReconnect();
+            history.refreshAfterReconnect();
         }
     });
     history.setConnectionAvailable(true);
@@ -797,6 +1164,248 @@ void RecommendationTest::retryWaitsForRealConnectionAndEmitsOnlySafeReads()
                 || action == QStringLiteral("forecast.latest")
                 || action == QStringLiteral("order.current")
                 || action == QStringLiteral("station.detail"));
+        QVERIFY(!action.startsWith(QStringLiteral("charge.")));
+        QVERIFY(action != QStringLiteral("order.cancel"));
+        QVERIFY(action != QStringLiteral("wallet.recharge"));
+        QVERIFY(action != QStringLiteral("user.update"));
+    }
+}
+
+void RecommendationTest::globalCurrentSurvivesInactiveChargeSelectionInvalidation()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    UserAppConfig config;
+    config.serverHost = QStringLiteral("127.0.0.1");
+    config.serverPort = server.serverPort();
+    config.tencentMapKey = QStringLiteral("test-map-key");
+    MainWindow window(config);
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    completeMainLoginWithoutOrder(window, peer.data());
+
+    auto *nearby = required<NearbyPage>(&window, "nearbyPage");
+    const auto stations = decodedStations();
+    nearby->displayStations(stations);
+    nearby->displayStationDetail(selectableDetail(stations.stations.constFirst()));
+    required<QPushButton>(nearby, "chargerButton_1001")->click();
+    auto *pages = required<QStackedWidget>(&window, "mainPages");
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("chargePage"));
+    required<QPushButton>(&window, "nearbyNavigationButton")->click();
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+
+    peer->disconnectFromHost();
+    QTRY_COMPARE(peer->state(), QAbstractSocket::UnconnectedState);
+    peer.reset(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    const auto current = takeRequest(peer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+
+    nearby->displayStations(decodedStations());
+    reply(peer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    QTest::qWait(30);
+    nearby->displayStationDetail(selectableDetail(stations.stations.constFirst(), 1002));
+    required<QPushButton>(nearby, "chargerButton_1002")->click();
+    QTRY_COMPARE_WITH_TIMEOUT(pages->currentWidget()->objectName(),
+                              QStringLiteral("chargePage"), 1'000);
+}
+
+void RecommendationTest::globalCurrentFailureRequiresVisibleRetryBeforeQueuedReads()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    UserAppConfig config;
+    config.serverHost = QStringLiteral("127.0.0.1");
+    config.serverPort = server.serverPort();
+    config.tencentMapKey = QStringLiteral("test-map-key");
+    MainWindow window(config);
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    completeMainLoginWithoutOrder(window, peer.data());
+    auto *nearby = required<NearbyPage>(&window, "nearbyPage");
+    const auto stations = decodedStations();
+    nearby->displayStations(stations);
+
+    peer->disconnectFromHost();
+    QTRY_COMPARE(peer->state(), QAbstractSocket::UnconnectedState);
+    peer.reset(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    auto current = takeRequest(peer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+    QCOMPARE(takeRequest(peer.data(), 100).action, QString());
+    reply(peer.data(), current.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("raw current failure"), QJsonObject{});
+
+    auto *status = window.findChild<QLabel *>(QStringLiteral("currentAuthorityStatus"));
+    auto *retry = window.findChild<QPushButton *>(QStringLiteral("currentAuthorityRetryButton"));
+    QVERIFY(status != nullptr);
+    QVERIFY(retry != nullptr);
+    QTRY_VERIFY(!status->isHidden());
+    QVERIFY(status->text().contains(QStringLiteral("当前订单")));
+    QVERIFY(!status->text().contains(QStringLiteral("raw current failure")));
+    QTRY_VERIFY(retry->isEnabled());
+    auto *pages = required<QStackedWidget>(&window, "mainPages");
+    QVERIFY(!pages->isEnabled());
+
+    const auto detail = selectableDetail(stations.stations.constFirst());
+    nearby->chargerSelected({stations.origin, detail.station,
+                             detail.chargers.constFirst(), 999});
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+
+    retry->click();
+    current = takeRequest(peer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+    QCOMPARE(takeRequest(peer.data(), 100).action, QString());
+    reply(peer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    const auto list = takeRequest(peer.data());
+    QCOMPARE(list.action, QStringLiteral("station.list"));
+    reply(peer.data(), list.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), encodedStations()}});
+    const auto forecast = takeRequest(peer.data());
+    QCOMPARE(forecast.action, QStringLiteral("forecast.latest"));
+    reply(peer.data(), forecast.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), QJsonValue(QJsonValue::Null)},
+                      {QStringLiteral("records"), QJsonArray{}}});
+    QTRY_VERIFY(status->isHidden());
+    QVERIFY(pages->isEnabled());
+}
+
+void RecommendationTest::pendingGlobalCurrentReplaysOnceAcrossSecondReconnect()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    UserAppConfig config;
+    config.serverHost = QStringLiteral("127.0.0.1");
+    config.serverPort = server.serverPort();
+    config.tencentMapKey = QStringLiteral("test-map-key");
+    MainWindow window(config);
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    completeMainLoginWithoutOrder(window, peer.data());
+    required<NearbyPage>(&window, "nearbyPage")->displayStations(decodedStations());
+    required<QPushButton>(&window, "historyNavigationButton")->click();
+    const auto initialHistory = takeRequest(peer.data());
+    QCOMPARE(initialHistory.action, QStringLiteral("order.list"));
+    reply(peer.data(), initialHistory.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{}},
+                      {QStringLiteral("total"), 0}});
+    QTRY_COMPARE(required<QStackedWidget>(&window, "mainPages")
+                     ->currentWidget()->objectName(),
+                 QStringLiteral("historyPage"));
+
+    peer->disconnectFromHost();
+    QTRY_COMPARE(peer->state(), QAbstractSocket::UnconnectedState);
+    peer.reset(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    const auto firstCurrent = takeRequest(peer.data());
+    QCOMPARE(firstCurrent.action, QStringLiteral("order.current"));
+    QCOMPARE(takeRequest(peer.data(), 100).action, QString());
+
+    peer->disconnectFromHost();
+    QTRY_COMPARE(peer->state(), QAbstractSocket::UnconnectedState);
+    peer.reset(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    const auto replayedCurrent = takeRequest(peer.data());
+    QCOMPARE(replayedCurrent.action, QStringLiteral("order.current"));
+    QCOMPARE(replayedCurrent.requestId, firstCurrent.requestId);
+    QCOMPARE(takeRequest(peer.data(), 100).action, QString());
+    reply(peer.data(), replayedCurrent.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    const auto list = takeRequest(peer.data());
+    QCOMPARE(list.action, QStringLiteral("station.list"));
+    const auto history = takeRequest(peer.data());
+    QCOMPARE(history.action, QStringLiteral("order.list"));
+    QCOMPARE(history.payload.value(QStringLiteral("limit")).toInt(), 20);
+    QCOMPARE(history.payload.value(QStringLiteral("offset")).toInt(), 0);
+    reply(peer.data(), list.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), encodedStations()}});
+    reply(peer.data(), history.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{}},
+                      {QStringLiteral("total"), 0}});
+    const auto forecast = takeRequest(peer.data());
+    QCOMPARE(forecast.action, QStringLiteral("forecast.latest"));
+    reply(peer.data(), forecast.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), QJsonValue(QJsonValue::Null)},
+                      {QStringLiteral("records"), QJsonArray{}}});
+    auto *status = required<QLabel>(&window, "currentAuthorityStatus");
+    QTRY_VERIFY(status->isHidden());
+    QVERIFY(required<QStackedWidget>(&window, "mainPages")->isEnabled());
+}
+
+void RecommendationTest::mutationDisconnectNeverReplaysWritesAndRefreshesCurrentFirst()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    UserAppConfig config;
+    config.serverHost = QStringLiteral("127.0.0.1");
+    config.serverPort = server.serverPort();
+    config.tencentMapKey = QStringLiteral("test-map-key");
+    MainWindow window(config);
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    completeMainLoginWithoutOrder(window, peer.data());
+
+    auto *nearby = required<NearbyPage>(&window, "nearbyPage");
+    const auto stations = decodedStations();
+    nearby->displayStations(stations);
+    nearby->displayStationDetail(selectableDetail(stations.stations.constFirst()));
+    required<QPushButton>(nearby, "chargerButton_1001")->click();
+    auto *reserve = required<QPushButton>(&window, "chargeReserveButton");
+    QTRY_VERIFY(reserve->isEnabled());
+    reserve->click();
+    const auto mutation = takeRequest(peer.data());
+    QCOMPARE(mutation.action, QStringLiteral("charge.reserve"));
+
+    peer->disconnectFromHost();
+    QTRY_COMPARE(peer->state(), QAbstractSocket::UnconnectedState);
+    peer.reset(waitForPeer(server));
+    QVERIFY(peer != nullptr);
+    const auto current = takeRequest(peer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+    QVERIFY(current.requestId != mutation.requestId);
+    reply(peer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+
+    QStringList replayActions;
+    QStringList replayRequestIds;
+    QElapsedTimer quiet;
+    QElapsedTimer total;
+    quiet.start();
+    total.start();
+    while (quiet.elapsed() < 350 && total.elapsed() < 3'000) {
+        const auto request = takeRequest(peer.data(), 75);
+        if (request.action.isEmpty()) {
+            continue;
+        }
+        quiet.restart();
+        replayActions.append(request.action);
+        replayRequestIds.append(request.requestId);
+        if (request.action == QStringLiteral("station.detail")) {
+            reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+                  stationDetailData());
+        } else if (request.action == QStringLiteral("station.list")) {
+            reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+                  QJsonObject{{QStringLiteral("stations"), encodedStations()}});
+        } else if (request.action == QStringLiteral("forecast.latest")) {
+            reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+                  QJsonObject{{QStringLiteral("forecastRun"), QJsonValue(QJsonValue::Null)},
+                              {QStringLiteral("records"), QJsonArray{}}});
+        }
+    }
+    QVERIFY(replayActions.contains(QStringLiteral("station.detail")));
+    QVERIFY(replayActions.contains(QStringLiteral("station.list")));
+    QVERIFY(replayActions.contains(QStringLiteral("forecast.latest")));
+    QCOMPARE(replayActions.size(), 3);
+    QCOMPARE(replayActions.count(QStringLiteral("station.detail")), 1);
+    QCOMPARE(replayActions.count(QStringLiteral("station.list")), 1);
+    QCOMPARE(replayActions.count(QStringLiteral("forecast.latest")), 1);
+    QVERIFY(!replayRequestIds.contains(mutation.requestId));
+    for (const QString &action : std::as_const(replayActions)) {
+        QVERIFY(action == QStringLiteral("station.detail")
+                || action == QStringLiteral("station.list")
+                || action == QStringLiteral("forecast.latest"));
         QVERIFY(!action.startsWith(QStringLiteral("charge.")));
         QVERIFY(action != QStringLiteral("order.cancel"));
         QVERIFY(action != QStringLiteral("wallet.recharge"));
