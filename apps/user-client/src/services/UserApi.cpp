@@ -26,6 +26,23 @@ const QString kUncertainMessage = QStringLiteral("结果未确认，请重新连
 const QRegularExpression kMobilePattern(QStringLiteral("^1[3-9][0-9]{9}$"));
 const QRegularExpression kPayloadHashPattern(QStringLiteral("^[0-9a-f]{64}$"));
 
+QString loginTransportMessage(const QString &code)
+{
+    if (code == QStringLiteral("NOT_CONNECTED")) {
+        return QStringLiteral("服务器连接不可用，请稍后重试");
+    }
+    if (code == QStringLiteral("TIMEOUT")) {
+        return QStringLiteral("登录请求超时，请重试");
+    }
+    if (code == QStringLiteral("TRANSPORT_ERROR")) {
+        return QStringLiteral("服务器连接中断，请稍后重试");
+    }
+    if (code == QStringLiteral("PROTOCOL_ERROR")) {
+        return QStringLiteral("服务器通信异常，请稍后重试");
+    }
+    return QStringLiteral("登录失败，请稍后重试");
+}
+
 bool hasExactlyKeys(const QJsonObject &object, std::initializer_list<const char *> keys)
 {
     if (object.size() != static_cast<qsizetype>(keys.size())) {
@@ -674,7 +691,9 @@ void UserApi::loginByPhone(const QString &mobile)
     }
     const QString requestId = client_->send(
         ev::actions::AuthUserLogin, QJsonObject{{QStringLiteral("mobile"), mobile}});
-    pendingOperations_.insert(requestId, {Operation::Login, sessionGeneration_});
+    PendingOperation pending{Operation::Login, sessionGeneration_};
+    pending.expectedMobile = mobile;
+    pendingOperations_.insert(requestId, std::move(pending));
 }
 
 ev::user::RequestContext UserApi::loadCurrentOrder(
@@ -1361,7 +1380,8 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
             return;
         }
         ev::user::User user;
-        if (!parseUser(data.value(QStringLiteral("user")), &user)) {
+        if (!parseUser(data.value(QStringLiteral("user")), &user)
+            || user.mobile != pending.expectedMobile) {
             emitInvalidResponse(response.requestId);
             return;
         }
@@ -1425,6 +1445,8 @@ void UserApi::handleTransportFailure(const QString &requestId, const QString &co
     }
     if (pending.operation == Operation::Login) {
         emit loginPendingChanged(false);
+        emitFailure(requestId, code, loginTransportMessage(code));
+        return;
     }
     if (isProfileOperation(pending.operation)) {
         if (isProfileMutation(pending.operation) && code != QStringLiteral("NOT_CONNECTED")) {

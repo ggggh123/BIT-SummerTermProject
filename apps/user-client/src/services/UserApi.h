@@ -109,6 +109,7 @@ private:
         std::optional<ev::user::RequestContext> chargeContext;
         std::optional<ev::user::HistoryRequestContext> historyContext;
         qint64 expectedEntityId = 0;
+        QString expectedMobile;
     };
 
     [[nodiscard]] QString loadProfile(bool reconciliation);

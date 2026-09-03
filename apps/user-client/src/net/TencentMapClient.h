@@ -2,10 +2,13 @@
 
 #include "domain/Models.h"
 
+#include <QHash>
 #include <QObject>
 #include <QUrl>
 
 class QNetworkAccessManager;
+class QNetworkReply;
+class QTimer;
 
 class TencentMapClient final : public QObject
 {
@@ -15,6 +18,7 @@ public:
     explicit TencentMapClient(QString apiKey, QNetworkAccessManager *networkManager = nullptr,
                               QUrl endpoint = productionEndpoint(), int timeoutMs = 5'000,
                               QObject *parent = nullptr);
+    ~TencentMapClient() override;
 
     [[nodiscard]] static QUrl productionEndpoint();
     [[nodiscard]] static QUrl buildGeocodeUrl(const QUrl &endpoint, const QString &address,
@@ -30,4 +34,5 @@ private:
     QNetworkAccessManager *networkManager_;
     QUrl endpoint_;
     int timeoutMs_;
+    QHash<QNetworkReply *, QTimer *> outstandingReplies_;
 };

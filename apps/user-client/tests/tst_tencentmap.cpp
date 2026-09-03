@@ -111,6 +111,7 @@ class FakeNetworkAccessManager final : public QNetworkAccessManager {
 public:
     QList<ReplyPlan> plans;
     QList<QNetworkRequest> requests;
+    QPointer<QNetworkReply> lastReply;
 
 protected:
     QNetworkReply *createRequest(Operation operation, const QNetworkRequest &request,
@@ -120,7 +121,9 @@ protected:
         Q_ASSERT(operation == GetOperation);
         requests.append(request);
         const ReplyPlan plan = plans.isEmpty() ? ReplyPlan{} : plans.takeFirst();
-        return new FakeReply(request, plan, this);
+        auto *reply = new FakeReply(request, plan, this);
+        lastReply = reply;
+        return reply;
     }
 };
 
@@ -315,6 +318,7 @@ class TencentMapClientTest final : public QObject {
 private slots:
     void requestBuilderUsesOfficialEndpointAndEncodedQueryOnly();
     void asyncGeocoderHandlesSuccessTencentNetworkMalformedAndTimeoutOnce();
+    void destructionCancelsExternalManagerReplyWithoutLateSignals();
     void navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState();
     void routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess();
     void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
@@ -402,6 +406,40 @@ void TencentMapClientTest::asyncGeocoderHandlesSuccessTencentNetworkMalformedAnd
         + malformedError.code + malformedError.message
         + timeoutError.code + timeoutError.message;
     QVERIFY(!exposed.contains(key));
+}
+
+void TencentMapClientTest::destructionCancelsExternalManagerReplyWithoutLateSignals()
+{
+    FakeNetworkAccessManager manager;
+    manager.plans = {{{}, QNetworkReply::NoError, true}};
+    auto *client = new TencentMapClient(
+        QStringLiteral("test-only-key"), &manager,
+        QUrl(QStringLiteral("https://offline.invalid/geocode")), 20);
+    QSignalSpy succeeded(client, &TencentMapClient::geocodeSucceeded);
+    QSignalSpy failed(client, &TencentMapClient::geocodeFailed);
+
+    const QString requestId = client->geocode(QStringLiteral("北京理工大学中关村校区"));
+    QVERIFY(!requestId.isEmpty());
+    QVERIFY(manager.lastReply != nullptr);
+    QNetworkReply *reply = manager.lastReply.data();
+    QSignalSpy finished(reply, &QNetworkReply::finished);
+    QSignalSpy destroyed(reply, &QObject::destroyed);
+    bool aborted = false;
+    connect(reply, &QNetworkReply::finished, &manager, [reply, &aborted] {
+        aborted = reply->error() == QNetworkReply::OperationCanceledError;
+    });
+
+    delete client;
+
+    QCOMPARE(finished.count(), 1);
+    QVERIFY(aborted);
+    QCOMPARE(succeeded.count(), 0);
+    QCOMPARE(failed.count(), 0);
+    QTRY_COMPARE_WITH_TIMEOUT(destroyed.count(), 1, 500);
+    QVERIFY(manager.lastReply.isNull());
+    QTest::qWait(50);
+    QCOMPARE(succeeded.count(), 0);
+    QCOMPARE(failed.count(), 0);
 }
 
 void TencentMapClientTest::navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState()

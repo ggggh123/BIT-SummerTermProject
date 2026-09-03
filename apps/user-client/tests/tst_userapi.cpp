@@ -331,12 +331,14 @@ class UserApiTest final : public QObject {
 
 private slots:
     void loginSendsOnlyPhoneAndDecodesCompleteSession();
+    void loginRejectsResponseForDifferentRequestedMobileAndRecovers();
     void malformedLoginSuccessIsInvalidResponseAndServerErrorIsPreserved();
     void staleLoginResponseCannotReplaceNewerSession();
     void currentOrderUsesOwnedTokenAndRequiresActiveOrderShape();
     void decoderAcceptsMaxSafeIntegerAndRejectsTwoToThe53();
     void nullableOrderTimestampsDecodeAsEmptyStrings();
     void loginPageDisablesWhilePendingAndShowsConnectionFailure();
+    void offlineLoginShowsStableChineseTransportError();
     void currentOrderGuardRoutesChargingAndNullToStablePages();
     void activeOrderGuardSurvivesProfileNavigation();
     void noOrderNavigationKeepsNearbyAvailable();
@@ -424,6 +426,65 @@ void UserApiTest::loginSendsOnlyPhoneAndDecodesCompleteSession()
     QCOMPARE(user.status, QStringLiteral("active"));
     QVERIFY(api.sessionUser().has_value());
     QCOMPARE(api.sessionUser()->userId, qint64{42});
+}
+
+void UserApiTest::loginRejectsResponseForDifferentRequestedMobileAndRecovers()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    QVERIFY(peer != nullptr);
+    UserApi api(&client);
+    QSignalSpy successes(&api, &UserApi::loginSucceeded);
+    QSignalSpy failures(&api, &UserApi::requestFailed);
+    QSignalSpy userApplied(&api, &UserApi::sessionUserApplied);
+    QSignalSpy pendingChanged(&api, &UserApi::loginPendingChanged);
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto mismatched = takeRequest(peer.data());
+    QCOMPARE(mismatched.payload.value(QStringLiteral("mobile")).toString(),
+             QString::fromLatin1(kMobile));
+    reply(peer.data(), mismatched.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("must-not-be-applied")},
+                      {QStringLiteral("user"), userObject(QStringLiteral("13900139000"))}});
+
+    QTRY_COMPARE(failures.count(), 1);
+    const auto mismatchError = qvariant_cast<ev::user::ApiError>(
+        failures.takeFirst().at(0));
+    QCOMPARE(mismatchError.requestId, mismatched.requestId);
+    QCOMPARE(mismatchError.code, QStringLiteral("INVALID_RESPONSE"));
+    QCOMPARE(successes.count(), 0);
+    QCOMPARE(userApplied.count(), 0);
+    QVERIFY(!api.sessionUser().has_value());
+    QTRY_COMPARE(pendingChanged.count(), 2);
+    QCOMPARE(pendingChanged.at(0).at(0).toBool(), true);
+    QCOMPARE(pendingChanged.at(1).at(0).toBool(), false);
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto recovered = takeRequest(peer.data());
+    reply(peer.data(), recovered.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("fresh-token")},
+                      {QStringLiteral("user"),
+                       userObject(QString::fromLatin1(kMobile), QStringLiteral("frozen"))}});
+
+    QTRY_COMPARE(successes.count(), 1);
+    QCOMPARE(userApplied.count(), 1);
+    QVERIFY(api.sessionUser().has_value());
+    QCOMPARE(api.sessionUser()->mobile, QString::fromLatin1(kMobile));
+    QCOMPARE(api.sessionUser()->status, QStringLiteral("frozen"));
+    QTRY_COMPARE(pendingChanged.count(), 4);
+    QCOMPARE(pendingChanged.at(2).at(0).toBool(), true);
+    QCOMPARE(pendingChanged.at(3).at(0).toBool(), false);
+
+    (void)api.loadCurrentOrder();
+    const auto current = takeRequest(peer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+    QCOMPARE(current.token, QStringLiteral("fresh-token"));
+    reply(peer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
 }
 
 void UserApiTest::malformedLoginSuccessIsInvalidResponseAndServerErrorIsPreserved()
@@ -789,6 +850,35 @@ void UserApiTest::loginPageDisablesWhilePendingAndShowsConnectionFailure()
     QCOMPARE(button->text(), QStringLiteral("登录"));
     page.setConnectionAvailable(false);
     QCOMPARE(banner->text(), QStringLiteral("服务器连接不可用"));
+}
+
+void UserApiTest::offlineLoginShowsStableChineseTransportError()
+{
+    QTcpServer portReservation;
+    QVERIFY(portReservation.listen(QHostAddress::LocalHost));
+    const quint16 unavailablePort = portReservation.serverPort();
+    portReservation.close();
+
+    MainWindow window(usableConfig(unavailablePort));
+    window.show();
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    auto *button = window.findChild<QPushButton *>(QStringLiteral("loginButton"));
+    auto *error = window.findChild<QLabel *>(QStringLiteral("loginError"));
+    auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
+    QVERIFY(phone != nullptr);
+    QVERIFY(button != nullptr);
+    QVERIFY(error != nullptr);
+    QVERIFY(pages != nullptr);
+
+    phone->setText(QString::fromLatin1(kMobile));
+    button->click();
+
+    QTRY_COMPARE_WITH_TIMEOUT(error->text(),
+                              QStringLiteral("服务器连接不可用，请稍后重试"), 1'000);
+    QVERIFY(!error->text().contains(QStringLiteral("not connected"),
+                                    Qt::CaseInsensitive));
+    QVERIFY(button->isEnabled());
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("loginPage"));
 }
 
 void UserApiTest::currentOrderGuardRoutesChargingAndNullToStablePages()

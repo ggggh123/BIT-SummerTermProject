@@ -12,7 +12,7 @@ Key 只能放在本机环境变量或已忽略的 `config.local.ini`，不得提
 ```ini
 [server]
 host=127.0.0.1
-port=9200
+port=9100
 
 [tencent]
 mapKey=<your-local-tencent-map-key>
