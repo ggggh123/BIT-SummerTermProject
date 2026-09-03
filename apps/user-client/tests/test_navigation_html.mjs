@@ -62,9 +62,27 @@ function makeElement(tagName = 'div') {
   };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function fakeTMap({ routeResult } = {}) {
-  const calls = { maps: [], driving: [], walking: [], searches: [], polylineStyles: [], polylines: [], detachedLayers: [] };
+  const calls = {
+    maps: [], driving: [], walking: [], searches: [], polylineStyles: [], polylines: [],
+    markerStyles: [], markers: [], detachedLayers: [], attachedLayers: [],
+  };
   let nextRouteResult = routeResult ?? { result: { routes: [{ polyline: [{ lat: 39.9, lng: 116.4 }, { lat: 39.91, lng: 116.41 }] }] } };
+  const queuedRouteResults = [];
+  let failNextMarkerConstruction = false;
+  let failNextMarkerAttachment = false;
+  const routeResultForSearch = () => queuedRouteResults.length > 0
+    ? queuedRouteResults.shift() : nextRouteResult;
   class LatLng {
     constructor(lat, lng) { this.lat = lat; this.lng = lng; }
   }
@@ -73,23 +91,48 @@ function fakeTMap({ routeResult } = {}) {
   }
   class Driving {
     constructor(options) { calls.driving.push(options); }
-    search(request) { calls.searches.push({ kind: 'driving', request }); return Promise.resolve(nextRouteResult); }
+    search(request) { calls.searches.push({ kind: 'driving', request }); return Promise.resolve(routeResultForSearch()); }
   }
   class Walking {
     constructor(options) { calls.walking.push(options); }
-    search(request) { calls.searches.push({ kind: 'walking', request }); return Promise.resolve(nextRouteResult); }
+    search(request) { calls.searches.push({ kind: 'walking', request }); return Promise.resolve(routeResultForSearch()); }
   }
   class PolylineStyle {
     constructor(options) { this.options = options; calls.polylineStyles.push(this); }
   }
   class MultiPolyline {
     constructor(options) { this.options = options; calls.polylines.push(this); }
-    setMap(map) { calls.detachedLayers.push({ layer: this, map }); }
+    setMap(map) {
+      (map === null ? calls.detachedLayers : calls.attachedLayers).push({ kind: 'route', layer: this, map });
+    }
+  }
+  class MarkerStyle {
+    constructor(options) { this.options = options; calls.markerStyles.push(this); }
+  }
+  class MultiMarker {
+    constructor(options) {
+      if (failNextMarkerConstruction) {
+        failNextMarkerConstruction = false;
+        throw new Error('planned marker construction failure');
+      }
+      this.options = options;
+      calls.markers.push(this);
+    }
+    setMap(map) {
+      if (map !== null && failNextMarkerAttachment) {
+        failNextMarkerAttachment = false;
+        throw new Error('planned marker attachment failure');
+      }
+      (map === null ? calls.detachedLayers : calls.attachedLayers).push({ kind: 'marker', layer: this, map });
+    }
   }
   return {
-    api: { LatLng, Map, PolylineStyle, MultiPolyline, service: { Driving, Walking } },
+    api: { LatLng, Map, PolylineStyle, MultiPolyline, MarkerStyle, MultiMarker, service: { Driving, Walking } },
     calls,
     setRouteResult(value) { nextRouteResult = value; },
+    queueRouteResult(value) { queuedRouteResults.push(value); },
+    failNextMarkerConstruction() { failNextMarkerConstruction = true; },
+    failNextMarkerAttachment() { failNextMarkerAttachment = true; },
   };
 }
 
@@ -229,8 +272,20 @@ test('route runtime keeps the key secret while constructing Tencent driving and 
   assert.deepEqual({ ...fake.calls.searches[0].request.to }, to);
   assert.equal(fake.calls.searches[0].kind, 'driving');
   assert.equal(fake.calls.polylines.length, 1);
+  assert.equal(fake.calls.markers.length, 1);
+  assert.equal(fake.calls.markerStyles.length, 2);
   assert.equal(fake.calls.polylineStyles.length, 1);
   assert.ok(fake.calls.polylines[0].options.styles.route instanceof fake.api.PolylineStyle);
+  assert.ok(fake.calls.markers[0].options.styles.start instanceof fake.api.MarkerStyle);
+  assert.ok(fake.calls.markers[0].options.styles.end instanceof fake.api.MarkerStyle);
+  assert.match(fake.calls.markers[0].options.styles.start.options.src, /^data:image\/svg\+xml/);
+  assert.match(fake.calls.markers[0].options.styles.end.options.src, /^data:image\/svg\+xml/);
+  assert.doesNotMatch(fake.calls.markers[0].options.styles.start.options.src, /^https?:/);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(fake.calls.markers[0].options.geometries
+      .map(({ id, styleId, position }) => ({ id, styleId, lat: position.lat, lng: position.lng })))),
+    [{ id: 'start', styleId: 'start', ...from }, { id: 'end', styleId: 'end', ...to }],
+  );
   assert.equal(page.context.lastRouteStatus.state, 'success');
   assert.match(page.context.lastRouteStatus.label, /朝阳充电站/);
 
@@ -238,9 +293,88 @@ test('route runtime keeps the key secret while constructing Tencent driving and 
   assert.equal(fake.calls.walking.length, 1);
   assert.equal(fake.calls.searches[1].kind, 'walking');
   assert.equal(fake.calls.polylines.length, 2);
-  assert.deepEqual(fake.calls.detachedLayers, [{ layer: fake.calls.polylines[0], map: null }]);
+  assert.equal(fake.calls.markers.length, 2);
+  assert.ok(fake.calls.detachedLayers.some(({ kind, layer, map }) => kind === 'route' && layer === fake.calls.polylines[0] && map === null));
+  assert.ok(fake.calls.detachedLayers.some(({ kind, layer, map }) => kind === 'marker' && layer === fake.calls.markers[0] && map === null));
   const exposed = `${JSON.stringify(page.context.lastRouteStatus)} ${page.elements['route-status'].textContent} ${page.elements['route-empty'].textContent} ${page.logs.join(' ')}`;
   assert.doesNotMatch(exposed, new RegExp(runtimeKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('newer route attempt owns overlays status and cache when deferred completions invert', async () => {
+  const page = loadPage();
+  const fake = await configureWithFakeMap(page);
+  const firstResult = deferred();
+  const secondResult = deferred();
+  fake.queueRouteResult(firstResult.promise);
+  fake.queueRouteResult(secondResult.promise);
+  const requestA = {
+    from: { lat: 39.9, lng: 116.4 }, to: { lat: 39.91, lng: 116.41 },
+    mode: 'driving', stationName: '旧目的地',
+  };
+  const requestB = {
+    from: { lat: 39.8, lng: 116.3 }, to: { lat: 39.82, lng: 116.32 },
+    mode: 'walking', stationName: '新目的地',
+  };
+  const pendingA = page.context.renderRoute(requestA, 'attempt-1');
+  const pendingB = page.context.renderRoute(requestB, 'attempt-2');
+  secondResult.resolve({ result: { routes: [{ polyline: [requestB.from, requestB.to] }] } });
+  await pendingB;
+  const successfulLayer = fake.calls.polylines.at(-1);
+  const successfulMarkers = fake.calls.markers.at(-1);
+  assert.match(page.elements['route-status'].textContent, /新目的地/);
+  assert.equal(page.context.lastRouteStatus.lastSuccessfulRequest.stationName, '新目的地');
+
+  firstResult.resolve({ result: { routes: [{ polyline: [requestA.from, requestA.to] }] } });
+  await assert.rejects(pendingA, /已失效|superseded/);
+  assert.equal(fake.calls.polylines.at(-1), successfulLayer);
+  assert.equal(fake.calls.markers.at(-1), successfulMarkers);
+  assert.match(page.elements['route-status'].textContent, /新目的地/);
+  assert.equal(page.context.lastRouteStatus.lastSuccessfulRequest.stationName, '新目的地');
+});
+
+test('timeout invalidation makes a late route completion harmless', async () => {
+  const page = loadPage();
+  const fake = await configureWithFakeMap(page);
+  const baseline = {
+    from: { lat: 39.9, lng: 116.4 }, to: { lat: 39.91, lng: 116.41 },
+    mode: 'driving', stationName: '保留路线',
+  };
+  await page.context.renderRoute(baseline, 'baseline');
+  const baselineLayer = fake.calls.polylines.at(-1);
+  const baselineMarkers = fake.calls.markers.at(-1);
+  const lateResult = deferred();
+  fake.queueRouteResult(lateResult.promise);
+  const lateRequest = { ...baseline, to: { lat: 39.93, lng: 116.43 }, stationName: '超时路线' };
+  const pending = page.context.renderRoute(lateRequest, 'timeout-attempt');
+  page.context.invalidateRouteAttempt('timeout-attempt');
+  lateResult.resolve({ result: { routes: [{ polyline: [lateRequest.from, lateRequest.to] }] } });
+  await assert.rejects(pending, /已失效|superseded/);
+  assert.equal(fake.calls.polylines.at(-1), baselineLayer);
+  assert.equal(fake.calls.markers.at(-1), baselineMarkers);
+  assert.equal(page.context.lastRouteStatus.lastSuccessfulRequest.stationName, '保留路线');
+});
+
+test('route and endpoint markers replace transactionally and survive marker failure', async () => {
+  const page = loadPage();
+  const fake = await configureWithFakeMap(page);
+  const original = {
+    from: { lat: 39.9, lng: 116.4 }, to: { lat: 39.91, lng: 116.41 },
+    mode: 'driving', stationName: '原路线',
+  };
+  await page.context.renderRoute(original, 'original-attempt');
+  const originalLayer = fake.calls.polylines[0];
+  const originalMarkers = fake.calls.markers[0];
+  fake.failNextMarkerAttachment();
+  const replacement = {
+    ...original, to: { lat: 39.95, lng: 116.45 }, mode: 'walking', stationName: '失败替换',
+  };
+  await assert.rejects(
+    page.context.renderRoute(replacement, 'failed-marker-attempt'), /路线/,
+  );
+  assert.equal(page.context.lastRouteStatus.lastSuccessfulRequest.stationName, '原路线');
+  assert.ok(!fake.calls.detachedLayers.some(({ layer }) => layer === originalLayer));
+  assert.ok(!fake.calls.detachedLayers.some(({ layer }) => layer === originalMarkers));
+  assert.match(page.elements['route-empty'].textContent, /原路线/);
 });
 
 test('later route failure remains visible and retryable without replacing the last successful route', async () => {

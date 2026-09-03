@@ -180,6 +180,20 @@ void ProfilePage::setConnectionAvailable(bool available)
     updateControls();
 }
 
+void ProfilePage::resetForSessionExpiry()
+{
+    readPending_ = false;
+    mutationPending_ = false;
+    hasUser_ = false;
+    reconciliationRequired_ = false;
+    displayUser({});
+    rechargeEdit_->clear();
+    status_->setText(QStringLiteral("请重新登录后查看账户信息"));
+    error_->clear();
+    retryButton_->hide();
+    updateControls();
+}
+
 void ProfilePage::displayUser(const ev::user::User &user)
 {
     QPixmap pixmap;

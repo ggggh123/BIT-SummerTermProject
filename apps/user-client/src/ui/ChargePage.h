@@ -30,6 +30,7 @@ public:
 
 public slots:
     void setConnectionAvailable(bool available);
+    void resetForSessionExpiry(quint64 sessionGeneration);
     void observeAuthoritativeCurrent(const ev::user::RequestContext &context,
                                      const ev::user::CurrentOrderResult &result);
     void nearbyRefreshCommitted(quint64 refreshAttemptId, quint64 selectionGeneration,
@@ -88,6 +89,7 @@ private:
 
     UserApi *api_;
     QLabel *status_;
+    QLabel *identity_;
     QLabel *meter_;
     QLabel *summary_;
     QLabel *error_;

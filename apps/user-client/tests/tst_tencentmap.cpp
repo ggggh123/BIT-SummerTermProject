@@ -182,6 +182,7 @@ private slots:
     void navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState();
     void routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess();
     void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
+    void navigationPageDestructionIgnoresPendingWebCallbacks();
     void resourceAndPageContractsRemainFixedAndDisplayPredictionStates();
     void nearbyChargerButtonsLocalizeEveryWireStatus();
     void nearbySelectionCarriesOriginStationAndChargerWithoutMutation();
@@ -294,7 +295,12 @@ void TencentMapClientTest::navigationScriptsAreJsonEscapedValidatedAndKeyFreeInC
              {QStringLiteral("stationName"), stationName},
          }},
     }).toJson(QJsonDocument::Compact))));
-    QVERIFY(route.contains(QStringLiteral("window.renderRoute")));
+    QVERIFY(route.contains(
+        QStringLiteral("window.renderRoute(operation.route,operation.operationId)")));
+    QVERIFY(route.contains(
+        QStringLiteral("Promise.resolve(window.renderRoute(operation.route,operation.operationId))")));
+    QVERIFY(!route.contains(
+        QStringLiteral("then(()=>window.renderRoute(operation.route,operation.operationId))")));
 
     QVERIFY(NavigationPage::buildRenderRouteScript(
         {91.0, 116.0}, to, QStringLiteral("driving"), stationName, QStringLiteral("bad-1"), &error).isEmpty());
@@ -306,6 +312,10 @@ void TencentMapClientTest::navigationScriptsAreJsonEscapedValidatedAndKeyFreeInC
     const QString completion = NavigationPage::buildOperationStatusScript(QStringLiteral("route-8"));
     QVERIFY(completion.contains(QStringLiteral("route-8")));
     QVERIFY(!completion.contains(key));
+    const QString invalidate = NavigationPage::buildInvalidateRouteScript(
+        QStringLiteral("route-8"));
+    QVERIFY(invalidate.contains(QStringLiteral("window.invalidateRouteAttempt")));
+    QVERIFY(invalidate.contains(QStringLiteral("route-8")));
 }
 
 void TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess()
@@ -328,6 +338,21 @@ void TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAnd
     QCOMPARE(tracker.lastSuccessfulRoute()->stationName, QStringLiteral("第一站"));
     QVERIFY(tracker.retryRoute().has_value());
     QCOMPARE(tracker.retryRoute()->stationName, QStringLiteral("第二站"));
+
+    tracker.begin(QStringLiteral("route-timeout"), second);
+    tracker.invalidatePending();
+    QVERIFY(!tracker.complete(QStringLiteral("route-timeout"), QStringLiteral("success"),
+                              QDateTime::currentDateTime()));
+    QCOMPARE(tracker.lastSuccessfulRoute()->stationName, QStringLiteral("第一站"));
+
+    NavigationPage page(QStringLiteral("invalid-replacement-key"));
+    page.routeOperationId_ = QStringLiteral("route-old-pending");
+    page.routeTracker_.begin(QStringLiteral("route-old-pending"), second);
+    page.showRoute({91.0, 116.3}, station(9, false, 1.0));
+    QVERIFY(page.routeOperationId_.isEmpty());
+    QVERIFY(!page.routeTracker_.complete(
+        QStringLiteral("route-old-pending"), QStringLiteral("success"),
+        QDateTime::currentDateTime()));
 }
 
 void TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOffline()
@@ -412,6 +437,52 @@ void TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOfflin
     QVERIFY(!completionState.contains(QStringLiteral("offline map test value")));
 }
 
+void TencentMapClientTest::navigationPageDestructionIgnoresPendingWebCallbacks()
+{
+    {
+        const QString slowBootstrap = QStringLiteral(R"JS(
+            (() => {
+                const deadline = Date.now() + 250;
+                while (Date.now() < deadline) {}
+                window.configureMap = () => Promise.resolve();
+                window.renderRoute = () => Promise.resolve();
+                return true;
+            })()
+        )JS");
+        auto *page = new NavigationPage(QStringLiteral("destruction-bootstrap-key"),
+                                        slowBootstrap, nullptr);
+        page->show();
+        auto *view = page->findChild<QWebEngineView *>(QStringLiteral("navigationWebView"));
+        QVERIFY(view != nullptr);
+        QSignalSpy loaded(view, &QWebEngineView::loadFinished);
+        QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty(), 5'000);
+        const QPointer<NavigationPage> guardedPage(page);
+        delete page;
+        QTest::qWait(350);
+        QVERIFY(guardedPage.isNull());
+    }
+
+    {
+        const QString pendingRouteBootstrap = QStringLiteral(R"JS(
+            window.configureMap = () => Promise.resolve();
+            window.renderRoute = () => new Promise(() => {});
+        )JS");
+        auto *page = new NavigationPage(QStringLiteral("destruction-route-key"),
+                                        pendingRouteBootstrap, nullptr);
+        page->show();
+        auto *status = page->findChild<QLabel *>(QStringLiteral("navigationStatus"));
+        QVERIFY(status != nullptr);
+        QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("地图已加载"), 5'000);
+        page->showRoute({39.958, 116.317}, station(9, false, 1.0));
+        QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("正在规划路线…"), 1'000);
+        QTest::qWait(75);
+        const QPointer<NavigationPage> guardedPage(page);
+        delete page;
+        QTest::qWait(150);
+        QVERIFY(guardedPage.isNull());
+    }
+}
+
 void TencentMapClientTest::resourceAndPageContractsRemainFixedAndDisplayPredictionStates()
 {
     QCOMPARE(NavigationPage::pageUrl(), QUrl(QStringLiteral("qrc:/map/navigation.html")));
@@ -421,6 +492,7 @@ void TencentMapClientTest::resourceAndPageContractsRemainFixedAndDisplayPredicti
     const QByteArray html = resource.readAll();
     QVERIFY(html.contains("window.configureMap"));
     QVERIFY(html.contains("window.renderRoute"));
+    QVERIFY(html.contains("window.TMap.MultiMarker"));
 
     QCOMPARE(NearbyPage::presetAddresses(), QStringList({
         QStringLiteral("北京理工大学中关村校区"),
@@ -490,21 +562,22 @@ void TencentMapClientTest::nearbySelectionCarriesOriginStationAndChargerWithoutM
     const ev::user::GeoPoint origin{39.958, 116.317};
     const ev::user::Station chosenStation = station(2, false, 1.2);
     page.displayStations({origin, {chosenStation}});
-    page.displayStationDetail({chosenStation, {charger(21, 2)}});
+    page.displayStationDetail({chosenStation, {charger(1001, 2)}});
 
     auto *forecastLabel = page.findChild<QLabel *>(QStringLiteral("forecastLabel_2"));
     QVERIFY(forecastLabel != nullptr);
     QCOMPARE(forecastLabel->text(), QStringLiteral("暂无预测"));
-    auto *chargerButton = page.findChild<QPushButton *>(QStringLiteral("chargerButton_21"));
+    auto *chargerButton = page.findChild<QPushButton *>(QStringLiteral("chargerButton_1001"));
     auto *navigateButton = page.findChild<QPushButton *>(QStringLiteral("navigateButton"));
     QVERIFY(chargerButton != nullptr);
+    QVERIFY(chargerButton->text().contains(QStringLiteral("充电桩 ID：1001")));
     QVERIFY(navigateButton != nullptr);
     chargerButton->click();
     QCOMPARE(selected.size(), 1);
     const auto selection = qvariant_cast<ev::user::StationSelection>(selected.takeFirst().at(0));
     QCOMPARE(selection.origin.latitude, origin.latitude);
     QCOMPARE(selection.station.stationId, qint64{2});
-    QCOMPARE(selection.charger.chargerId, qint64{21});
+    QCOMPARE(selection.charger.chargerId, qint64{1001});
     QVERIFY(selection.selectionGeneration > 0);
     chargerButton->click();
     QCOMPARE(selected.size(), 1);

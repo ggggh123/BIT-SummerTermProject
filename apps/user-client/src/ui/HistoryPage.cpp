@@ -183,6 +183,15 @@ void HistoryPage::setConnectionAvailable(bool available)
     updateControls();
 }
 
+void HistoryPage::resetForSessionExpiry(quint64 sessionGeneration)
+{
+    active_ = false;
+    reconnectRefreshPending_ = false;
+    clearForSession(sessionGeneration);
+    status_->setText(QStringLiteral("请重新登录后查看历史订单"));
+    updateControls();
+}
+
 void HistoryPage::requestPage(qint64 pageIndex)
 {
     if (!active_ || !connected_ || pageIndex < 0) {

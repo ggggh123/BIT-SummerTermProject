@@ -177,6 +177,16 @@ bool connectToFakeServer(TcpJsonClient &client, QTcpServer &server)
     return accepted && connected;
 }
 
+QTcpSocket *waitForPeer(QTcpServer &server, int timeoutMs = 5'000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!server.hasPendingConnections() && timer.elapsed() < timeoutMs) {
+        QTest::qWait(10);
+    }
+    return server.nextPendingConnection();
+}
+
 ev::protocol::RequestEnvelope takeRequest(QTcpSocket *peer)
 {
     QElapsedTimer timer;
@@ -285,6 +295,7 @@ private slots:
     void chargeMutationDisablesAuthenticatedNavigationUntilOutcome();
     void nearbyStationsUseOwnedSessionValidateDistanceAndSortTies();
     void stationDetailDecodesCompleteAuthoritativeObjects();
+    void plannedHealthAndChargerListWrappersUseExactTypedContract();
     void latestForecastDecodesCompleteRunAndExactNoPrediction();
     void latestForecastRejectsRecordsOutsideMatchingStationSnapshot();
     void task4ResultSignalsCarryIdsAcrossIdenticalArgumentRaces();
@@ -297,7 +308,8 @@ private slots:
     void chargeRefreshPreservesIdleSelectionInBothResponseOrders();
     void chargeRefreshSuccessCannotEraseFactsFailure();
     void disconnectIgnoresChargeListReplayBeforeFreshReconciliation();
-    void foregroundOriginReplacementRemovesOldStationControls();
+    void foregroundSearchRetainsCommittedCacheUntilListCommit_data();
+    void foregroundSearchRetainsCommittedCacheUntilListCommit();
     void activeOrderExistsChargingStatesWaitForMatchingFacts();
     void terminalBackWaitsForNearbyFactsToCommit();
     void terminalAndNullBackRemainReachableAcrossReconnect();
@@ -374,6 +386,7 @@ void UserApiTest::malformedLoginSuccessIsInvalidResponseAndServerErrorIsPreserve
     QTcpSocket *peer = server.nextPendingConnection();
     UserApi api(&client);
     QSignalSpy failures(&api, &UserApi::requestFailed);
+    QSignalSpy expired(&api, SIGNAL(sessionExpired(quint64)));
 
     api.loginByPhone(QString::fromLatin1(kMobile));
     const auto malformedRequest = takeRequest(peer);
@@ -391,6 +404,168 @@ void UserApiTest::malformedLoginSuccessIsInvalidResponseAndServerErrorIsPreserve
     const ev::user::ApiError failure = qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0));
     QCOMPARE(failure.code, QStringLiteral("USER_FROZEN"));
     QCOMPARE(failure.message, QStringLiteral("冻结用户不能预约"));
+
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto unauthenticated = takeRequest(peer);
+    reply(peer, unauthenticated.requestId, false, QStringLiteral("AUTH_REQUIRED"),
+          QStringLiteral("login itself cannot expire an authenticated session"), QJsonObject{});
+    QTRY_COMPARE(failures.size(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code,
+             QStringLiteral("AUTH_REQUIRED"));
+    QCOMPARE(expired.count(), 0);
+}
+
+void UserApiTest::plannedHealthAndChargerListWrappersUseExactTypedContract()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    QSignalSpy healthLoaded(&api, &UserApi::systemHealthLoaded);
+    QSignalSpy chargersLoaded(&api, &UserApi::chargerListLoaded);
+    QSignalSpy failures(&api, &UserApi::requestFailed);
+
+    const QString healthId = api.loadSystemHealth();
+    const auto health = takeRequest(peer.data());
+    QCOMPARE(health.requestId, healthId);
+    QCOMPARE(health.action, QStringLiteral("system.health"));
+    QCOMPARE(health.token, QString());
+    QCOMPARE(health.payload, QJsonObject{});
+    reply(peer.data(), health.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("status"), QStringLiteral("ready")},
+                      {QStringLiteral("schemaVersion"), 1},
+                      {QStringLiteral("snapshotVersion"), 42},
+                      {QStringLiteral("forecastRunId"), QStringLiteral("run-42")},
+                      {QStringLiteral("serverTime"), QString::fromLatin1(kTimestamp)}});
+    QTRY_COMPARE(healthLoaded.count(), 1);
+    const auto healthResult = qvariant_cast<ev::user::SystemHealthResult>(
+        healthLoaded.takeFirst().at(1));
+    QCOMPARE(healthResult.status, QStringLiteral("ready"));
+    QCOMPARE(healthResult.schemaVersion, qint64{1});
+    QCOMPARE(healthResult.snapshotVersion, qint64{42});
+    QVERIFY(healthResult.forecastRunId.has_value());
+    QCOMPARE(*healthResult.forecastRunId, QStringLiteral("run-42"));
+    QCOMPARE(healthResult.serverTime, QString::fromLatin1(kTimestamp));
+
+    QSignalSpy loggedIn(&api, &UserApi::loginSucceeded);
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("surface-token")},
+                      {QStringLiteral("user"), userObject()}});
+    QTRY_COMPARE(loggedIn.count(), 1);
+
+    const QString listId = api.loadChargers(3);
+    const auto list = takeRequest(peer.data());
+    QCOMPARE(list.requestId, listId);
+    QCOMPARE(list.action, QStringLiteral("charger.list"));
+    QCOMPARE(list.token, QStringLiteral("surface-token"));
+    const QJsonObject expectedListPayload{{QStringLiteral("stationId"), 3}};
+    QCOMPARE(list.payload, expectedListPayload);
+    reply(peer.data(), list.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(1001, 3), chargerObject(1002, 3)}}});
+    QTRY_COMPARE(chargersLoaded.count(), 1);
+    QCOMPARE(chargersLoaded.first().at(0).toString(), listId);
+    const auto chargerList = qvariant_cast<ev::user::ChargerListResult>(
+        chargersLoaded.takeFirst().at(1));
+    QCOMPARE(chargerList.stationId, qint64{3});
+    QCOMPARE(chargerList.chargers.size(), 2);
+    QCOMPARE(chargerList.chargers.at(0).chargerId, qint64{1001});
+
+    const QString degradedId = api.loadSystemHealth();
+    const auto degraded = takeRequest(peer.data());
+    QCOMPARE(degraded.requestId, degradedId);
+    reply(peer.data(), degraded.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("status"), QStringLiteral("degraded")},
+                      {QStringLiteral("schemaVersion"), 1},
+                      {QStringLiteral("snapshotVersion"), 0},
+                      {QStringLiteral("forecastRunId"), QJsonValue(QJsonValue::Null)},
+                      {QStringLiteral("serverTime"), QString::fromLatin1(kTimestamp)}});
+    QTRY_COMPARE(healthLoaded.count(), 1);
+    QVERIFY(!qvariant_cast<ev::user::SystemHealthResult>(
+                 healthLoaded.takeFirst().at(1)).forecastRunId.has_value());
+
+    const QString startingId = api.loadSystemHealth();
+    const auto starting = takeRequest(peer.data());
+    reply(peer.data(), starting.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("status"), QStringLiteral("starting")},
+                      {QStringLiteral("schemaVersion"), 1},
+                      {QStringLiteral("snapshotVersion"), 0},
+                      {QStringLiteral("forecastRunId"), QJsonValue(QJsonValue::Null)},
+                      {QStringLiteral("serverTime"), QString::fromLatin1(kTimestamp)}});
+    QTRY_COMPARE(healthLoaded.count(), 1);
+    QCOMPARE(healthLoaded.takeFirst().at(0).toString(), startingId);
+
+    const QJsonObject validHealth{
+        {QStringLiteral("status"), QStringLiteral("ready")},
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("snapshotVersion"), 42},
+        {QStringLiteral("forecastRunId"), QStringLiteral("run-42")},
+        {QStringLiteral("serverTime"), QString::fromLatin1(kTimestamp)},
+    };
+    QVector<QJsonObject> invalidHealth;
+    auto invalid = validHealth;
+    invalid.insert(QStringLiteral("status"), QStringLiteral("unknown"));
+    invalidHealth.append(invalid);
+    invalid = validHealth;
+    invalid.insert(QStringLiteral("schemaVersion"), 2);
+    invalidHealth.append(invalid);
+    invalid = validHealth;
+    invalid.insert(QStringLiteral("snapshotVersion"), -1);
+    invalidHealth.append(invalid);
+    invalid = validHealth;
+    invalid.insert(QStringLiteral("forecastRunId"), QStringLiteral("   "));
+    invalidHealth.append(invalid);
+    invalid = validHealth;
+    invalid.insert(QStringLiteral("serverTime"), QStringLiteral("2026-09-01T08:00:00Z"));
+    invalidHealth.append(invalid);
+    invalid = validHealth;
+    invalid.insert(QStringLiteral("unexpected"), true);
+    invalidHealth.append(invalid);
+    for (const QJsonObject &data : std::as_const(invalidHealth)) {
+        const QString requestId = api.loadSystemHealth();
+        const auto request = takeRequest(peer.data());
+        QCOMPARE(request.requestId, requestId);
+        reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(), data);
+        QTRY_COMPARE(failures.count(), 1);
+        QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code,
+                 QStringLiteral("INVALID_RESPONSE"));
+    }
+
+    const QString badId = api.loadChargers(3);
+    const auto bad = takeRequest(peer.data());
+    QJsonObject foreign = chargerObject(2001, 4);
+    reply(peer.data(), bad.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("chargers"), QJsonArray{foreign}}});
+    QTRY_COMPARE(failures.count(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code,
+             QStringLiteral("INVALID_RESPONSE"));
+
+    QJsonObject duplicateCode = chargerObject(1002, 3);
+    duplicateCode.insert(QStringLiteral("code"), QStringLiteral("T-1001"));
+    for (const QJsonArray &chargers : {
+             QJsonArray{chargerObject(1001, 3), chargerObject(1001, 3)},
+             QJsonArray{chargerObject(1001, 3), duplicateCode}}) {
+        const QString requestId = api.loadChargers(3);
+        const auto request = takeRequest(peer.data());
+        QCOMPARE(request.requestId, requestId);
+        reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("chargers"), chargers}});
+        QTRY_COMPARE(failures.count(), 1);
+        QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code,
+                 QStringLiteral("INVALID_RESPONSE"));
+    }
+
+    QVERIFY(api.loadChargers(0).isEmpty());
+    QTRY_COMPARE(failures.count(), 1);
+    QCOMPARE(qvariant_cast<ev::user::ApiError>(failures.takeFirst().at(0)).code,
+             QStringLiteral("INVALID_STATION"));
+    QTest::qWait(100);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
 }
 
 void UserApiTest::staleLoginResponseCannotReplaceNewerSession()
@@ -1625,11 +1800,11 @@ void UserApiTest::profileRejectsInvalidFailureCodesAndPreservesLegalCodes()
     const QString legalFailureId = api.loadProfile();
     QVERIFY(!legalFailureId.isEmpty());
     const auto legalFailureRequest = takeRequest(peer);
-    reply(peer, legalFailureRequest.requestId, false, QStringLiteral("AUTH_REQUIRED"),
+    reply(peer, legalFailureRequest.requestId, false, QStringLiteral("FORBIDDEN"),
           QString(), QJsonObject{});
     QTRY_COMPARE(failures.size(), 1);
     auto failure = qvariant_cast<ev::user::ApiError>(failures.takeFirst().first());
-    QCOMPARE(failure.code, QStringLiteral("AUTH_REQUIRED"));
+    QCOMPARE(failure.code, QStringLiteral("FORBIDDEN"));
     QCOMPARE(failure.message, QString());
     QCOMPARE(uncertain.size(), 0);
 
@@ -2369,8 +2544,27 @@ void UserApiTest::disconnectIgnoresChargeListReplayBeforeFreshReconciliation()
     QTRY_VERIFY(reserve->isEnabled());
 }
 
-void UserApiTest::foregroundOriginReplacementRemovesOldStationControls()
+void UserApiTest::foregroundSearchRetainsCommittedCacheUntilListCommit_data()
 {
+    QTest::addColumn<bool>("sameOrigin");
+    QTest::addColumn<QString>("failureMode");
+    for (const bool sameOrigin : {false, true}) {
+        for (const QString &failureMode : {
+                 QStringLiteral("business"), QStringLiteral("malformed"),
+                 QStringLiteral("disconnect")}) {
+            QTest::newRow(qPrintable(QStringLiteral("%1-%2")
+                                         .arg(sameOrigin ? QStringLiteral("same")
+                                                         : QStringLiteral("new"),
+                                              failureMode)))
+                << sameOrigin << failureMode;
+        }
+    }
+}
+
+void UserApiTest::foregroundSearchRetainsCommittedCacheUntilListCommit()
+{
+    QFETCH(bool, sameOrigin);
+    QFETCH(QString, failureMode);
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
     TcpJsonClient client;
@@ -2389,23 +2583,103 @@ void UserApiTest::foregroundOriginReplacementRemovesOldStationControls()
     TencentMapClient map(QStringLiteral("test-key"), nullptr,
                          QUrl(QStringLiteral("https://offline.invalid/geocode")), 20);
     NearbyPage page(&api, &map);
+    connect(&api, &UserApi::connectionChanged,
+            &page, &NearbyPage::setConnectionAvailable);
+    page.setConnectionAvailable(true);
     page.show();
     const ev::user::GeoPoint originalOrigin{39.958, 116.317};
-    const auto station = stationValue();
+    auto station = stationValue();
+    station.forecastEnabled = true;
     page.displayStations({originalOrigin, {station}});
     page.displayStationDetail({station, {chargerValue()}});
+    ev::user::ForecastLatestResult forecast;
+    forecast.forecastRun = ev::user::ForecastRun{
+        QStringLiteral("cached-run"), QStringLiteral("2026-09-01T08:00:00+08:00"),
+        QStringLiteral("2026-09-01T07:00:00+08:00"),
+        QStringLiteral("2026-09-01T08:01:00+08:00"), QStringLiteral("v1"),
+        QString(64, QLatin1Char('a')), false};
+    forecast.records.append({station.stationId,
+                             QStringLiteral("2026-09-01T08:00:00+08:00"), 1,
+                             60.0, 2, 2, QStringLiteral("medium"), false});
+    page.displayForecast(forecast);
+    const QString committedSource = page.findChild<QLabel *>(
+        QStringLiteral("forecastSource"))->text();
+    QSignalSpy invalidated(&page, &NearbyPage::selectionInvalidated);
+    invalidated.clear();
     QVERIFY(page.findChild<QPushButton *>(QStringLiteral("stationButton_3")) != nullptr);
     QVERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_7")) != nullptr);
 
+    const ev::user::GeoPoint requestedOrigin = sameOrigin
+        ? originalOrigin : ev::user::GeoPoint{40.0, 116.4};
     page.pendingGeocodeId_ = QStringLiteral("foreground-geocode");
-    emit map.geocodeSucceeded(QStringLiteral("foreground-geocode"), {40.0, 116.4});
+    emit map.geocodeSucceeded(QStringLiteral("foreground-geocode"), requestedOrigin);
     const auto refreshedList = takeRequest(peer.data());
     QCOMPARE(refreshedList.action, QStringLiteral("station.list"));
 
     auto *oldStation = page.findChild<QPushButton *>(QStringLiteral("stationButton_3"));
     auto *oldCharger = page.findChild<QPushButton *>(QStringLiteral("chargerButton_7"));
-    QVERIFY(oldStation == nullptr || !oldStation->isEnabled());
-    QVERIFY(oldCharger == nullptr || !oldCharger->isEnabled());
+    auto *oldForecast = page.findChild<QLabel *>(QStringLiteral("forecastLabel_3"));
+    QVERIFY(oldStation != nullptr);
+    QVERIFY(oldCharger != nullptr);
+    QVERIFY(oldForecast != nullptr);
+    QVERIFY(oldForecast->text().contains(QStringLiteral("1小时预测")));
+    QCOMPARE(page.findChild<QLabel *>(QStringLiteral("forecastSource"))->text(),
+             committedSource);
+    QVERIFY(!oldStation->isEnabled());
+    QVERIFY(!oldCharger->isEnabled());
+    QVERIFY(!page.findChild<QPushButton *>(QStringLiteral("navigateButton"))->isEnabled());
+    QVERIFY(page.findChild<QLabel *>(QStringLiteral("nearbyStatus"))->text()
+                .contains(QStringLiteral("缓存")));
+    QCOMPARE(invalidated.count(), 0);
+
+    if (failureMode == QStringLiteral("business")) {
+        reply(peer.data(), refreshedList.requestId, false, QStringLiteral("DB_BUSY"),
+              QStringLiteral("busy"), QJsonObject{});
+    } else if (failureMode == QStringLiteral("malformed")) {
+        reply(peer.data(), refreshedList.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("stations"), QStringLiteral("bad")}});
+    } else {
+        const quint16 reconnectPort = server.serverPort();
+        server.setProperty("reconnectPort", reconnectPort);
+        server.close();
+        peer->abort();
+    }
+
+    QTRY_VERIFY(page.findChild<QPushButton *>(QStringLiteral("stationButton_3")) != nullptr);
+    QVERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_7")) != nullptr);
+    QCOMPARE(page.findChild<QLabel *>(QStringLiteral("forecastSource"))->text(),
+             committedSource);
+    QVERIFY(page.findChild<QLabel *>(QStringLiteral("forecastLabel_3"))->text()
+                .contains(QStringLiteral("1小时预测")));
+    QCOMPARE(invalidated.count(), 0);
+    if (failureMode == QStringLiteral("disconnect")) {
+        QTRY_VERIFY_WITH_TIMEOUT(
+            page.findChild<QLabel *>(QStringLiteral("nearbyConnectionBanner"))->text()
+                .contains(QStringLiteral("离线缓存")), 1'000);
+        QVERIFY(page.findChild<QPushButton *>(QStringLiteral("stationButton_3"))->isEnabled());
+        QVERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->isEnabled());
+        QVERIFY(server.listen(QHostAddress::LocalHost,
+                              server.property("reconnectPort").value<quint16>()));
+        page.findChild<QPushButton *>(QStringLiteral("nearbyRetryButton"))->click();
+        peer.reset(waitForPeer(server));
+        QVERIFY(peer != nullptr);
+    } else {
+        QTRY_VERIFY(page.findChild<QPushButton *>(QStringLiteral("stationButton_3"))->isEnabled());
+        QVERIFY(page.findChild<QLabel *>(QStringLiteral("nearbyStatus"))->text()
+                    .contains(QStringLiteral("缓存")));
+    }
+
+    page.pendingGeocodeId_ = QStringLiteral("foreground-recovery");
+    emit map.geocodeSucceeded(QStringLiteral("foreground-recovery"), requestedOrigin);
+    const auto recovery = takeRequest(peer.data());
+    QCOMPARE(recovery.action, QStringLiteral("station.list"));
+    reply(peer.data(), recovery.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"),
+                       QJsonArray{stationObject(4, 0.2, true, false)}}});
+    QTRY_VERIFY(page.findChild<QPushButton *>(QStringLiteral("stationButton_4")) != nullptr);
+    QVERIFY(page.findChild<QPushButton *>(QStringLiteral("stationButton_3")) == nullptr);
+    QVERIFY(page.findChild<QPushButton *>(QStringLiteral("chargerButton_7")) == nullptr);
+    QCOMPARE(invalidated.count(), 1);
 }
 
 void UserApiTest::activeOrderExistsChargingStatesWaitForMatchingFacts()
@@ -2926,6 +3200,7 @@ void UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing()
           QJsonObject{{QStringLiteral("stations"),
                        QJsonArray{stationObject(4, 0.2, true, false)}}});
     QTRY_VERIFY(window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"))->isEnabled());
+    QTRY_VERIFY(nearbyPage->findChild<QPushButton *>(QStringLiteral("stationButton_4")) != nullptr);
     QVERIFY(nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7")) == nullptr);
     QCOMPARE(unavailable.size(), 1);
     QCOMPARE(committed.size(), 0);
@@ -3562,6 +3837,8 @@ void UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection()
         reply(peer.data(), replacementList.requestId, true, QStringLiteral("OK"), QString(),
               QJsonObject{{QStringLiteral("stations"),
                            QJsonArray{stationObject(4, 0.2, true, false)}}});
+        QTRY_VERIFY(nearbyPage->findChild<QPushButton *>(QStringLiteral("stationButton_4"))
+                    != nullptr);
         QTRY_VERIFY(!reserve->isEnabled());
         reserve->click();
         QTest::qWait(20);
@@ -3582,10 +3859,14 @@ void UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection()
         reply(peer.data(), replacementList.requestId, true, QStringLiteral("OK"), QString(),
               QJsonObject{{QStringLiteral("stations"),
                            QJsonArray{stationObject(4, 0.2, true, false)}}});
+        QTRY_VERIFY(nearbyPage->findChild<QPushButton *>(QStringLiteral("stationButton_4"))
+                    != nullptr);
+        QVERIFY(nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7")) == nullptr);
         auto *cancel = window.findChild<QPushButton *>(QStringLiteral("chargeCancelButton"));
         QTRY_VERIFY(cancel->isEnabled());
         cancel->click();
         const auto cancelMutation = takeRequest(peer.data());
+        QCOMPARE(cancelMutation.action, QStringLiteral("order.cancel"));
         reply(peer.data(), cancelMutation.requestId, true, QStringLiteral("OK"), QString(),
               QJsonObject{{QStringLiteral("order"),
                            canonicalOrderObject(QStringLiteral("cancelled"))}});

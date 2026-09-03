@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QPushButton>
+#include <QPointer>
 #include <QSignalBlocker>
 #include <QTimer>
 #include <QUuid>
@@ -82,6 +83,12 @@ std::optional<LastRoute> RouteOperationTracker::retryRoute() const
     return retryRoute_;
 }
 
+void RouteOperationTracker::invalidatePending()
+{
+    currentOperationId_.clear();
+    pendingRoute_.reset();
+}
+
 NavigationPage::NavigationPage(QString mapKey, QWidget *parent)
     : NavigationPage(std::move(mapKey), {}, parent)
 {
@@ -97,6 +104,7 @@ NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScr
     , cacheLabel_(new QLabel(QStringLiteral("暂无成功路线"), this))
     , retryButton_(new QPushButton(QStringLiteral("重试"), this))
     , modeBox_(new QComboBox(this))
+    , callbackGate_(std::make_shared<CallbackGate>())
 {
     setObjectName(QStringLiteral("navigationPage"));
     statusLabel_->setObjectName(QStringLiteral("navigationStatus"));
@@ -123,7 +131,10 @@ NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScr
     layout->addWidget(view_, 1);
 
     view_->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
-    connect(backButton, &QPushButton::clicked, this, &NavigationPage::backRequested);
+    connect(backButton, &QPushButton::clicked, this, [this] {
+        deactivate();
+        emit backRequested();
+    });
     connect(view_, &QWebEngineView::loadFinished, this, [this](bool success) {
         pageLoaded_ = success;
         configurationStarted_ = false;
@@ -136,15 +147,21 @@ NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScr
             configureForCurrentLoad();
             return;
         }
-        view_->page()->runJavaScript(documentReadyBootstrapScript_, [this](const QVariant &) {
-            configureForCurrentLoad();
+        const QPointer<NavigationPage> guardedPage(this);
+        const auto gate = callbackGate_;
+        view_->page()->runJavaScript(documentReadyBootstrapScript_,
+                                     [guardedPage, gate](const QVariant &) {
+            if (!gate->active || guardedPage.isNull()) {
+                return;
+            }
+            guardedPage->configureForCurrentLoad();
         });
     });
     connect(retryButton_, &QPushButton::clicked, this, [this] {
         if (!configured_) {
             const auto retry = routeTracker_.retryRoute();
             if (retry.has_value()) {
-                routeOperationId_ = QUuid::createUuid().toString(QUuid::WithoutBraces);
+                routeOperationId_ = QStringLiteral("route-%1").arg(++nextOperationId_);
                 routeTracker_.begin(routeOperationId_, *retry);
             }
             view_->reload();
@@ -167,6 +184,16 @@ NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScr
         }
     });
     view_->setUrl(pageUrl());
+}
+
+NavigationPage::~NavigationPage()
+{
+    callbackGate_->active = false;
+    routeTracker_.invalidatePending();
+    routeOperationId_.clear();
+    configureOperationId_.clear();
+    configured_ = false;
+    pageLoaded_ = false;
 }
 
 QUrl NavigationPage::pageUrl()
@@ -219,9 +246,10 @@ QString NavigationPage::buildRenderRouteScript(
     };
     return QStringLiteral(
         "(()=>{const operation=%1;window.__qtOperations=window.__qtOperations||{};"
-        "Promise.resolve().then(()=>window.renderRoute(operation.route))"
+        "try{Promise.resolve(window.renderRoute(operation.route,operation.operationId))"
         ".then(()=>{window.__qtOperations[operation.operationId]={state:'success'};})"
-        ".catch(()=>{window.__qtOperations[operation.operationId]={state:'error'};});"
+        ".catch(()=>{window.__qtOperations[operation.operationId]={state:'error'};});}"
+        "catch(_){window.__qtOperations[operation.operationId]={state:'error'};}"
         "return operation.operationId;})()")
         .arg(compactJson(operation));
 }
@@ -234,6 +262,14 @@ QString NavigationPage::buildOperationStatusScript(const QString &operationId)
         .arg(compactJson(operationId));
 }
 
+QString NavigationPage::buildInvalidateRouteScript(const QString &operationId)
+{
+    return QStringLiteral(
+        "(()=>{const operationId=%1;return typeof window.invalidateRouteAttempt==='function'"
+        "?window.invalidateRouteAttempt(operationId):false;})()")
+        .arg(compactJson(operationId));
+}
+
 std::optional<LastRoute> NavigationPage::lastSuccessfulRoute() const
 {
     return routeTracker_.lastSuccessfulRoute();
@@ -241,9 +277,12 @@ std::optional<LastRoute> NavigationPage::lastSuccessfulRoute() const
 
 void NavigationPage::showRoute(ev::user::GeoPoint origin, ev::user::Station station, QString mode)
 {
+    invalidateRouteAttempt();
+    routeTracker_.invalidatePending();
+    routeOperationId_.clear();
     const ev::user::GeoPoint destination{station.latitude, station.longitude};
     QString error;
-    const QString operationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString operationId = QStringLiteral("route-%1").arg(++nextOperationId_);
     const QString script = buildRenderRouteScript(
         origin, destination, mode, station.name, operationId, &error);
     if (script.isEmpty()) {
@@ -267,13 +306,22 @@ void NavigationPage::showRoute(ev::user::GeoPoint origin, ev::user::Station stat
     pollOperation(operationId, OperationKind::Route);
 }
 
+void NavigationPage::deactivate()
+{
+    invalidateRouteAttempt();
+    routeTracker_.invalidatePending();
+    routeOperationId_.clear();
+    retryButton_->hide();
+    statusLabel_->setText(QStringLiteral("导航已暂停"));
+}
+
 void NavigationPage::configureForCurrentLoad()
 {
     if (!pageLoaded_ || configurationStarted_) {
         return;
     }
     configurationStarted_ = true;
-    configureOperationId_ = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    configureOperationId_ = QStringLiteral("configure-%1").arg(++nextOperationId_);
     view_->page()->runJavaScript(buildConfigureMapScript(mapKey_, configureOperationId_));
     statusLabel_->setText(QStringLiteral("正在配置腾讯地图…"));
     pollOperation(configureOperationId_, OperationKind::Configure);
@@ -305,15 +353,20 @@ void NavigationPage::pollOperation(const QString &operationId, OperationKind kin
         return;
     }
     QTimer::singleShot(50, this, [this, operationId, kind, attemptsRemaining] {
+        const QPointer<NavigationPage> guardedPage(this);
+        const auto gate = callbackGate_;
         view_->page()->runJavaScript(buildOperationStatusScript(operationId),
-            [this, operationId, kind, attemptsRemaining](const QVariant &result) {
+            [guardedPage, gate, operationId, kind, attemptsRemaining](const QVariant &result) {
+                if (!gate->active || guardedPage.isNull()) {
+                    return;
+                }
                 const QVariantMap record = result.toMap();
                 const QString state = record.value(QStringLiteral("state")).toString();
                 if (state == QStringLiteral("success") || state == QStringLiteral("error")) {
-                    finishOperation(operationId, kind, state);
+                    guardedPage->finishOperation(operationId, kind, state);
                     return;
                 }
-                pollOperation(operationId, kind, attemptsRemaining - 1);
+                guardedPage->pollOperation(operationId, kind, attemptsRemaining - 1);
             });
     });
 }
@@ -342,8 +395,19 @@ void NavigationPage::finishOperation(const QString &operationId, OperationKind k
         retryButton_->hide();
         updateLastSuccessLabel();
     } else {
+        if (view_ != nullptr && view_->page() != nullptr) {
+            view_->page()->runJavaScript(buildInvalidateRouteScript(operationId));
+        }
         showFailure(QStringLiteral("路线规划失败，请检查网络后重试"));
     }
+}
+
+void NavigationPage::invalidateRouteAttempt()
+{
+    if (routeOperationId_.isEmpty() || view_ == nullptr || view_->page() == nullptr) {
+        return;
+    }
+    view_->page()->runJavaScript(buildInvalidateRouteScript(routeOperationId_));
 }
 
 void NavigationPage::showFailure(const QString &reason)

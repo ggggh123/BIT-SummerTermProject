@@ -401,6 +401,9 @@ private slots:
     void pendingGlobalCurrentReplaysOnceAcrossSecondReconnect();
     void mutationDisconnectNeverReplaysWritesAndRefreshesCurrentFirst();
     void historyNavigationObeysTask6MutationGate();
+    void authenticatedAuthRequiredExpiresSession_data();
+    void authenticatedAuthRequiredExpiresSession();
+    void sessionExpiryCancelsConcurrentSafeReadsAndMutationExactlyOnce();
 };
 
 void RecommendationTest::contractTimestampComparatorCoversLongFractionsAndZeroEquivalence()
@@ -1743,6 +1746,166 @@ void RecommendationTest::historyNavigationObeysTask6MutationGate()
     request = takeRequest(peer.data());
     QCOMPARE(request.action, QStringLiteral("charge.reserve"));
     QTRY_VERIFY(!historyButton->isEnabled());
+}
+
+void RecommendationTest::authenticatedAuthRequiredExpiresSession_data()
+{
+    QTest::addColumn<QString>("source");
+    QTest::newRow("history read") << QStringLiteral("history");
+    QTest::newRow("global current read") << QStringLiteral("global-current");
+    QTest::newRow("profile read") << QStringLiteral("profile");
+    QTest::newRow("charge mutation") << QStringLiteral("charge-mutation");
+}
+
+void RecommendationTest::authenticatedAuthRequiredExpiresSession()
+{
+    QFETCH(QString, source);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    UserAppConfig config;
+    config.serverHost = QStringLiteral("127.0.0.1");
+    config.serverPort = server.serverPort();
+    config.tencentMapKey = QStringLiteral("session-expiry-test-key");
+    MainWindow window(config);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server, 5'000));
+    QVERIFY(peer != nullptr);
+    completeMainLoginWithoutOrder(window, peer.data());
+
+    auto *api = window.findChild<UserApi *>();
+    QVERIFY(api != nullptr);
+    QSignalSpy expired(api, SIGNAL(sessionExpired(quint64)));
+    auto *pages = required<QStackedWidget>(&window, "mainPages");
+    ev::protocol::RequestEnvelope expiringRequest;
+    if (source == QStringLiteral("history")) {
+        required<QPushButton>(&window, "historyNavigationButton")->click();
+        expiringRequest = takeRequest(peer.data());
+        QCOMPARE(expiringRequest.action, QStringLiteral("order.list"));
+    } else if (source == QStringLiteral("profile")) {
+        required<QPushButton>(&window, "profileNavigationButton")->click();
+        expiringRequest = takeRequest(peer.data());
+        QCOMPARE(expiringRequest.action, QStringLiteral("user.get"));
+    } else if (source == QStringLiteral("global-current")) {
+        peer->disconnectFromHost();
+        QTRY_COMPARE(peer->state(), QAbstractSocket::UnconnectedState);
+        peer.reset(waitForPeer(server, 5'000));
+        QVERIFY(peer != nullptr);
+        expiringRequest = takeRequest(peer.data());
+        QCOMPARE(expiringRequest.action, QStringLiteral("order.current"));
+    } else {
+        auto *nearby = required<NearbyPage>(&window, "nearbyPage");
+        const auto stations = decodedStations();
+        nearby->displayStations(stations);
+        nearby->displayStationDetail(selectableDetail(stations.stations.constFirst()));
+        required<QPushButton>(nearby, "chargerButton_1001")->click();
+        auto *reserve = required<QPushButton>(&window, "chargeReserveButton");
+        QTRY_VERIFY(reserve->isEnabled());
+        reserve->click();
+        expiringRequest = takeRequest(peer.data());
+        QCOMPARE(expiringRequest.action, QStringLiteral("charge.reserve"));
+    }
+
+    reply(peer.data(), expiringRequest.requestId, false,
+          QStringLiteral("AUTH_REQUIRED"), QStringLiteral("expired token"), QJsonObject{});
+    QTRY_COMPARE_WITH_TIMEOUT(pages->currentWidget()->objectName(),
+                              QStringLiteral("loginPage"), 1'000);
+    QVERIFY(expired.isValid());
+    QCOMPARE(expired.size(), 1);
+    QVERIFY(!api->sessionUser().has_value());
+    QVERIFY(required<QWidget>(&window, "authenticatedNavigation")->isHidden());
+    QVERIFY(pages->isEnabled());
+    QCOMPARE(required<QLabel>(&window, "loginError")->text(),
+             QStringLiteral("登录已失效，请重新登录"));
+    QVERIFY(required<QPushButton>(&window, "currentOrderNavigationButton")->isHidden());
+    QTRY_VERIFY(window.findChild<QPushButton *>(QStringLiteral("stationButton_1")) == nullptr);
+
+    required<QLineEdit>(&window, "phoneEdit")->setText(QString::fromLatin1(kMobile));
+    required<QPushButton>(&window, "loginButton")->click();
+    const auto freshLogin = takeRequest(peer.data());
+    QCOMPARE(freshLogin.action, QStringLiteral("auth.user_login"));
+    QVERIFY(freshLogin.token.isEmpty());
+    reply(peer.data(), freshLogin.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("fresh-session-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto freshGuard = takeRequest(peer.data());
+    QCOMPARE(freshGuard.action, QStringLiteral("order.current"));
+    QCOMPARE(freshGuard.token, QStringLiteral("fresh-session-token"));
+    reply(peer.data(), freshGuard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+    QTRY_VERIFY(!required<QWidget>(&window, "authenticatedNavigation")->isHidden());
+    QCOMPARE(expired.size(), 1);
+}
+
+void RecommendationTest::sessionExpiryCancelsConcurrentSafeReadsAndMutationExactlyOnce()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    UserAppConfig config;
+    config.serverHost = QStringLiteral("127.0.0.1");
+    config.serverPort = server.serverPort();
+    config.tencentMapKey = QStringLiteral("session-expiry-concurrency-key");
+    MainWindow window(config);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server, 5'000));
+    QVERIFY(peer != nullptr);
+    completeMainLoginWithoutOrder(window, peer.data());
+    auto *api = window.findChild<UserApi *>();
+    QVERIFY(api != nullptr);
+    QSignalSpy expired(api, SIGNAL(sessionExpired(quint64)));
+    QSignalSpy historyLoaded(api, &UserApi::orderHistoryLoaded);
+    QSignalSpy historyFailed(api, &UserApi::orderHistoryRequestFailed);
+    QSignalSpy stationsLoaded(api, &UserApi::nearbyStationsLoaded);
+    QSignalSpy chargeFailed(api, &UserApi::chargeRequestFailed);
+    QSignalSpy generalFailed(api, &UserApi::requestFailed);
+
+    const auto historyContext = api->loadOrderHistory(20, 0, 71, 81);
+    const QString stationRequestId = api->loadNearbyStations({39.962, 116.318});
+    const auto mutationContext = api->reserveCharger(1001, 72, 82);
+    QVERIFY(!historyContext.requestId.isEmpty());
+    QVERIFY(!stationRequestId.isEmpty());
+    QVERIFY(!mutationContext.requestId.isEmpty());
+    QHash<QString, ev::protocol::RequestEnvelope> requests;
+    for (int index = 0; index < 3; ++index) {
+        const auto request = takeRequest(peer.data());
+        requests.insert(request.action, request);
+    }
+    QCOMPARE(requests.size(), 3);
+    QCOMPARE(requests.value(QStringLiteral("order.list")).requestId,
+             historyContext.requestId);
+    QCOMPARE(requests.value(QStringLiteral("station.list")).requestId,
+             stationRequestId);
+    QCOMPARE(requests.value(QStringLiteral("charge.reserve")).requestId,
+             mutationContext.requestId);
+
+    reply(peer.data(), mutationContext.requestId, false,
+          QStringLiteral("AUTH_REQUIRED"), QStringLiteral("expired mutation token"),
+          QJsonObject{});
+    auto *pages = required<QStackedWidget>(&window, "mainPages");
+    QTRY_COMPARE_WITH_TIMEOUT(pages->currentWidget()->objectName(),
+                              QStringLiteral("loginPage"), 1'000);
+    QVERIFY(expired.isValid());
+    QCOMPARE(expired.size(), 1);
+    QCOMPARE(chargeFailed.size(), 0);
+    QCOMPARE(generalFailed.size(), 0);
+
+    reply(peer.data(), historyContext.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{}},
+                      {QStringLiteral("total"), 0}});
+    reply(peer.data(), stationRequestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), encodedStations()}});
+    reply(peer.data(), historyContext.requestId, false,
+          QStringLiteral("AUTH_REQUIRED"), QStringLiteral("duplicate old expiry"),
+          QJsonObject{});
+    QTest::qWait(100);
+    QCOMPARE(expired.size(), 1);
+    QCOMPARE(historyLoaded.size(), 0);
+    QCOMPARE(historyFailed.size(), 0);
+    QCOMPARE(stationsLoaded.size(), 0);
+    QCOMPARE(chargeFailed.size(), 0);
+    QCOMPARE(generalFailed.size(), 0);
+    QCOMPARE(takeRequest(peer.data(), 150).action, QString());
+    QVERIFY(!api->sessionUser().has_value());
 }
 
 QTEST_MAIN(RecommendationTest)

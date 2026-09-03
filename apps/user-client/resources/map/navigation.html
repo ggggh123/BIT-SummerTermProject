@@ -31,7 +31,9 @@
     let lastAttemptedRequest = null;
     let lastSuccessfulRequest = null;
     let lastSuccessfulLabel = '';
-    let currentRouteLayer = null;
+    let currentRouteBundle = null;
+    let activeRouteAttemptId = '';
+    let routeAttemptSequence = 0;
 
     window.lastRouteStatus = { state: 'idle' };
 
@@ -166,13 +168,57 @@
       return paths.every(Boolean) ? paths : null;
     }
 
-    window.renderRoute = async (request = {}) => {
-      if (!validCoordinate(request.from) || !validCoordinate(request.to)) return fail('起点和终点坐标无效，请重新选择。');
-      if (request.mode !== 'driving' && request.mode !== 'walking') return fail('仅支持驾车或步行导航。');
-      if (!map || !window.TMap || !window.TMap.service) return fail('地图尚未加载，请先配置地图后重试。');
+    function nextAttemptId(operationId) {
+      if (typeof operationId === 'string' && operationId) return operationId;
+      routeAttemptSequence += 1;
+      return `web-route-${routeAttemptSequence}`;
+    }
+
+    function attemptIsActive(operationId) {
+      return operationId === activeRouteAttemptId;
+    }
+
+    function detachLayer(layer) {
+      try {
+        if (layer?.setMap) layer.setMap(null);
+      } catch (_) {}
+    }
+
+    function supersededRoute() {
+      return new Error('路线请求已失效（superseded）');
+    }
+
+    function failRoute(operationId, message) {
+      if (!attemptIsActive(operationId)) return Promise.reject(supersededRoute());
+      showFailure(message);
+      return Promise.reject(new Error(message));
+    }
+
+    window.invalidateRouteAttempt = (operationId) => {
+      if (typeof operationId === 'string' && operationId === activeRouteAttemptId) {
+        activeRouteAttemptId = '';
+        return true;
+      }
+      return false;
+    };
+
+    window.renderRoute = async (request = {}, suppliedOperationId = '') => {
+      const operationId = nextAttemptId(suppliedOperationId);
+      activeRouteAttemptId = operationId;
+      if (!validCoordinate(request.from) || !validCoordinate(request.to)) {
+        return failRoute(operationId, '起点和终点坐标无效，请重新选择。');
+      }
+      if (request.mode !== 'driving' && request.mode !== 'walking') {
+        return failRoute(operationId, '仅支持驾车或步行导航。');
+      }
+      if (!map || !window.TMap || !window.TMap.service) {
+        return failRoute(operationId, '地图尚未加载，请先配置地图后重试。');
+      }
 
       const cleanRequest = copyRequest(request);
       lastAttemptedRequest = cleanRequest;
+      let nextRouteLayer = null;
+      let nextEndpointMarkers = null;
       try {
         const from = new window.TMap.LatLng(cleanRequest.from.lat, cleanRequest.from.lng);
         const to = new window.TMap.LatLng(cleanRequest.to.lat, cleanRequest.to.lng);
@@ -180,22 +226,51 @@
           ? new window.TMap.service.Driving({ map })
           : new window.TMap.service.Walking();
         const plan = await service.search({ from, to });
+        if (!attemptIsActive(operationId)) throw supersededRoute();
         const route = plan?.result?.routes?.[0] ?? plan?.routes?.[0];
         const paths = routePaths(route?.polyline);
         if (!paths) throw new Error('empty route');
-        const nextRouteLayer = new window.TMap.MultiPolyline({
-          map,
+        nextRouteLayer = new window.TMap.MultiPolyline({
+          map: null,
           styles: { route: new window.TMap.PolylineStyle({ color: '#2f80ed', width: 6, borderWidth: 1 }) },
           geometries: [{ id: 'route', styleId: 'route', paths }],
         });
-        if (currentRouteLayer?.setMap) currentRouteLayer.setMap(null);
-        currentRouteLayer = nextRouteLayer;
+        const markerStyle = (color) => new window.TMap.MarkerStyle({
+          width: 24,
+          height: 24,
+          anchor: { x: 12, y: 12 },
+          src: `data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='24'%20viewBox='0%200%2024%2024'%3E%3Ccircle%20cx='12'%20cy='12'%20r='10'%20fill='%23${color}'%20stroke='%23fff'%20stroke-width='3'/%3E%3C/svg%3E`,
+        });
+        nextEndpointMarkers = new window.TMap.MultiMarker({
+          map: null,
+          styles: {
+            start: markerStyle('27ae60'),
+            end: markerStyle('eb5757'),
+          },
+          geometries: [
+            { id: 'start', styleId: 'start', position: from },
+            { id: 'end', styleId: 'end', position: to },
+          ],
+        });
+        if (!attemptIsActive(operationId)) throw supersededRoute();
+        nextRouteLayer.setMap(map);
+        nextEndpointMarkers.setMap(map);
+        if (!attemptIsActive(operationId)) throw supersededRoute();
+        const previousBundle = currentRouteBundle;
+        currentRouteBundle = { route: nextRouteLayer, markers: nextEndpointMarkers };
+        if (previousBundle) {
+          detachLayer(previousBundle.route);
+          detachLayer(previousBundle.markers);
+        }
         lastSuccessfulRequest = cleanRequest;
         lastSuccessfulLabel = `${cleanRequest.stationName}（${cleanRequest.mode === 'driving' ? '驾车' : '步行'}）`;
         showSuccess(`路线规划成功：${lastSuccessfulLabel}`);
         return window.lastRouteStatus;
       } catch (_) {
-        return fail('路线规划失败，请检查网络后重试。');
+        detachLayer(nextRouteLayer);
+        detachLayer(nextEndpointMarkers);
+        if (!attemptIsActive(operationId)) throw supersededRoute();
+        return failRoute(operationId, '路线规划失败，请检查网络后重试。');
       }
     };
 

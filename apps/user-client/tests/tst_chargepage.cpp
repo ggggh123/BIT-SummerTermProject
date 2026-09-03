@@ -250,6 +250,7 @@ private slots:
     void terminalMutationRejectsOlderOutstandingPoll();
     void ordinaryReconnectReconcilesCurrentAndFactsBeforeActions();
     void ordinaryReconnectRejectsOutstandingPollReplayAfterFreshCurrent();
+    void offlineRetryReconnectsImmediatelyCurrentFirstWithoutMutationReplay();
     void factsFailureRetryReconcilesCurrentBeforeRestoringReservedActions();
     void nullReconciliationRetainsIdleSelectionUntilFactsRestoreReserve();
 };
@@ -272,6 +273,11 @@ void ChargePageTest::exactStateTableUsesOnlyAuthoritativeFields()
     QVERIFY(!button(page, "chargeStartButton")->isEnabled());
 
     page.enterOrder(decodedOrder(QStringLiteral("reserved")), selection(12, QStringLiteral("reserved")));
+    auto *identity = label(page, "chargeOrderIdentity");
+    QVERIFY(identity->isVisibleTo(&page));
+    QVERIFY(identity->text().contains(QStringLiteral("订单 ID：99")));
+    QVERIFY(identity->text().contains(QStringLiteral("星火充电站")));
+    QVERIFY(identity->text().contains(QStringLiteral("A-07")));
     QVERIFY(button(page, "chargeStartButton")->isEnabled());
     QVERIFY(button(page, "chargeCancelButton")->isEnabled());
 
@@ -793,6 +799,12 @@ void ChargePageTest::ordinaryReconnectReconcilesCurrentAndFactsBeforeActions()
     QVERIFY(!button(page, "chargeStartButton")->isEnabled());
     reply(secondPeer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
+    QTRY_VERIFY(label(page, "chargeOrderIdentity")->text()
+                    .contains(QStringLiteral("订单 ID：99")));
+    QVERIFY(label(page, "chargeOrderIdentity")->text()
+                .contains(QStringLiteral("星火充电站")));
+    QVERIFY(label(page, "chargeOrderIdentity")->text()
+                .contains(QStringLiteral("A-07")));
     const auto facts = takeRequest(secondPeer.data());
     QCOMPARE(facts.action, QStringLiteral("station.detail"));
     QVERIFY(!button(page, "chargeStartButton")->isEnabled());
@@ -803,6 +815,46 @@ void ChargePageTest::ordinaryReconnectReconcilesCurrentAndFactsBeforeActions()
                        QJsonArray{chargerObject(QStringLiteral("reserved"))}}});
     QTRY_VERIFY(button(page, "chargeStartButton")->isEnabled());
     QTRY_VERIFY(button(page, "chargeCancelButton")->isEnabled());
+}
+
+void ChargePageTest::offlineRetryReconnectsImmediatelyCurrentFirstWithoutMutationReplay()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> firstPeer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, firstPeer.data());
+    ChargePage page(&api);
+    page.setConnectionAvailable(true);
+    page.enterSelection(selection(88));
+    button(page, "chargeReserveButton")->click();
+    const auto mutation = takeRequest(firstPeer.data());
+    QCOMPARE(mutation.action, QStringLiteral("charge.reserve"));
+
+    firstPeer->abort();
+    QTRY_VERIFY(button(page, "chargeRetryButton")->isVisibleTo(&page));
+    QVERIFY(button(page, "chargeRetryButton")->isEnabled());
+    QElapsedTimer manualReconnect;
+    manualReconnect.start();
+    button(page, "chargeRetryButton")->click();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 750);
+    QVERIFY2(manualReconnect.elapsed() < 1'000,
+             "manual Retry must not wait for the one-second automatic reconnect timer");
+    QScopedPointer<QTcpSocket> secondPeer(server.nextPendingConnection());
+    QVERIFY(secondPeer != nullptr);
+    const auto current = takeRequest(secondPeer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+    QVERIFY(current.requestId != mutation.requestId);
+    QTest::qWait(100);
+    QCOMPARE(secondPeer->bytesAvailable(), qint64{0});
+    reply(secondPeer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    const auto facts = takeRequest(secondPeer.data());
+    QCOMPARE(facts.action, QStringLiteral("station.detail"));
+    QVERIFY(facts.action != QStringLiteral("charge.reserve"));
 }
 
 void ChargePageTest::ordinaryReconnectRejectsOutstandingPollReplayAfterFreshCurrent()

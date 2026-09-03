@@ -44,6 +44,19 @@ struct Charger final {
     QString updatedAt;
 };
 
+struct SystemHealthResult final {
+    QString status; // starting | degraded | ready
+    qint64 schemaVersion = 0;
+    qint64 snapshotVersion = 0;
+    std::optional<QString> forecastRunId;
+    QString serverTime;
+};
+
+struct ChargerListResult final {
+    qint64 stationId = 0;
+    QVector<Charger> chargers;
+};
+
 struct GeoPoint final {
     double latitude = 0.0;
     double longitude = 0.0;
@@ -199,6 +212,8 @@ Q_DECLARE_METATYPE(ev::user::ApiError)
 Q_DECLARE_METATYPE(ev::user::GeoPoint)
 Q_DECLARE_METATYPE(ev::user::Station)
 Q_DECLARE_METATYPE(ev::user::Charger)
+Q_DECLARE_METATYPE(ev::user::SystemHealthResult)
+Q_DECLARE_METATYPE(ev::user::ChargerListResult)
 Q_DECLARE_METATYPE(ev::user::StationListResult)
 Q_DECLARE_METATYPE(ev::user::StationDetailResult)
 Q_DECLARE_METATYPE(ev::user::ForecastRun)

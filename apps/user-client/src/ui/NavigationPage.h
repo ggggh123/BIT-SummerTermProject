@@ -7,6 +7,7 @@
 #include <QWidget>
 
 #include <optional>
+#include <memory>
 
 struct LastRoute final {
     ev::user::GeoPoint origin;
@@ -24,6 +25,7 @@ public:
                                 const QDateTime &generatedAt);
     [[nodiscard]] std::optional<LastRoute> lastSuccessfulRoute() const;
     [[nodiscard]] std::optional<LastRoute> retryRoute() const;
+    void invalidatePending();
 
 private:
     QString currentOperationId_;
@@ -38,6 +40,7 @@ class NavigationPage final : public QWidget
 
 public:
     explicit NavigationPage(QString mapKey, QWidget *parent = nullptr);
+    ~NavigationPage() override;
 
     [[nodiscard]] static QUrl pageUrl();
     [[nodiscard]] static QString buildConfigureMapScript(const QString &key,
@@ -46,11 +49,13 @@ public:
         const ev::user::GeoPoint &from, const ev::user::GeoPoint &to, const QString &mode,
         const QString &stationName, const QString &operationId = {}, QString *error = nullptr);
     [[nodiscard]] static QString buildOperationStatusScript(const QString &operationId);
+    [[nodiscard]] static QString buildInvalidateRouteScript(const QString &operationId);
     [[nodiscard]] std::optional<LastRoute> lastSuccessfulRoute() const;
 
 public slots:
     void showRoute(ev::user::GeoPoint origin, ev::user::Station station,
                    QString mode = QStringLiteral("driving"));
+    void deactivate();
 
 signals:
     void backRequested();
@@ -67,6 +72,11 @@ private:
     void finishOperation(const QString &operationId, OperationKind kind, const QString &state);
     void showFailure(const QString &reason);
     void updateLastSuccessLabel();
+    void invalidateRouteAttempt();
+
+    struct CallbackGate final {
+        bool active = true;
+    };
 
     QString mapKey_;
     QString documentReadyBootstrapScript_;
@@ -81,6 +91,8 @@ private:
     QString configureOperationId_;
     QString routeOperationId_;
     RouteOperationTracker routeTracker_;
+    quint64 nextOperationId_ = 0;
+    std::shared_ptr<CallbackGate> callbackGate_;
 };
 
 Q_DECLARE_METATYPE(LastRoute)

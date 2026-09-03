@@ -21,6 +21,7 @@ public slots:
     void refresh();
     void refreshAfterReconnect();
     void setConnectionAvailable(bool available);
+    void resetForSessionExpiry(quint64 sessionGeneration);
 
 private:
     static constexpr qint64 kPageSize = 20;

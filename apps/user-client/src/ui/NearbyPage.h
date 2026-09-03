@@ -35,6 +35,7 @@ public slots:
     void displayStations(ev::user::StationListResult result);
     void displayForecast(ev::user::ForecastLatestResult result);
     void displayStationDetail(ev::user::StationDetailResult result);
+    void resetForSessionExpiry();
 
 signals:
     void chargerSelected(ev::user::StationSelection selection);
@@ -60,7 +61,7 @@ private:
         const ev::user::GeoPoint &origin,
         std::optional<quint64> requiredSelectionGeneration = std::nullopt,
         std::optional<qint64> expectedStationId = std::nullopt,
-        quint64 refreshAttemptId = 0);
+        quint64 refreshAttemptId = 0, bool foregroundSearch = false);
     void requestStationDetail(const ev::user::Station &station);
     void requestReconnectStations();
     void cancelPendingStationList();
@@ -127,6 +128,7 @@ private:
     quint64 pendingDetailSearchGeneration_ = 0;
     quint64 pendingDetailSelectionGeneration_ = 0;
     std::optional<ev::user::GeoPoint> origin_;
+    std::optional<ev::user::GeoPoint> pendingForegroundOrigin_;
     std::optional<ev::user::GeoPoint> pendingDetailOrigin_;
     std::optional<ev::user::GeoPoint> displayedDetailOrigin_;
     QVector<ev::user::Station> stations_;

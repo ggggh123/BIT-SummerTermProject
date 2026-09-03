@@ -93,11 +93,39 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     connect(userApi_, &UserApi::loginPendingChanged, loginPage_, &LoginPage::setPending);
     connect(userApi_, &UserApi::connectionChanged, loginPage_, &LoginPage::setConnectionAvailable);
     connect(userApi_, &UserApi::connectionChanged, nearbyPage_, &NearbyPage::setConnectionAvailable);
-    connect(userApi_, &UserApi::connectionChanged, chargePage_, &ChargePage::setConnectionAvailable);
     connect(userApi_, &UserApi::requestFailed, this, [this](const ev::user::ApiError &error) {
         if (pages_->currentWidget() == loginPage_) {
             loginPage_->setError(error.message);
         }
+    });
+    connect(userApi_, &UserApi::sessionExpired, this, [this](quint64 sessionGeneration) {
+        guardContext_.reset();
+        reconnectCurrentContext_.reset();
+        reconnectCurrentOwnerOrderId_ = 0;
+        reconnectCurrentRequired_ = false;
+        reconnectReadsQueued_ = false;
+        deferredSelectionInvalidation_.reset();
+        mutationAuthorityStamps_.clear();
+        rememberedSelection_.reset();
+        authoritativeActiveOrder_.reset();
+        hasActiveOrder_ = false;
+        chargeFlowBlocked_ = false;
+        ++authorityRevision_;
+        nearbyPage_->resetForSessionExpiry();
+        historyPage_->resetForSessionExpiry(sessionGeneration);
+        profilePage_->resetForSessionExpiry();
+        chargePage_->resetForSessionExpiry(sessionGeneration);
+        if (navigationPage_ != nullptr) {
+            navigationPage_->deactivate();
+        }
+        currentAuthorityStatus_->hide();
+        currentAuthorityRetryButton_->hide();
+        currentOrderNavigationButton_->hide();
+        authenticatedNavigation_->setVisible(false);
+        pages_->setEnabled(true);
+        pages_->setCurrentWidget(loginPage_);
+        loginPage_->setPending(false);
+        loginPage_->setError(QStringLiteral("登录已失效，请重新登录"));
     });
     connect(userApi_, &UserApi::loginSucceeded, this, [this](const ev::user::User &) {
         rememberedSelection_.reset();

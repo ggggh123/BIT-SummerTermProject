@@ -20,6 +20,7 @@ public:
 
 public slots:
     void setConnectionAvailable(bool available);
+    void resetForSessionExpiry();
 
 private:
     void displayUser(const ev::user::User &user);

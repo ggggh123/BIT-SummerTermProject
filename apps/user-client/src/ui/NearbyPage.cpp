@@ -20,6 +20,8 @@ void clearLayout(QLayout *layout)
 {
     while (QLayoutItem *item = layout->takeAt(0)) {
         if (QWidget *widget = item->widget()) {
+            widget->hide();
+            widget->setParent(nullptr);
             widget->deleteLater();
         }
         delete item;
@@ -170,15 +172,8 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 return;
             }
             pendingGeocodeId_.clear();
-            const bool newOrigin = !origin_.has_value()
-                || origin_->latitude != origin.latitude
-                || origin_->longitude != origin.longitude;
             abandonChargeRefresh();
             cancelPendingStationList();
-            ++originGeneration_;
-            invalidateSelection();
-            origin_ = origin;
-            pendingStationsRequestId_.clear();
             if (!pendingForecastRequestId_.isEmpty()) {
                 supersededSafeReadIds_.insert(pendingForecastRequestId_);
             }
@@ -188,19 +183,8 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
             }
             pendingDetailRequestId_.clear();
             pendingDetailOrigin_.reset();
-            displayedDetailOrigin_.reset();
-            if (newOrigin) {
-                clearForecastCache();
-            }
-            stations_.clear();
-            rebuildStationCards();
-            clearLayout(detailLayout_);
             setDetailControlsEnabled(false);
-            detailStatus_->setText(QStringLiteral("起点已变更，请重新选择充电站"));
-            statusLabel_->setText(QStringLiteral("定位成功：%1, %2，正在加载附近站点…")
-                                      .arg(origin.latitude, 0, 'f', 6)
-                                      .arg(origin.longitude, 0, 'f', 6));
-            requestNearbyStations(origin);
+            requestNearbyStations(origin, std::nullopt, std::nullopt, 0, true);
         });
         connect(mapClient_, &TencentMapClient::geocodeFailed, this,
                 [this](const ev::user::ApiError &error) {
@@ -219,12 +203,14 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
             }
             const bool chargeRefresh = pendingStationsSelectionGeneration_.has_value();
             const bool reconnectRefresh = reconnectStationsPending_;
+            const bool foregroundSearch = pendingForegroundOrigin_.has_value();
             const std::optional<quint64> forecastAttempt = chargeRefreshAttemptId_;
             if (pendingStationsOriginGeneration_ != originGeneration_
                 || pendingStationsSearchGeneration_ != searchGeneration_) {
                 pendingStationsRequestId_.clear();
                 pendingStationsSelectionGeneration_.reset();
                 reconnectStationsPending_ = false;
+                pendingForegroundOrigin_.reset();
                 setSearchPending(false);
                 if (chargeRefresh) {
                     finishChargeRefreshUnavailable();
@@ -236,6 +222,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 pendingStationsRequestId_.clear();
                 pendingStationsSelectionGeneration_.reset();
                 reconnectStationsPending_ = false;
+                pendingForegroundOrigin_.reset();
                 setSearchPending(false);
                 finishChargeRefreshUnavailable();
                 return;
@@ -245,6 +232,15 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
             pendingStationsRequestId_.clear();
             pendingStationsSelectionGeneration_.reset();
             reconnectStationsPending_ = false;
+            if (foregroundSearch
+                && (result.origin.latitude != pendingForegroundOrigin_->latitude
+                    || result.origin.longitude != pendingForegroundOrigin_->longitude)) {
+                pendingForegroundOrigin_.reset();
+                setSearchPending(false);
+                setDetailControlsEnabled(connected_);
+                showError(QStringLiteral("服务器响应无效，继续显示缓存"));
+                return;
+            }
             if (!chargeRefresh && !reconnectRefresh) {
                 if (!pendingDetailRequestId_.isEmpty()) {
                     supersededSafeReadIds_.insert(pendingDetailRequestId_);
@@ -257,7 +253,19 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                                [this](const ev::user::Station &station) {
                     return station.stationId == *chargeRefreshStationId_;
                 });
-            applyStations(std::move(result), !chargeRefresh && !reconnectRefresh);
+            if (foregroundSearch) {
+                const bool newOrigin = !origin_.has_value()
+                    || origin_->latitude != result.origin.latitude
+                    || origin_->longitude != result.origin.longitude;
+                ++originGeneration_;
+                if (newOrigin) {
+                    clearForecastCache();
+                }
+                pendingForegroundOrigin_.reset();
+                applyStations(std::move(result), true);
+            } else {
+                applyStations(std::move(result), !chargeRefresh && !reconnectRefresh);
+            }
             if (chargeGeneration.has_value()
                 && chargeRefreshSelectionGeneration_ == chargeGeneration) {
                 if (!containsExpectedStation) {
@@ -269,10 +277,12 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 }
             }
             setSearchPending(false);
-            if (!chargeRefresh && !reconnectRefresh) {
+            if ((!chargeRefresh && !reconnectRefresh) || foregroundSearch) {
                 clearLayout(detailLayout_);
+                displayedDetailOrigin_.reset();
                 detailStatus_->setText(QStringLiteral("请选择充电站查看充电桩"));
             }
+            setDetailControlsEnabled(connected_);
             const int forecastStations = std::count_if(
                 stations_.cbegin(), stations_.cend(), [](const auto &station) {
                     return station.forecastEnabled;
@@ -378,6 +388,9 @@ void NearbyPage::setConnectionAvailable(bool available)
     connectionBanner_->setText(QStringLiteral("服务器已连接"));
     connectionBanner_->setStyleSheet(QString());
     retryButton_->setEnabled(true);
+    if (pendingStationsRequestId_.isEmpty()) {
+        setDetailControlsEnabled(true);
+    }
 }
 
 void NearbyPage::refreshAfterReconnect()
@@ -426,6 +439,7 @@ void NearbyPage::cancelPendingStationList()
     }
     pendingStationsRequestId_.clear();
     pendingStationsSelectionGeneration_.reset();
+    pendingForegroundOrigin_.reset();
     reconnectStationsPending_ = false;
     setSearchPending(false);
 }
@@ -433,6 +447,13 @@ void NearbyPage::cancelPendingStationList()
 void NearbyPage::refreshAfterCharge(ev::user::GeoPoint origin, qint64 stationId,
                                     quint64 selectionGeneration, quint64 refreshAttemptId)
 {
+    if (pendingForegroundOrigin_.has_value()) {
+        if (refreshAttemptId != 0) {
+            emit chargeRefreshUnavailable(
+                refreshAttemptId, selectionGeneration, stationId);
+        }
+        return;
+    }
     const bool stationStillKnown = std::any_of(
         stations_.cbegin(), stations_.cend(), [stationId](const ev::user::Station &station) {
             return station.stationId == stationId;
@@ -553,6 +574,41 @@ void NearbyPage::displayStationDetail(ev::user::StationDetailResult result)
     applyStationDetail(std::move(result), true);
 }
 
+void NearbyPage::resetForSessionExpiry()
+{
+    pendingGeocodeId_.clear();
+    cancelChargeRefresh();
+    cancelPendingStationList();
+    if (!pendingForecastRequestId_.isEmpty()) {
+        userApi_->cancelSafeRead(pendingForecastRequestId_);
+    }
+    if (!pendingDetailRequestId_.isEmpty()) {
+        userApi_->cancelSafeRead(pendingDetailRequestId_);
+    }
+    pendingForecastRequestId_.clear();
+    pendingDetailRequestId_.clear();
+    supersededSafeReadIds_.clear();
+    reconnectRefreshPending_ = false;
+    reconnectStationsPending_ = false;
+    pendingStationsSelectionGeneration_.reset();
+    pendingForecastSelectionGeneration_.reset();
+    pendingForecastRefreshAttemptId_.reset();
+    pendingDetailOrigin_.reset();
+    displayedDetailOrigin_.reset();
+    origin_.reset();
+    stations_.clear();
+    clearForecastCache();
+    ++originGeneration_;
+    ++searchGeneration_;
+    ++selectionGeneration_;
+    rebuildStationCards();
+    clearLayout(detailLayout_);
+    setSearchPending(false);
+    setDetailControlsEnabled(false);
+    statusLabel_->setText(QStringLiteral("请重新登录后查询附近充电站"));
+    detailStatus_->setText(QStringLiteral("请重新登录后查看充电桩"));
+}
+
 void NearbyPage::applyStationDetail(ev::user::StationDetailResult result,
                                     bool invalidateCurrentSelection)
 {
@@ -572,7 +628,8 @@ void NearbyPage::applyStationDetail(ev::user::StationDetailResult result,
     detailLayout_->addWidget(title);
     for (const auto &charger : result.chargers) {
         auto *button = new QPushButton(
-            QStringLiteral("%1 · %2 · %3 kW · %4")
+            QStringLiteral("充电桩 ID：%1 · %2 · %3 · %4 kW · %5")
+                .arg(charger.chargerId)
                 .arg(charger.code,
                      charger.type == QStringLiteral("fast") ? QStringLiteral("快充") : QStringLiteral("慢充"))
                 .arg(charger.powerKw, 0, 'f', 1)
@@ -612,7 +669,7 @@ void NearbyPage::requestNearbyStations(
     const ev::user::GeoPoint &origin,
     std::optional<quint64> requiredSelectionGeneration,
     std::optional<qint64> expectedStationId,
-    quint64 refreshAttemptId)
+    quint64 refreshAttemptId, bool foregroundSearch)
 {
     if (userApi_ == nullptr) {
         return;
@@ -623,8 +680,13 @@ void NearbyPage::requestNearbyStations(
         abandonChargeRefresh();
     }
     cancelPendingStationList();
+    if (foregroundSearch) {
+        pendingForegroundOrigin_ = origin;
+    }
     setSearchPending(true);
-    statusLabel_->setText(QStringLiteral("正在加载附近充电站…"));
+    statusLabel_->setText(foregroundSearch && !stations_.isEmpty()
+        ? QStringLiteral("正在加载新的附近充电站（保留当前缓存）…")
+        : QStringLiteral("正在加载附近充电站…"));
     ++searchGeneration_;
     pendingStationsSelectionGeneration_ = requiredSelectionGeneration;
     if (requiredSelectionGeneration.has_value()) {
@@ -644,7 +706,9 @@ void NearbyPage::requestNearbyStations(
     pendingForecastSelectionGeneration_.reset();
     pendingForecastRefreshAttemptId_.reset();
     if (!pendingDetailRequestId_.isEmpty()) {
-        invalidateSelection();
+        if (!foregroundSearch) {
+            invalidateSelection();
+        }
         supersededSafeReadIds_.insert(pendingDetailRequestId_);
         pendingDetailRequestId_.clear();
         pendingDetailOrigin_.reset();
@@ -653,10 +717,16 @@ void NearbyPage::requestNearbyStations(
     pendingStationsOriginGeneration_ = originGeneration_;
     pendingStationsSearchGeneration_ = searchGeneration_;
     pendingStationsRequestId_ = userApi_->loadNearbyStations(origin);
+    if (foregroundSearch) {
+        setDetailControlsEnabled(false);
+    }
     if (pendingStationsRequestId_.isEmpty()) {
         pendingStationsSelectionGeneration_.reset();
+        pendingForegroundOrigin_.reset();
         setSearchPending(false);
-        showError(QStringLiteral("请求失败，请重试"));
+        setDetailControlsEnabled(connected_);
+        showError(stations_.isEmpty() ? QStringLiteral("请求失败，请重试")
+                                      : QStringLiteral("请求失败，继续显示缓存"));
         if (requiredSelectionGeneration.has_value()) {
             finishChargeRefreshFailed({QString(), QStringLiteral("NOT_CONNECTED"),
                                        QStringLiteral("请求失败，请重试")});
@@ -838,10 +908,12 @@ void NearbyPage::handleApiFailure(const ev::user::ApiError &error)
         && error.requestId == pendingStationsRequestId_) {
         const bool chargeRefresh = pendingStationsSelectionGeneration_.has_value();
         const bool reconnectRefresh = reconnectStationsPending_;
+        const bool foregroundSearch = pendingForegroundOrigin_.has_value();
         if (pendingStationsOriginGeneration_ != originGeneration_
             || pendingStationsSearchGeneration_ != searchGeneration_) {
             pendingStationsRequestId_.clear();
             pendingStationsSelectionGeneration_.reset();
+            pendingForegroundOrigin_.reset();
             reconnectStationsPending_ = false;
             setSearchPending(false);
             if (chargeRefresh) {
@@ -853,6 +925,7 @@ void NearbyPage::handleApiFailure(const ev::user::ApiError &error)
             && *pendingStationsSelectionGeneration_ != selectionGeneration_) {
             pendingStationsRequestId_.clear();
             pendingStationsSelectionGeneration_.reset();
+            pendingForegroundOrigin_.reset();
             reconnectStationsPending_ = false;
             setSearchPending(false);
             finishChargeRefreshUnavailable();
@@ -860,9 +933,11 @@ void NearbyPage::handleApiFailure(const ev::user::ApiError &error)
         }
         pendingStationsRequestId_.clear();
         pendingStationsSelectionGeneration_.reset();
+        pendingForegroundOrigin_.reset();
         reconnectStationsPending_ = false;
         setSearchPending(false);
-        if (reconnectRefresh && !stations_.isEmpty()) {
+        setDetailControlsEnabled(connected_);
+        if ((reconnectRefresh || foregroundSearch) && !stations_.isEmpty()) {
             statusLabel_->setText(QStringLiteral("刷新失败，继续显示缓存：%1")
                                       .arg(errorText(error)));
         } else {

@@ -26,6 +26,7 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
     : QWidget(parent)
     , api_(api)
     , status_(new QLabel(this))
+    , identity_(new QLabel(this))
     , meter_(new QLabel(this))
     , summary_(new QLabel(this))
     , error_(new QLabel(this))
@@ -41,6 +42,7 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
     Q_ASSERT(api_ != nullptr);
     setObjectName(QStringLiteral("chargePage"));
     status_->setObjectName(QStringLiteral("chargeStatus"));
+    identity_->setObjectName(QStringLiteral("chargeOrderIdentity"));
     meter_->setObjectName(QStringLiteral("chargeMeter"));
     summary_->setObjectName(QStringLiteral("chargeSummary"));
     error_->setObjectName(QStringLiteral("chargeError"));
@@ -52,12 +54,14 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
     backButton_->setObjectName(QStringLiteral("chargeBackButton"));
     retryButton_->setObjectName(QStringLiteral("chargeRetryButton"));
     status_->setWordWrap(true);
+    identity_->setWordWrap(true);
     meter_->setWordWrap(true);
     summary_->setWordWrap(true);
     error_->setWordWrap(true);
 
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(status_);
+    layout->addWidget(identity_);
     layout->addWidget(meter_);
     layout->addWidget(summary_);
     layout->addWidget(error_);
@@ -86,7 +90,13 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
     connect(backButton_, &QPushButton::clicked, this, [this] {
         emit backRequested(order_.has_value() ? order_->orderId : 0);
     });
-    connect(retryButton_, &QPushButton::clicked, this, &ChargePage::requestReconciliation);
+    connect(retryButton_, &QPushButton::clicked, this, [this] {
+        if (!connected_) {
+            api_->retryConnection();
+            return;
+        }
+        requestReconciliation();
+    });
     connect(api_, &UserApi::connectionChanged, this, &ChargePage::setConnectionAvailable);
     connect(api_, &UserApi::sessionUserApplied, this,
             [this](const ev::user::User &, quint64 sessionGeneration, quint64) {
@@ -371,8 +381,38 @@ void ChargePage::setConnectionAvailable(bool available)
     render();
 }
 
+void ChargePage::resetForSessionExpiry(quint64 sessionGeneration)
+{
+    pageActive_ = false;
+    ++pageGeneration_;
+    cancelOwnedSafeReads();
+    pollTimer_->stop();
+    pendingMutation_.reset();
+    pendingMutationSubjectOrderId_ = 0;
+    pendingMutationSuperseded_ = false;
+    reconciliationRequired_ = false;
+    factsPending_ = false;
+    factsFailed_ = false;
+    factsGateRequired_ = false;
+    reconciledNoOrder_ = false;
+    exitRefreshRequired_ = false;
+    exitRefreshFailed_ = false;
+    exitRefreshAttemptId_ = 0;
+    exitRefreshSelectionGeneration_ = 0;
+    exitRefreshStationId_ = 0;
+    selection_.reset();
+    order_.reset();
+    associatedCharger_.reset();
+    sessionGeneration_ = sessionGeneration;
+    error_->clear();
+    emit mutationPendingChanged(false);
+    updateChargeFlowBlock();
+    render();
+}
+
 void ChargePage::render()
 {
+    identity_->hide();
     meter_->setVisible(false);
     summary_->setVisible(false);
     reserveButton_->setEnabled(false);
@@ -382,7 +422,7 @@ void ChargePage::render()
     settleButton_->setEnabled(false);
     backButton_->setEnabled(false);
     retryButton_->setVisible(reconciliationRequired_ || factsFailed_ || !connected_);
-    retryButton_->setEnabled(connected_ && pageActive_ && !pendingRead_.has_value()
+    retryButton_->setEnabled(pageActive_ && !pendingRead_.has_value()
                              && !factsPending_ && !pendingMutation_.has_value());
 
     if (!pageActive_) {
@@ -407,6 +447,12 @@ void ChargePage::render()
         return;
     }
     const ev::user::Order &order = *order_;
+    identity_->setText(
+        QStringLiteral("订单 ID：%1 · 充电站：%2 · 充电桩：%3")
+            .arg(order.orderId)
+            .arg(order.stationName.isEmpty() ? QStringLiteral("—") : order.stationName,
+                 order.chargerCode.isEmpty() ? QStringLiteral("—") : order.chargerCode));
+    identity_->show();
     if (order.status == QStringLiteral("reserved")) {
         status_->setText(QStringLiteral("已预约"));
         const bool associatedReserved = associatedCharger_.has_value()

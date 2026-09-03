@@ -18,6 +18,7 @@ class UserApi final : public QObject
 public:
     explicit UserApi(TcpJsonClient *client, QObject *parent = nullptr);
 
+    [[nodiscard]] QString loadSystemHealth();
     void loginByPhone(const QString &mobile);
     [[nodiscard]] ev::user::RequestContext loadCurrentOrder(
         quint64 pageGeneration = 0, quint64 selectionGeneration = 0,
@@ -37,6 +38,7 @@ public:
     void cancelSafeRead(const QString &requestId);
     [[nodiscard]] QString loadNearbyStations(const ev::user::GeoPoint &origin);
     [[nodiscard]] QString loadStationDetail(qint64 stationId);
+    [[nodiscard]] QString loadChargers(qint64 stationId);
     [[nodiscard]] QString loadLatestForecast(const QString &stationListRequestId);
     [[nodiscard]] ev::user::HistoryRequestContext loadOrderHistory(
         qint64 limit, qint64 offset, quint64 pageGeneration, quint64 readEpoch);
@@ -48,7 +50,10 @@ public:
     [[nodiscard]] bool profileNeedsReconciliation() const;
 
 signals:
+    void systemHealthLoaded(QString requestId, ev::user::SystemHealthResult result);
+    void chargerListLoaded(QString requestId, ev::user::ChargerListResult result);
     void loginSucceeded(ev::user::User user);
+    void sessionExpired(quint64 sessionGeneration);
     void currentOrderLoaded(ev::user::RequestContext context,
                             ev::user::CurrentOrderResult result);
     void chargeOrderChanged(ev::user::RequestContext context, ev::user::Order order);
@@ -75,9 +80,11 @@ signals:
 
 private:
     enum class Operation {
+        Health,
         Login,
         NearbyStations,
         StationDetail,
+        ChargerList,
         LatestForecast,
         HistoryList,
         ProfileGet,
@@ -119,6 +126,7 @@ private:
     void applySessionUser(ev::user::User user);
     void finishProfileOperation(Operation operation);
     void markProfileUncertain();
+    void expireAuthenticatedSession();
     void handleConnectionState(bool connected);
     void handleResponse(const ev::protocol::ResponseEnvelope &response);
     void handleTransportFailure(const QString &requestId, const QString &code, const QString &message);

@@ -184,6 +184,64 @@ bool parseCharger(const QJsonValue &value, ev::user::Charger *charger)
     return true;
 }
 
+bool parseSystemHealth(const QJsonObject &data, ev::user::SystemHealthResult *result)
+{
+    if (!hasExactlyKeys(data, {"status", "schemaVersion", "snapshotVersion",
+                               "forecastRunId", "serverTime"})) {
+        return false;
+    }
+    ev::user::SystemHealthResult decoded;
+    if (!data.value(QStringLiteral("status")).isString()
+        || !nonnegativeInteger(data, "schemaVersion", &decoded.schemaVersion)
+        || decoded.schemaVersion != 1
+        || !nonnegativeInteger(data, "snapshotVersion", &decoded.snapshotVersion)
+        || !validTimestamp(data.value(QStringLiteral("serverTime")), &decoded.serverTime)) {
+        return false;
+    }
+    decoded.status = data.value(QStringLiteral("status")).toString();
+    if (decoded.status != QStringLiteral("starting")
+        && decoded.status != QStringLiteral("degraded")
+        && decoded.status != QStringLiteral("ready")) {
+        return false;
+    }
+    const QJsonValue forecastRunId = data.value(QStringLiteral("forecastRunId"));
+    if (forecastRunId.isNull()) {
+        decoded.forecastRunId.reset();
+    } else if (!forecastRunId.isString() || forecastRunId.toString().trimmed().isEmpty()) {
+        return false;
+    } else {
+        decoded.forecastRunId = forecastRunId.toString();
+    }
+    *result = std::move(decoded);
+    return true;
+}
+
+bool parseChargerList(const QJsonObject &data, qint64 stationId,
+                      ev::user::ChargerListResult *result)
+{
+    if (!hasExactlyKeys(data, {"chargers"})
+        || !data.value(QStringLiteral("chargers")).isArray()) {
+        return false;
+    }
+    ev::user::ChargerListResult decoded;
+    decoded.stationId = stationId;
+    QSet<qint64> chargerIds;
+    QSet<QString> chargerCodes;
+    for (const QJsonValue &value : data.value(QStringLiteral("chargers")).toArray()) {
+        ev::user::Charger charger;
+        if (!parseCharger(value, &charger) || charger.stationId != stationId
+            || chargerIds.contains(charger.chargerId)
+            || chargerCodes.contains(charger.code)) {
+            return false;
+        }
+        chargerIds.insert(charger.chargerId);
+        chargerCodes.insert(charger.code);
+        decoded.chargers.append(std::move(charger));
+    }
+    *result = std::move(decoded);
+    return true;
+}
+
 bool parseForecastRun(const QJsonValue &value, ev::user::ForecastRun *run)
 {
     if (!value.isObject()) {
@@ -560,6 +618,8 @@ UserApi::UserApi(TcpJsonClient *client, QObject *parent)
     qRegisterMetaType<ev::user::GeoPoint>();
     qRegisterMetaType<ev::user::Station>();
     qRegisterMetaType<ev::user::Charger>();
+    qRegisterMetaType<ev::user::SystemHealthResult>();
+    qRegisterMetaType<ev::user::ChargerListResult>();
     qRegisterMetaType<ev::user::StationListResult>();
     qRegisterMetaType<ev::user::StationDetailResult>();
     qRegisterMetaType<ev::user::ForecastLatestResult>();
@@ -570,15 +630,24 @@ UserApi::UserApi(TcpJsonClient *client, QObject *parent)
     connect(client_, &TcpJsonClient::connectionChanged, this, &UserApi::handleConnectionState);
 }
 
+QString UserApi::loadSystemHealth()
+{
+    const QString requestId = client_->send(ev::actions::SystemHealth, {}, {});
+    pendingOperations_.insert(requestId, {Operation::Health, sessionGeneration_});
+    return requestId;
+}
+
 void UserApi::loginByPhone(const QString &mobile)
 {
     const auto oldRequestIds = pendingOperations_.keys();
     for (const QString &requestId : oldRequestIds) {
         const auto it = pendingOperations_.constFind(requestId);
         if (it != pendingOperations_.cend()
-            && (it->operation == Operation::ChargeCurrent
+            && (it->operation == Operation::Health
+                || it->operation == Operation::ChargeCurrent
                 || it->operation == Operation::NearbyStations
                 || it->operation == Operation::StationDetail
+                || it->operation == Operation::ChargerList
                 || it->operation == Operation::LatestForecast
                 || it->operation == Operation::HistoryList)) {
             client_->cancelRequest(requestId);
@@ -702,8 +771,10 @@ void UserApi::cancelSafeRead(const QString &requestId)
     if (it == pendingOperations_.end()) {
         return;
     }
-    if (it->operation != Operation::ChargeCurrent
+    if (it->operation != Operation::Health
+        && it->operation != Operation::ChargeCurrent
         && it->operation != Operation::StationDetail
+        && it->operation != Operation::ChargerList
         && it->operation != Operation::NearbyStations
         && it->operation != Operation::LatestForecast
         && it->operation != Operation::HistoryList) {
@@ -745,6 +816,24 @@ QString UserApi::loadStationDetail(qint64 stationId)
     const QString requestId = client_->send(
         ev::actions::StationDetail, QJsonObject{{QStringLiteral("stationId"), stationId}}, token_);
     pendingOperations_.insert(requestId, {Operation::StationDetail, sessionGeneration_, {}, stationId});
+    return requestId;
+}
+
+QString UserApi::loadChargers(qint64 stationId)
+{
+    if (!user_.has_value() || token_.isEmpty()) {
+        emitFailure(QString(), QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录"));
+        return {};
+    }
+    if (stationId <= 0 || stationId > kMaxSafeInteger) {
+        emitFailure(QString(), QStringLiteral("INVALID_STATION"), QStringLiteral("充电站无效"));
+        return {};
+    }
+    const QString requestId = client_->send(
+        ev::actions::ChargerList,
+        QJsonObject{{QStringLiteral("stationId"), stationId}}, token_);
+    pendingOperations_.insert(
+        requestId, {Operation::ChargerList, sessionGeneration_, {}, stationId});
     return requestId;
 }
 
@@ -997,6 +1086,30 @@ void UserApi::markProfileUncertain()
     emit profileReconciliationRequired();
 }
 
+void UserApi::expireAuthenticatedSession()
+{
+    if (!user_.has_value() || token_.isEmpty()) {
+        return;
+    }
+    const auto requestIds = pendingOperations_.keys();
+    for (const QString &requestId : requestIds) {
+        client_->cancelRequest(requestId);
+    }
+    pendingOperations_.clear();
+    ++sessionGeneration_;
+    userRevision_ = 0;
+    ++chargeReadEpoch_;
+    user_.reset();
+    stationSnapshots_.clear();
+    token_.clear();
+    profileRequestId_.clear();
+    profileOutcomeUncertain_ = false;
+    emit loginPendingChanged(false);
+    emit profileReadPendingChanged(false);
+    emit profileMutationPendingChanged(false);
+    emit sessionExpired(sessionGeneration_);
+}
+
 void UserApi::handleConnectionState(bool connected)
 {
     emit connectionChanged(connected);
@@ -1019,6 +1132,13 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
     }
     if (pending.operation == Operation::Login) {
         emit loginPendingChanged(false);
+    }
+    if (pending.operation != Operation::Login
+        && pending.operation != Operation::Health
+        && !response.ok && response.code == QStringLiteral("AUTH_REQUIRED")
+        && validFailure(response) && user_.has_value() && !token_.isEmpty()) {
+        expireAuthenticatedSession();
+        return;
     }
     if (isProfileOperation(pending.operation)) {
         const auto invalidProfileResponse = [this, &response, &pending] {
@@ -1225,6 +1345,15 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
         return;
     }
     const QJsonObject data = response.data.toObject();
+    if (pending.operation == Operation::Health) {
+        ev::user::SystemHealthResult result;
+        if (!parseSystemHealth(data, &result)) {
+            emitInvalidResponse(response.requestId);
+            return;
+        }
+        emit systemHealthLoaded(response.requestId, result);
+        return;
+    }
     if (pending.operation == Operation::Login) {
         if (!hasExactlyKeys(data, {"token", "user"}) || !data.value(QStringLiteral("token")).isString()
             || data.value(QStringLiteral("token")).toString().trimmed().isEmpty()) {
@@ -1264,6 +1393,15 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
             return;
         }
         emit stationDetailLoaded(response.requestId, result);
+        return;
+    }
+    if (pending.operation == Operation::ChargerList) {
+        ev::user::ChargerListResult result;
+        if (!parseChargerList(data, pending.stationId, &result)) {
+            emitInvalidResponse(response.requestId);
+            return;
+        }
+        emit chargerListLoaded(response.requestId, result);
         return;
     }
     ev::user::ForecastLatestResult result;
