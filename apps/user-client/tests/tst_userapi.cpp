@@ -306,6 +306,12 @@ private slots:
     void chargeDerivedForecastIsNotReplayedAfterDisconnect();
     void differentAuthoritativeOrderClearsRememberedSelectionCopies();
     void externalActiveOrderAuthorityInvalidatesVisibleSelection();
+    void exitRefreshFirstFailureWins_data();
+    void exitRefreshFirstFailureWins();
+    void externalActiveOrderSupersedesTerminalExit_data();
+    void externalActiveOrderSupersedesTerminalExit();
+    void deferredNearbyInvalidationPreventsSelectionResurrection_data();
+    void deferredNearbyInvalidationPreventsSelectionResurrection();
     void nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates();
     void profileActionsUseOwnedSessionAndAuthoritativeResponses();
     void profileValidationAndFailuresPreserveCachedUser();
@@ -3127,10 +3133,23 @@ void UserApiTest::externalActiveOrderAuthorityInvalidatesVisibleSelection()
           QJsonObject{{QStringLiteral("order"),
                        canonicalOrderObject(QStringLiteral("reserved"), false, 8)}});
     QTRY_VERIFY(!reserve->isEnabled());
-    QTRY_VERIFY(window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"))
+    auto *currentNavigation =
+        window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"));
+    QVERIFY(!currentNavigation->isEnabled());
+    const auto authorityFacts = takeRequest(peer.data());
+    QCOMPARE(authorityFacts.action, QStringLiteral("station.detail"));
+    QJsonObject authorityStation = stationObject(3, 0.0, false);
+    authorityStation.insert(QStringLiteral("idleCount"), 1);
+    reply(peer.data(), authorityFacts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), authorityStation},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(7, 3),
+                                  chargerObject(8, 3, QStringLiteral("reserved")),
+                                  chargerObject(9, 3, QStringLiteral("charging")),
+                                  chargerObject(10, 3, QStringLiteral("fault"))}}});
+    QTRY_VERIFY(currentNavigation->isEnabled());
+    QTRY_VERIFY(window.findChild<QPushButton *>(QStringLiteral("chargeStartButton"))
                     ->isEnabled());
-    QTest::qWait(20);
-    QCOMPARE(peer->bytesAvailable(), qint64{0});
 
     (void)api->loadCurrentOrder(78, 78, ev::user::ChargeOperation::Guard);
     const auto laterNull = takeRequest(peer.data());
@@ -3139,6 +3158,436 @@ void UserApiTest::externalActiveOrderAuthorityInvalidatesVisibleSelection()
     QTRY_VERIFY(!reserve->isEnabled());
     QTest::qWait(20);
     QCOMPARE(peer->bytesAvailable(), qint64{0});
+}
+
+void UserApiTest::exitRefreshFirstFailureWins_data()
+{
+    QTest::addColumn<int>("scenario");
+    QTest::newRow("detail-failure-then-late-list-success-and-retry") << 0;
+    QTest::newRow("missing-charger-then-late-list-failure-and-geocode") << 1;
+    QTest::newRow("list-failure-then-late-detail-success") << 2;
+    QTest::newRow("list-failure-then-late-detail-failure") << 3;
+    QTest::newRow("settle-detail-failure-then-late-list-success") << 4;
+    QTest::newRow("settle-list-failure-then-late-detail-success") << 5;
+}
+
+void UserApiTest::exitRefreshFirstFailureWins()
+{
+    QFETCH(int, scenario);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    phone->setText(QString::fromLatin1(kMobile));
+    window.findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("first-failure-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto guard = takeRequest(peer.data());
+    reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+
+    auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    const auto station = stationValue();
+    const bool settle = scenario >= 4;
+    const QString selectedStatus = settle ? QStringLiteral("charging")
+                                          : QStringLiteral("reserved");
+    nearbyPage->displayStations({origin, {station}});
+    nearbyPage->displayStationDetail(
+        {station, {chargerValue(selectedStatus)}});
+    nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
+    auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
+    chargePage->enterOrder(
+        settle ? orderValue(QStringLiteral("charging"), true)
+               : orderValue(QStringLiteral("reserved")),
+        ev::user::StationSelection{
+            origin, station, chargerValue(selectedStatus), 3});
+    QSignalSpy committed(nearbyPage, &NearbyPage::chargeRefreshCommitted);
+    QSignalSpy failed(nearbyPage, &NearbyPage::chargeRefreshFailed);
+    QSignalSpy unavailable(nearbyPage, &NearbyPage::chargeRefreshUnavailable);
+    window.findChild<QPushButton *>(settle ? QStringLiteral("chargeSettleButton")
+                                           : QStringLiteral("chargeCancelButton"))->click();
+    const auto mutation = takeRequest(peer.data());
+    QJsonObject mutationData{{QStringLiteral("order"),
+                              canonicalOrderObject(settle ? QStringLiteral("completed")
+                                                          : QStringLiteral("cancelled"))}};
+    if (settle) {
+        mutationData.insert(QStringLiteral("balanceFen"), 10'000);
+    }
+    reply(peer.data(), mutation.requestId, true, QStringLiteral("OK"), QString(), mutationData);
+    const auto firstRefresh = takeRequest(peer.data());
+    const auto secondRefresh = takeRequest(peer.data());
+    const auto detail = firstRefresh.action == QStringLiteral("station.detail")
+        ? firstRefresh : secondRefresh;
+    const auto list = firstRefresh.action == QStringLiteral("station.list")
+        ? firstRefresh : secondRefresh;
+
+    const auto validDetail = [&] {
+        reply(peer.data(), detail.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(7, 3), chargerObject(8, 3),
+                                      chargerObject(9, 3, QStringLiteral("charging")),
+                                      chargerObject(10, 3, QStringLiteral("fault"))}}});
+    };
+    if (scenario == 0 || scenario == 4) {
+        reply(peer.data(), detail.requestId, false, QStringLiteral("DB_BUSY"),
+              QStringLiteral("busy"), QJsonObject{});
+    } else if (scenario == 1) {
+        reply(peer.data(), detail.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(8, 3), chargerObject(9, 3),
+                                      chargerObject(10, 3, QStringLiteral("charging")),
+                                      chargerObject(11, 3, QStringLiteral("fault"))}}});
+    } else {
+        reply(peer.data(), list.requestId, false, QStringLiteral("DB_BUSY"),
+              QStringLiteral("busy"), QJsonObject{});
+    }
+
+    QTRY_COMPARE(failed.size(), 1);
+    QCOMPARE(committed.size(), 0);
+    QCOMPARE(unavailable.size(), 0);
+    const quint64 failedAttempt = failed.at(0).at(0).toULongLong();
+    const quint64 failedGeneration = failed.at(0).at(1).toULongLong();
+    QCOMPARE(failed.at(0).at(2).toLongLong(), qint64{3});
+    QVERIFY(failedAttempt != 0);
+    QVERIFY(failedGeneration != 0);
+    auto *retry = window.findChild<QPushButton *>(QStringLiteral("chargeRetryButton"));
+    QTRY_VERIFY(retry->isVisible());
+    QTRY_VERIFY(retry->isEnabled());
+    QVERIFY(!window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"))->isEnabled());
+
+    if (scenario == 0) {
+        retry->click();
+        const auto current = takeRequest(peer.data());
+        reply(peer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+        const auto retryFirst = takeRequest(peer.data());
+        const auto retrySecond = takeRequest(peer.data());
+        const auto retryDetail = retryFirst.action == QStringLiteral("station.detail")
+            ? retryFirst : retrySecond;
+        const auto retryList = retryFirst.action == QStringLiteral("station.list")
+            ? retryFirst : retrySecond;
+        reply(peer.data(), list.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("stations"),
+                           QJsonArray{stationObject(3, 0.1, true, false)}}});
+        QTest::qWait(20);
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(committed.size(), 0);
+        QCOMPARE(unavailable.size(), 0);
+        QVERIFY(!window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"))->isEnabled());
+        chargePage->nearbyRefreshCommitted(failedAttempt, failedGeneration, 3);
+        chargePage->nearbyRefreshFailed(
+            failedAttempt, failedGeneration, 3,
+            {QStringLiteral("old"), QStringLiteral("DB_BUSY"), QStringLiteral("old")});
+        chargePage->nearbyRefreshUnavailable(failedAttempt, failedGeneration, 3);
+        QVERIFY(!window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"))->isEnabled());
+        reply(peer.data(), retryDetail.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(7, 3), chargerObject(8, 3),
+                                      chargerObject(9, 3, QStringLiteral("charging")),
+                                      chargerObject(10, 3, QStringLiteral("fault"))}}});
+        reply(peer.data(), retryList.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("stations"),
+                           QJsonArray{stationObject(3, 0.1, true, false)}}});
+        QTRY_COMPARE(committed.size(), 1);
+        QTRY_VERIFY(window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"))->isEnabled());
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(unavailable.size(), 0);
+    } else if (scenario == 1) {
+        reply(peer.data(), list.requestId, false, QStringLiteral("DB_BUSY"),
+              QStringLiteral("late"), QJsonObject{});
+        nearbyPage->pendingGeocodeId_ = QStringLiteral("late-failed-geocode");
+        emit nearbyPage->mapClient_->geocodeSucceeded(
+            QStringLiteral("late-failed-geocode"), ev::user::GeoPoint{40.0, 116.4});
+        const auto replacementList = takeRequest(peer.data());
+        reply(peer.data(), replacementList.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("stations"),
+                           QJsonArray{stationObject(4, 0.2, true, false)}}});
+        QTest::qWait(20);
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(committed.size(), 0);
+        QCOMPARE(unavailable.size(), 0);
+        QVERIFY(retry->isVisible());
+        QVERIFY(retry->isEnabled());
+    } else if (scenario == 4) {
+        reply(peer.data(), list.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("stations"),
+                           QJsonArray{stationObject(3, 0.1, true, false)}}});
+        QTest::qWait(20);
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(committed.size(), 0);
+        QCOMPARE(unavailable.size(), 0);
+        QVERIFY(retry->isVisible());
+        QVERIFY(retry->isEnabled());
+    } else {
+        if (scenario == 2 || scenario == 5) {
+            validDetail();
+        } else {
+            reply(peer.data(), detail.requestId, false, QStringLiteral("DB_BUSY"),
+                  QStringLiteral("late"), QJsonObject{});
+        }
+        QTest::qWait(20);
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(committed.size(), 0);
+        QCOMPARE(unavailable.size(), 0);
+        QVERIFY(retry->isVisible());
+        QVERIFY(retry->isEnabled());
+    }
+}
+
+void UserApiTest::externalActiveOrderSupersedesTerminalExit_data()
+{
+    QTest::addColumn<bool>("sameSelection");
+    QTest::newRow("cancel-exit-same-selection-active-reservation") << true;
+    QTest::newRow("settle-exit-different-charger-active-charge") << false;
+}
+
+void UserApiTest::externalActiveOrderSupersedesTerminalExit()
+{
+    QFETCH(bool, sameSelection);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    phone->setText(QString::fromLatin1(kMobile));
+    window.findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("authority-exit-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto guard = takeRequest(peer.data());
+    reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+
+    auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    const auto station = stationValue();
+    const QString oldChargerStatus = sameSelection ? QStringLiteral("reserved")
+                                                   : QStringLiteral("charging");
+    nearbyPage->displayStations({origin, {station}});
+    nearbyPage->displayStationDetail({station, {chargerValue(oldChargerStatus)}});
+    nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
+    auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
+    chargePage->enterOrder(
+        sameSelection ? orderValue(QStringLiteral("reserved"))
+                      : orderValue(QStringLiteral("charging"), true),
+        ev::user::StationSelection{origin, station, chargerValue(oldChargerStatus), 3});
+    window.findChild<QPushButton *>(sameSelection
+        ? QStringLiteral("chargeCancelButton") : QStringLiteral("chargeSettleButton"))->click();
+    const auto mutation = takeRequest(peer.data());
+    if (sameSelection) {
+        reply(peer.data(), mutation.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("order"),
+                           canonicalOrderObject(QStringLiteral("cancelled"))}});
+    } else {
+        reply(peer.data(), mutation.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("order"),
+                           canonicalOrderObject(QStringLiteral("completed"))},
+                          {QStringLiteral("balanceFen"), 10'000}});
+    }
+    const auto oldFirst = takeRequest(peer.data());
+    const auto oldSecond = takeRequest(peer.data());
+    const auto oldDetail = oldFirst.action == QStringLiteral("station.detail")
+        ? oldFirst : oldSecond;
+    const auto oldList = oldFirst.action == QStringLiteral("station.list")
+        ? oldFirst : oldSecond;
+
+    auto *api = window.findChild<UserApi *>();
+    (void)api->loadCurrentOrder(91, 91, ev::user::ChargeOperation::Guard);
+    const auto authorityRequest = takeRequest(peer.data());
+    QJsonObject authority = canonicalOrderObject(
+        sameSelection ? QStringLiteral("reserved") : QStringLiteral("charging"),
+        false, sameSelection ? 7 : 8, sameSelection ? 3 : 4);
+    authority.insert(QStringLiteral("orderId"), sameSelection ? 100 : 101);
+    authority.insert(QStringLiteral("stationName"),
+                     sameSelection ? QStringLiteral("测试充电站3")
+                                   : QStringLiteral("测试充电站4"));
+    reply(peer.data(), authorityRequest.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), authority}});
+
+    auto *status = window.findChild<QLabel *>(QStringLiteral("chargeStatus"));
+    QTRY_COMPARE(status->text(), sameSelection ? QStringLiteral("已预约")
+                                               : QStringLiteral("充电中"));
+    auto *back = window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"));
+    QVERIFY(!back->isEnabled());
+    QVERIFY(!window.findChild<QPushButton *>(QStringLiteral("chargeReserveButton"))->isEnabled());
+
+    const auto freshFirst = takeRequest(peer.data());
+    std::optional<ev::protocol::RequestEnvelope> freshList;
+    ev::protocol::RequestEnvelope freshDetail = freshFirst;
+    if (sameSelection) {
+        const auto freshSecond = takeRequest(peer.data());
+        freshDetail = freshFirst.action == QStringLiteral("station.detail")
+            ? freshFirst : freshSecond;
+        freshList = freshFirst.action == QStringLiteral("station.list")
+            ? freshFirst : freshSecond;
+    }
+    QCOMPARE(freshDetail.action, QStringLiteral("station.detail"));
+
+    const auto replyOldDetail = [&] {
+        reply(peer.data(), oldDetail.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(7, 3), chargerObject(8, 3),
+                                      chargerObject(9, 3, QStringLiteral("charging")),
+                                      chargerObject(10, 3, QStringLiteral("fault"))}}});
+    };
+    const auto replyOldList = [&] {
+        reply(peer.data(), oldList.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("stations"),
+                           QJsonArray{stationObject(3, 0.1, true, false)}}});
+    };
+    if (sameSelection) {
+        replyOldDetail();
+        replyOldList();
+    } else {
+        replyOldList();
+        replyOldDetail();
+    }
+    QTest::qWait(20);
+    QCOMPARE(status->text(), sameSelection ? QStringLiteral("已预约")
+                                           : QStringLiteral("充电中"));
+    QVERIFY(!back->isEnabled());
+
+    const qint64 stationId = sameSelection ? 3 : 4;
+    const qint64 chargerId = sameSelection ? 7 : 8;
+    reply(peer.data(), freshDetail.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(stationId, 0.0, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(chargerId, stationId,
+                                                   sameSelection
+                                                       ? QStringLiteral("reserved")
+                                                       : QStringLiteral("charging")),
+                                  chargerObject(chargerId + 1, stationId),
+                                  chargerObject(chargerId + 2, stationId),
+                                  chargerObject(chargerId + 3, stationId,
+                                                QStringLiteral("fault"))}}});
+    auto *action = window.findChild<QPushButton *>(sameSelection
+        ? QStringLiteral("chargeStartButton") : QStringLiteral("chargeStopButton"));
+    QTRY_VERIFY(action->isEnabled());
+    QVERIFY(!back->isEnabled());
+    emit chargePage->backRequested(42);
+    QCOMPARE(window.findChild<QStackedWidget *>(QStringLiteral("mainPages"))->currentWidget(),
+             static_cast<QWidget *>(chargePage));
+    const auto backReconcile = takeRequest(peer.data());
+    QCOMPARE(backReconcile.action, QStringLiteral("order.current"));
+    QCOMPARE(status->text(), sameSelection ? QStringLiteral("已预约")
+                                           : QStringLiteral("充电中"));
+    back->click();
+    QCOMPARE(window.findChild<QStackedWidget *>(QStringLiteral("mainPages"))->currentWidget(),
+             static_cast<QWidget *>(chargePage));
+    if (freshList.has_value()) {
+        reply(peer.data(), freshList->requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("stations"),
+                           QJsonArray{stationObject(3, 0.1, true, false)}}});
+    }
+}
+
+void UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection_data()
+{
+    QTest::addColumn<bool>("reserveSucceeds");
+    QTest::newRow("active-order-exists-reconciles-null") << false;
+    QTest::newRow("reserve-success-retains-order-not-selection") << true;
+}
+
+void UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection()
+{
+    QFETCH(bool, reserveSucceeds);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    phone->setText(QString::fromLatin1(kMobile));
+    window.findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("deferred-generation-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto guard = takeRequest(peer.data());
+    reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    const auto station = stationValue();
+    nearbyPage->displayStations({origin, {station}});
+    nearbyPage->displayStationDetail({station, {chargerValue()}});
+    nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
+    auto *reserve = window.findChild<QPushButton *>(QStringLiteral("chargeReserveButton"));
+    reserve->click();
+    const auto mutation = takeRequest(peer.data());
+
+    nearbyPage->pendingGeocodeId_ = QStringLiteral("hidden-pending-geocode");
+    emit nearbyPage->mapClient_->geocodeSucceeded(
+        QStringLiteral("hidden-pending-geocode"), ev::user::GeoPoint{40.0, 116.4});
+    const auto replacementList = takeRequest(peer.data());
+    QCOMPARE(replacementList.action, QStringLiteral("station.list"));
+    QSignalSpy unavailable(nearbyPage, &NearbyPage::chargeRefreshUnavailable);
+
+    if (!reserveSucceeds) {
+        reply(peer.data(), mutation.requestId, false, QStringLiteral("ACTIVE_ORDER_EXISTS"),
+              QStringLiteral("refresh"), QJsonObject{});
+        const auto current = takeRequest(peer.data());
+        reply(peer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+        const auto oldFacts = takeRequest(peer.data());
+        QCOMPARE(oldFacts.action, QStringLiteral("station.detail"));
+        reply(peer.data(), oldFacts.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(7, 3), chargerObject(8, 3),
+                                      chargerObject(9, 3, QStringLiteral("charging")),
+                                      chargerObject(10, 3, QStringLiteral("fault"))}}});
+        reply(peer.data(), replacementList.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("stations"),
+                           QJsonArray{stationObject(4, 0.2, true, false)}}});
+        QTRY_VERIFY(!reserve->isEnabled());
+        reserve->click();
+        QTest::qWait(20);
+        QCOMPARE(peer->bytesAvailable(), qint64{0});
+        QCOMPARE(unavailable.size(), 0);
+    } else {
+        reply(peer.data(), mutation.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("order"),
+                           canonicalOrderObject(QStringLiteral("reserved"))}});
+        const auto facts = takeRequest(peer.data());
+        QCOMPARE(facts.action, QStringLiteral("station.detail"));
+        reply(peer.data(), facts.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(7, 3, QStringLiteral("reserved")),
+                                      chargerObject(8, 3), chargerObject(9, 3),
+                                      chargerObject(10, 3, QStringLiteral("fault"))}}});
+        reply(peer.data(), replacementList.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("stations"),
+                           QJsonArray{stationObject(4, 0.2, true, false)}}});
+        auto *cancel = window.findChild<QPushButton *>(QStringLiteral("chargeCancelButton"));
+        QTRY_VERIFY(cancel->isEnabled());
+        cancel->click();
+        const auto cancelMutation = takeRequest(peer.data());
+        reply(peer.data(), cancelMutation.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("order"),
+                           canonicalOrderObject(QStringLiteral("cancelled"))}});
+        const auto optionalFacts = takeRequest(peer.data());
+        QCOMPARE(optionalFacts.action, QStringLiteral("station.detail"));
+        QTest::qWait(20);
+        QCOMPARE(peer->bytesAvailable(), qint64{0});
+        QCOMPARE(unavailable.size(), 0);
+        QTRY_VERIFY(window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"))->isEnabled());
+    }
 }
 
 QTEST_MAIN(UserApiTest)

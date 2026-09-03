@@ -30,7 +30,8 @@ public:
 
 public slots:
     void setConnectionAvailable(bool available);
-    void observeAuthoritativeCurrent(const ev::user::CurrentOrderResult &result);
+    void observeAuthoritativeCurrent(const ev::user::RequestContext &context,
+                                     const ev::user::CurrentOrderResult &result);
     void nearbyRefreshCommitted(quint64 refreshAttemptId, quint64 selectionGeneration,
                                 qint64 stationId);
     void nearbyRefreshFailed(quint64 refreshAttemptId, quint64 selectionGeneration,
@@ -39,12 +40,14 @@ public slots:
                                   qint64 stationId);
 
 signals:
-    void backRequested();
+    void backRequested(qint64 presentedOrderId);
     void activeOrderResolved(bool active);
     void nearbyRefreshRequested(ev::user::GeoPoint origin, qint64 stationId,
                                 quint64 selectionGeneration, quint64 refreshAttemptId);
     void nearbyDetailRefreshReady(ev::user::StationDetailResult result,
                                   quint64 selectionGeneration, quint64 refreshAttemptId);
+    void nearbyDetailRefreshFailed(quint64 refreshAttemptId, quint64 selectionGeneration,
+                                   qint64 stationId, ev::user::ApiError error);
     void rememberedSelectionInvalidated();
     void mutationPendingChanged(bool pending);
     void chargeFlowBlockedChanged(bool blocked);
@@ -112,6 +115,7 @@ private:
     std::optional<ev::user::Charger> associatedCharger_;
     std::optional<ev::user::RequestContext> pendingMutation_;
     std::optional<ev::user::RequestContext> pendingRead_;
+    std::optional<ev::user::RequestContext> lastHandledCurrentContext_;
     QString pendingFactsRequestId_;
     quint64 pendingFactsPageGeneration_ = 0;
     quint64 pendingFactsReadEpoch_ = 0;

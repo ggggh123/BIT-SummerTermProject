@@ -28,6 +28,8 @@ public slots:
                             quint64 selectionGeneration, quint64 refreshAttemptId = 0);
     void applyChargeStationDetail(ev::user::StationDetailResult result,
                                   quint64 selectionGeneration, quint64 refreshAttemptId);
+    void failChargeStationDetail(quint64 refreshAttemptId, quint64 selectionGeneration,
+                                 qint64 stationId, ev::user::ApiError error);
     void displayStations(ev::user::StationListResult result);
     void displayForecast(ev::user::ForecastLatestResult result);
     void displayStationDetail(ev::user::StationDetailResult result);

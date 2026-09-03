@@ -81,6 +81,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     });
     connect(userApi_, &UserApi::loginSucceeded, this, [this](const ev::user::User &) {
         rememberedSelection_.reset();
+        deferredSelectionInvalidation_.reset();
         guardContext_ = userApi_->loadCurrentOrder(
             0, 0, ev::user::ChargeOperation::Guard);
     });
@@ -94,7 +95,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         }
         authoritativeActiveOrder_ = result.order;
         hasActiveOrder_ = result.order.has_value();
-        chargePage_->observeAuthoritativeCurrent(result);
+        chargePage_->observeAuthoritativeCurrent(context, result);
         updateAuthenticatedNavigation();
         if (!guardContext_.has_value() || context != *guardContext_) {
             return;
@@ -174,15 +175,20 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     connect(nearbyPage_, &NearbyPage::selectionInvalidated, this,
             [this](quint64 selectionGeneration) {
         if (chargeFlowBlocked_) {
+            if (!deferredSelectionInvalidation_.has_value()
+                || selectionGeneration > *deferredSelectionInvalidation_) {
+                deferredSelectionInvalidation_ = selectionGeneration;
+            }
             return;
         }
-        rememberedSelection_.reset();
-        chargePage_->invalidateSelection(selectionGeneration);
+        applySelectionInvalidation(selectionGeneration);
     });
     connect(chargePage_, &ChargePage::nearbyRefreshRequested,
             nearbyPage_, &NearbyPage::refreshAfterCharge);
     connect(chargePage_, &ChargePage::nearbyDetailRefreshReady,
             nearbyPage_, &NearbyPage::applyChargeStationDetail);
+    connect(chargePage_, &ChargePage::nearbyDetailRefreshFailed,
+            nearbyPage_, &NearbyPage::failChargeStationDetail);
     connect(nearbyPage_, &NearbyPage::chargeRefreshCommitted,
             chargePage_, &ChargePage::nearbyRefreshCommitted);
     connect(nearbyPage_, &NearbyPage::chargeRefreshFailed,
@@ -197,9 +203,32 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             nearbyPage_, &NearbyPage::cancelChargeRefresh);
     connect(chargePage_, &ChargePage::chargeFlowBlockedChanged, this, [this](bool blocked) {
         chargeFlowBlocked_ = blocked;
+        if (!blocked && deferredSelectionInvalidation_.has_value()) {
+            const quint64 selectionGeneration = *deferredSelectionInvalidation_;
+            deferredSelectionInvalidation_.reset();
+            applySelectionInvalidation(selectionGeneration);
+        }
         updateAuthenticatedNavigation();
     });
-    connect(chargePage_, &ChargePage::backRequested, this, [this] {
+    connect(chargePage_, &ChargePage::backRequested, this, [this](qint64) {
+        const bool authoritativeActive = authoritativeActiveOrder_.has_value()
+            && (authoritativeActiveOrder_->status == QStringLiteral("reserved")
+                || authoritativeActiveOrder_->status == QStringLiteral("charging"));
+        if (authoritativeActive) {
+            std::optional<ev::user::StationSelection> matching;
+            if (rememberedSelection_.has_value()
+                && rememberedSelection_->station.stationId
+                    == authoritativeActiveOrder_->stationId
+                && rememberedSelection_->charger.chargerId
+                    == authoritativeActiveOrder_->chargerId) {
+                matching = rememberedSelection_;
+            }
+            chargePage_->enterOrder(*authoritativeActiveOrder_, matching);
+            chargePage_->resume();
+            pages_->setCurrentWidget(chargePage_);
+            return;
+        }
+        chargePage_->leavePage();
         hasActiveOrder_ = false;
         authoritativeActiveOrder_.reset();
         rememberedSelection_.reset();
@@ -263,4 +292,10 @@ void MainWindow::updateAuthenticatedNavigation()
     currentOrderNavigationButton_->setVisible(hasActiveOrder_);
     currentOrderNavigationButton_->setEnabled(!chargeFlowBlocked_ && hasActiveOrder_);
     profileNavigationButton_->setEnabled(!chargeFlowBlocked_);
+}
+
+void MainWindow::applySelectionInvalidation(quint64 selectionGeneration)
+{
+    rememberedSelection_.reset();
+    chargePage_->invalidateSelection(selectionGeneration);
 }

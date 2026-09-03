@@ -360,6 +360,20 @@ void NearbyPage::applyChargeStationDetail(ev::user::StationDetailResult result,
     finishChargeRefreshIfReady();
 }
 
+void NearbyPage::failChargeStationDetail(quint64 refreshAttemptId,
+                                         quint64 selectionGeneration,
+                                         qint64 stationId,
+                                         ev::user::ApiError error)
+{
+    if (!chargeRefreshAttemptId_.has_value()
+        || *chargeRefreshAttemptId_ != refreshAttemptId
+        || *chargeRefreshSelectionGeneration_ != selectionGeneration
+        || *chargeRefreshStationId_ != stationId) {
+        return;
+    }
+    finishChargeRefreshFailed(error);
+}
+
 void NearbyPage::displayStations(ev::user::StationListResult result)
 {
     abandonChargeRefresh();
@@ -671,6 +685,16 @@ void NearbyPage::finishChargeRefreshFailed(const ev::user::ApiError &error)
     const quint64 selectionGeneration = *chargeRefreshSelectionGeneration_;
     const qint64 stationId = *chargeRefreshStationId_;
     resetChargeRefresh();
+    if (pendingStationsSelectionGeneration_.has_value()) {
+        cancelPendingStationList();
+    }
+    if (pendingForecastRefreshAttemptId_ == attemptId
+        && !pendingForecastRequestId_.isEmpty()) {
+        userApi_->cancelSafeRead(pendingForecastRequestId_);
+        pendingForecastRequestId_.clear();
+        pendingForecastSelectionGeneration_.reset();
+        pendingForecastRefreshAttemptId_.reset();
+    }
     if (attemptId != 0) {
         emit chargeRefreshFailed(attemptId, selectionGeneration, stationId, error);
     }

@@ -13,6 +13,7 @@ public:
 
 private:
     void updateAuthenticatedNavigation();
+    void applySelectionInvalidation(quint64 selectionGeneration);
 
     class TcpJsonClient *client_;
     class UserApi *userApi_;
@@ -33,4 +34,5 @@ private:
     std::optional<ev::user::Order> authoritativeActiveOrder_;
     std::optional<ev::user::StationSelection> rememberedSelection_;
     std::optional<ev::user::RequestContext> guardContext_;
+    std::optional<quint64> deferredSelectionInvalidation_;
 };
