@@ -82,21 +82,17 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     connect(userApi_, &UserApi::loginSucceeded, this, [this](const ev::user::User &) {
         rememberedSelection_.reset();
         deferredSelectionInvalidation_.reset();
+        mutationAuthorityStamps_.clear();
+        authoritativeActiveOrder_.reset();
+        hasActiveOrder_ = false;
+        ++authorityRevision_;
+        updateAuthenticatedNavigation();
         guardContext_ = userApi_->loadCurrentOrder(
             0, 0, ev::user::ChargeOperation::Guard);
     });
     connect(userApi_, &UserApi::currentOrderLoaded, this,
             [this](const ev::user::RequestContext &context,
                    const ev::user::CurrentOrderResult &result) {
-        if (result.order.has_value() && rememberedSelection_.has_value()
-            && (rememberedSelection_->station.stationId != result.order->stationId
-                || rememberedSelection_->charger.chargerId != result.order->chargerId)) {
-            rememberedSelection_.reset();
-        }
-        authoritativeActiveOrder_ = result.order;
-        hasActiveOrder_ = result.order.has_value();
-        chargePage_->observeAuthoritativeCurrent(context, result);
-        updateAuthenticatedNavigation();
         if (!guardContext_.has_value() || context != *guardContext_) {
             return;
         }
@@ -113,7 +109,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             }
             chargePage_->enterGuardOrder(*result.order, matching);
         }
-        if (hasActiveOrder_) {
+        if (result.order.has_value()) {
             pages_->setCurrentWidget(chargePage_);
         } else {
             pages_->setCurrentWidget(nearbyPage_);
@@ -126,8 +122,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             return;
         }
         guardContext_.reset();
-        hasActiveOrder_ = false;
-        authoritativeActiveOrder_.reset();
+        clearActiveOrder(0, true);
         authenticatedNavigation_->setVisible(false);
         pages_->setCurrentWidget(loginPage_);
         loginPage_->setError(QStringLiteral("当前订单加载失败，请重新登录"));
@@ -201,6 +196,51 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     chargePage_->setNearbyRefreshAvailable(true);
     connect(chargePage_, &ChargePage::chargeSafeReadsInvalidated,
             nearbyPage_, &NearbyPage::cancelChargeRefresh);
+    connect(chargePage_, &ChargePage::currentAuthorityObserved, this,
+            [this](const ev::user::RequestContext &context,
+                   const ev::user::CurrentOrderResult &result,
+                   bool pageOwned, qint64 resolvedOwnerOrderId) {
+        if (result.order.has_value()) {
+            adoptActiveOrder(*result.order);
+            return;
+        }
+        const bool guardOwned = guardContext_.has_value() && context == *guardContext_;
+        if (guardOwned) {
+            clearActiveOrder(0, true);
+        } else if (pageOwned) {
+            clearActiveOrder(resolvedOwnerOrderId);
+        }
+    });
+    connect(chargePage_, &ChargePage::mutationDispatched, this,
+            [this](const ev::user::RequestContext &context, qint64 subjectOrderId) {
+        mutationAuthorityStamps_.insert(
+            context.requestId, {authorityRevision_, subjectOrderId});
+    });
+    connect(chargePage_, &ChargePage::mutationAuthorityObserved, this,
+            [this](const ev::user::RequestContext &context,
+                   const ev::user::Order &order) {
+        const auto stamp = mutationAuthorityStamps_.constFind(context.requestId);
+        if (stamp == mutationAuthorityStamps_.cend()) {
+            return;
+        }
+        const bool newerDifferentAuthority = stamp->revisionAtDispatch != authorityRevision_
+            && authoritativeActiveOrder_.has_value()
+            && authoritativeActiveOrder_->orderId != order.orderId;
+        if (newerDifferentAuthority) {
+            return;
+        }
+        const bool active = order.status == QStringLiteral("reserved")
+            || order.status == QStringLiteral("charging");
+        if (active) {
+            adoptActiveOrder(order);
+        } else {
+            clearActiveOrder(order.orderId);
+        }
+    });
+    connect(chargePage_, &ChargePage::mutationFinished, this,
+            [this](const ev::user::RequestContext &context) {
+        mutationAuthorityStamps_.remove(context.requestId);
+    });
     connect(chargePage_, &ChargePage::chargeFlowBlockedChanged, this, [this](bool blocked) {
         chargeFlowBlocked_ = blocked;
         if (!blocked && deferredSelectionInvalidation_.has_value()) {
@@ -236,30 +276,6 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         currentOrderNavigationButton_->setVisible(false);
         updateAuthenticatedNavigation();
         pages_->setCurrentWidget(nearbyPage_);
-    });
-    connect(chargePage_, &ChargePage::activeOrderResolved, this, [this](bool active) {
-        hasActiveOrder_ = active;
-        if (!active) {
-            authoritativeActiveOrder_.reset();
-        }
-        updateAuthenticatedNavigation();
-    });
-    connect(userApi_, &UserApi::chargeOrderChanged, this,
-            [this](const ev::user::RequestContext &, const ev::user::Order &order) {
-        hasActiveOrder_ = order.status == QStringLiteral("reserved")
-            || order.status == QStringLiteral("charging");
-        if (hasActiveOrder_) {
-            authoritativeActiveOrder_ = order;
-        } else {
-            authoritativeActiveOrder_.reset();
-        }
-        updateAuthenticatedNavigation();
-    });
-    connect(userApi_, &UserApi::chargeSettled, this,
-            [this](const ev::user::RequestContext &, const ev::user::Order &, qint64) {
-        hasActiveOrder_ = false;
-        authoritativeActiveOrder_.reset();
-        updateAuthenticatedNavigation();
     });
     connect(nearbyPage_, &NearbyPage::navigationRequested, this,
             [this](ev::user::GeoPoint origin, ev::user::Station station) {
@@ -298,4 +314,33 @@ void MainWindow::applySelectionInvalidation(quint64 selectionGeneration)
 {
     rememberedSelection_.reset();
     chargePage_->invalidateSelection(selectionGeneration);
+}
+
+void MainWindow::adoptActiveOrder(const ev::user::Order &order)
+{
+    if (rememberedSelection_.has_value()
+        && (rememberedSelection_->station.stationId != order.stationId
+            || rememberedSelection_->charger.chargerId != order.chargerId)) {
+        rememberedSelection_.reset();
+    }
+    authoritativeActiveOrder_ = order;
+    hasActiveOrder_ = true;
+    ++authorityRevision_;
+    updateAuthenticatedNavigation();
+}
+
+void MainWindow::clearActiveOrder(qint64 resolvedOwnerOrderId, bool force)
+{
+    if (!force && authoritativeActiveOrder_.has_value()
+        && (resolvedOwnerOrderId <= 0
+            || authoritativeActiveOrder_->orderId != resolvedOwnerOrderId)) {
+        return;
+    }
+    const bool changed = authoritativeActiveOrder_.has_value() || hasActiveOrder_;
+    authoritativeActiveOrder_.reset();
+    hasActiveOrder_ = false;
+    if (changed || force) {
+        ++authorityRevision_;
+    }
+    updateAuthenticatedNavigation();
 }

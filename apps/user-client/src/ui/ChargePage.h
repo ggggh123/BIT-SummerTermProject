@@ -41,7 +41,13 @@ public slots:
 
 signals:
     void backRequested(qint64 presentedOrderId);
-    void activeOrderResolved(bool active);
+    void currentAuthorityObserved(ev::user::RequestContext context,
+                                  ev::user::CurrentOrderResult result,
+                                  bool pageOwned, qint64 resolvedOwnerOrderId);
+    void mutationDispatched(ev::user::RequestContext context, qint64 subjectOrderId);
+    void mutationAuthorityObserved(ev::user::RequestContext context,
+                                   ev::user::Order order);
+    void mutationFinished(ev::user::RequestContext context);
     void nearbyRefreshRequested(ev::user::GeoPoint origin, qint64 stationId,
                                 quint64 selectionGeneration, quint64 refreshAttemptId);
     void nearbyDetailRefreshReady(ev::user::StationDetailResult result,
@@ -110,12 +116,14 @@ private:
     quint64 sessionGeneration_ = 0;
     quint64 selectionGeneration_ = 0;
     quint64 readEpoch_ = 0;
+    qint64 pendingReadOwnerOrderId_ = 0;
+    qint64 pendingMutationSubjectOrderId_ = 0;
+    bool pendingMutationSuperseded_ = false;
     std::optional<ev::user::StationSelection> selection_;
     std::optional<ev::user::Order> order_;
     std::optional<ev::user::Charger> associatedCharger_;
     std::optional<ev::user::RequestContext> pendingMutation_;
     std::optional<ev::user::RequestContext> pendingRead_;
-    std::optional<ev::user::RequestContext> lastHandledCurrentContext_;
     QString pendingFactsRequestId_;
     quint64 pendingFactsPageGeneration_ = 0;
     quint64 pendingFactsReadEpoch_ = 0;

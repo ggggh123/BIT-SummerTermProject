@@ -312,6 +312,13 @@ private slots:
     void externalActiveOrderSupersedesTerminalExit();
     void deferredNearbyInvalidationPreventsSelectionResurrection_data();
     void deferredNearbyInvalidationPreventsSelectionResurrection();
+    void externalNullPreservesActiveAuthorityUntilOwnerReconciles();
+    void externalNullPreservesIdleSelection();
+    void lateMutationCannotOverwriteNewerAuthority_data();
+    void lateMutationCannotOverwriteNewerAuthority();
+    void lateMutationFailureCannotDisruptNewerAuthority();
+    void reserveFactsFailureRemainsRetryable_data();
+    void reserveFactsFailureRemainsRetryable();
     void nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates();
     void profileActionsUseOwnedSessionAndAuthoritativeResponses();
     void profileValidationAndFailuresPreserveCachedUser();
@@ -2078,7 +2085,6 @@ void UserApiTest::activeOrderExistsCannotBeBypassedBeforeReconciliation()
     const auto guard = takeRequest(peer.data());
     reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
-
     auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
     const ev::user::GeoPoint origin{39.958, 116.317};
     const auto station = stationValue();
@@ -3588,6 +3594,490 @@ void UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection()
         QCOMPARE(unavailable.size(), 0);
         QTRY_VERIFY(window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"))->isEnabled());
     }
+}
+
+void UserApiTest::externalNullPreservesActiveAuthorityUntilOwnerReconciles()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    phone->setText(QString::fromLatin1(kMobile));
+    window.findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("external-null-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto guard = takeRequest(peer.data());
+    reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    QTRY_VERIFY(window.findChild<QWidget *>(QStringLiteral("authenticatedNavigation"))
+                    ->isVisibleTo(&window));
+
+    auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
+    auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
+    auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
+    auto *status = window.findChild<QLabel *>(QStringLiteral("chargeStatus"));
+    auto *start = window.findChild<QPushButton *>(QStringLiteral("chargeStartButton"));
+    auto *reserve = window.findChild<QPushButton *>(QStringLiteral("chargeReserveButton"));
+    auto *nearby = window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"));
+    auto *current = window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"));
+    auto *profile = window.findChild<QPushButton *>(QStringLiteral("profileNavigationButton"));
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    ev::user::Station station = stationValue();
+    station.forecastEnabled = false;
+    nearbyPage->displayStations({origin, {station}});
+    nearbyPage->displayStationDetail({station, {chargerValue()}});
+    nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
+    QTRY_VERIFY(reserve->isEnabled());
+
+    auto *api = window.findChild<UserApi *>();
+    (void)api->loadCurrentOrder(91, 91, ev::user::ChargeOperation::Guard);
+    const auto activeCurrent = takeRequest(peer.data());
+    reply(peer.data(), activeCurrent.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"),
+                       canonicalOrderObject(QStringLiteral("reserved"))}});
+    const auto activeFirst = takeRequest(peer.data());
+    const auto activeSecond = takeRequest(peer.data());
+    const auto activeDetail = activeFirst.action == QStringLiteral("station.detail")
+        ? activeFirst : activeSecond;
+    const auto activeList = activeFirst.action == QStringLiteral("station.list")
+        ? activeFirst : activeSecond;
+    QCOMPARE(activeDetail.action, QStringLiteral("station.detail"));
+    QCOMPARE(activeList.action, QStringLiteral("station.list"));
+    reply(peer.data(), activeDetail.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(7, 3, QStringLiteral("reserved")),
+                                  chargerObject(8, 3), chargerObject(9, 3),
+                                  chargerObject(10, 3, QStringLiteral("fault"))}}});
+    reply(peer.data(), activeList.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"),
+                       QJsonArray{stationObject(3, 0.1, true, false)}}});
+    QTRY_COMPARE(status->text(), QStringLiteral("已预约"));
+    QTRY_VERIFY(start->isEnabled());
+    QVERIFY(current->isVisible());
+    QVERIFY(current->isEnabled());
+    QVERIFY(!nearby->isEnabled());
+    QVERIFY(profile->isEnabled());
+
+    (void)api->loadCurrentOrder(92, 92, ev::user::ChargeOperation::Guard);
+    const auto independentNull = takeRequest(peer.data());
+    reply(peer.data(), independentNull.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    QTest::qWait(30);
+    QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(chargePage));
+    QCOMPARE(status->text(), QStringLiteral("已预约"));
+    QVERIFY(start->isEnabled());
+    QVERIFY(current->isVisible());
+    QVERIFY(current->isEnabled());
+    QVERIFY(!nearby->isEnabled());
+    QVERIFY(profile->isEnabled());
+
+    chargePage->setConnectionAvailable(false);
+    chargePage->setConnectionAvailable(true);
+    const auto ownedNull = takeRequest(peer.data());
+    QCOMPARE(ownedNull.action, QStringLiteral("order.current"));
+    reply(peer.data(), ownedNull.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    const auto idleFirst = takeRequest(peer.data());
+    const auto idleSecond = takeRequest(peer.data());
+    const auto idleDetail = idleFirst.action == QStringLiteral("station.detail")
+        ? idleFirst : idleSecond;
+    const auto idleList = idleFirst.action == QStringLiteral("station.list")
+        ? idleFirst : idleSecond;
+    QCOMPARE(idleDetail.action, QStringLiteral("station.detail"));
+    QCOMPARE(idleList.action, QStringLiteral("station.list"));
+    reply(peer.data(), idleList.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"),
+                       QJsonArray{stationObject(3, 0.1, true, false)}}});
+    reply(peer.data(), idleDetail.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(7, 3), chargerObject(8, 3),
+                                  chargerObject(9, 3, QStringLiteral("charging")),
+                                  chargerObject(10, 3, QStringLiteral("fault"))}}});
+    QTRY_VERIFY(reserve->isEnabled());
+    QVERIFY(!current->isVisible());
+    QVERIFY(nearby->isEnabled());
+    QVERIFY(profile->isEnabled());
+    QVERIFY(status->text().contains(QStringLiteral("已选择")));
+}
+
+void UserApiTest::externalNullPreservesIdleSelection()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    phone->setText(QString::fromLatin1(kMobile));
+    window.findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("idle-null-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto guard = takeRequest(peer.data());
+    reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    QTRY_VERIFY(window.findChild<QWidget *>(QStringLiteral("authenticatedNavigation"))
+                    ->isVisibleTo(&window));
+
+    auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    const auto station = stationValue();
+    nearbyPage->displayStations({origin, {station}});
+    nearbyPage->displayStationDetail({station, {chargerValue()}});
+    nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
+    auto *reserve = window.findChild<QPushButton *>(QStringLiteral("chargeReserveButton"));
+    auto *status = window.findChild<QLabel *>(QStringLiteral("chargeStatus"));
+    QTRY_VERIFY(reserve->isEnabled());
+
+    auto *api = window.findChild<UserApi *>();
+    (void)api->loadCurrentOrder(101, 101, ev::user::ChargeOperation::Guard);
+    const auto independentNull = takeRequest(peer.data());
+    reply(peer.data(), independentNull.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    QTest::qWait(30);
+    QVERIFY(reserve->isEnabled());
+    QVERIFY(status->text().contains(QStringLiteral("已选择")));
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+}
+
+void UserApiTest::lateMutationCannotOverwriteNewerAuthority_data()
+{
+    QTest::addColumn<bool>("settle");
+    QTest::addColumn<bool>("factsBeforeMutation");
+    QTest::newRow("cancel-b-facts-first") << false << true;
+    QTest::newRow("cancel-a-terminal-first") << false << false;
+    QTest::newRow("settle-b-facts-first") << true << true;
+    QTest::newRow("settle-a-terminal-first") << true << false;
+}
+
+void UserApiTest::lateMutationCannotOverwriteNewerAuthority()
+{
+    QFETCH(bool, settle);
+    QFETCH(bool, factsBeforeMutation);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    phone->setText(QString::fromLatin1(kMobile));
+    window.findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("crossed-authority-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto guard = takeRequest(peer.data());
+    QJsonObject orderA = canonicalOrderObject(
+        settle ? QStringLiteral("charging") : QStringLiteral("reserved"), settle);
+    reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderA}});
+    const auto factsA = takeRequest(peer.data());
+    QCOMPARE(factsA.action, QStringLiteral("station.detail"));
+    reply(peer.data(), factsA.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(7, 3, settle ? QStringLiteral("charging")
+                                                            : QStringLiteral("reserved")),
+                                  chargerObject(8, 3), chargerObject(9, 3),
+                                  chargerObject(10, 3, QStringLiteral("fault"))}}});
+
+    auto *api = window.findChild<UserApi *>();
+    auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
+    auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
+    auto *status = window.findChild<QLabel *>(QStringLiteral("chargeStatus"));
+    auto *mutationButton = window.findChild<QPushButton *>(settle
+        ? QStringLiteral("chargeSettleButton") : QStringLiteral("chargeCancelButton"));
+    QTRY_VERIFY(mutationButton->isEnabled());
+    QSignalSpy changed(api, &UserApi::chargeOrderChanged);
+    QSignalSpy settled(api, &UserApi::chargeSettled);
+    QSignalSpy userApplied(api, &UserApi::sessionUserApplied);
+    mutationButton->click();
+    const auto mutationA = takeRequest(peer.data());
+    QCOMPARE(mutationA.action, settle ? QStringLiteral("charge.settle")
+                                      : QStringLiteral("order.cancel"));
+
+    (void)api->loadCurrentOrder(201, 201, ev::user::ChargeOperation::Guard);
+    const auto currentB = takeRequest(peer.data());
+    QJsonObject orderB = canonicalOrderObject(QStringLiteral("reserved"), false, 8, 4);
+    orderB.insert(QStringLiteral("orderId"), 101);
+    orderB.insert(QStringLiteral("stationName"), QStringLiteral("测试充电站4"));
+    reply(peer.data(), currentB.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderB}});
+    const auto factsB = takeRequest(peer.data());
+    QCOMPARE(factsB.action, QStringLiteral("station.detail"));
+    const auto replyFactsB = [&] {
+        reply(peer.data(), factsB.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(4, 0.0, false, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(8, 4, QStringLiteral("reserved")),
+                                      chargerObject(9, 4), chargerObject(10, 4),
+                                      chargerObject(11, 4, QStringLiteral("fault"))}}});
+    };
+    const auto replyMutationA = [&] {
+        if (settle) {
+            reply(peer.data(), mutationA.requestId, true, QStringLiteral("OK"), QString(),
+                  QJsonObject{{QStringLiteral("order"),
+                               canonicalOrderObject(QStringLiteral("completed"))},
+                              {QStringLiteral("balanceFen"), 7'777}});
+        } else {
+            reply(peer.data(), mutationA.requestId, true, QStringLiteral("OK"), QString(),
+                  QJsonObject{{QStringLiteral("order"),
+                               canonicalOrderObject(QStringLiteral("cancelled"))}});
+        }
+    };
+    if (factsBeforeMutation) {
+        replyFactsB();
+        QTRY_COMPARE(status->text(), QStringLiteral("已预约"));
+        replyMutationA();
+    } else {
+        replyMutationA();
+        replyFactsB();
+    }
+
+    auto *startB = window.findChild<QPushButton *>(QStringLiteral("chargeStartButton"));
+    auto *back = window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"));
+    auto *nearby = window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"));
+    auto *current = window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"));
+    QTRY_COMPARE(status->text(), QStringLiteral("已预约"));
+    QTRY_VERIFY(startB->isEnabled());
+    QVERIFY(!back->isEnabled());
+    QVERIFY(!nearby->isEnabled());
+    QVERIFY(current->isVisible());
+    QVERIFY(current->isEnabled());
+    QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(chargePage));
+    if (settle) {
+        QTRY_COMPARE(api->sessionUser()->balanceFen, qint64{7'777});
+        QCOMPARE(settled.size(), 1);
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(userApplied.size(), 1);
+        QCOMPARE(userApplied.at(0).at(1).toULongLong(), quint64{1});
+        QCOMPARE(userApplied.at(0).at(2).toULongLong(), quint64{2});
+    } else {
+        QCOMPARE(api->sessionUser()->balanceFen, qint64{12'345});
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(settled.size(), 0);
+        QCOMPARE(userApplied.size(), 0);
+    }
+    QTest::qWait(30);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+
+    replyMutationA();
+    QTest::qWait(30);
+    QCOMPARE(status->text(), QStringLiteral("已预约"));
+    QCOMPARE(settled.size(), settle ? 1 : 0);
+    QCOMPARE(changed.size(), settle ? 0 : 1);
+    QCOMPARE(userApplied.size(), settle ? 1 : 0);
+    QCOMPARE(api->sessionUser()->balanceFen, settle ? qint64{7'777} : qint64{12'345});
+    back->click();
+    QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(chargePage));
+}
+
+void UserApiTest::lateMutationFailureCannotDisruptNewerAuthority()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    phone->setText(QString::fromLatin1(kMobile));
+    window.findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("crossed-failure-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto guard = takeRequest(peer.data());
+    reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"),
+                       canonicalOrderObject(QStringLiteral("reserved"))}});
+    const auto factsA = takeRequest(peer.data());
+    reply(peer.data(), factsA.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(7, 3, QStringLiteral("reserved")),
+                                  chargerObject(8, 3), chargerObject(9, 3),
+                                  chargerObject(10, 3, QStringLiteral("fault"))}}});
+    auto *cancel = window.findChild<QPushButton *>(QStringLiteral("chargeCancelButton"));
+    QTRY_VERIFY(cancel->isEnabled());
+    cancel->click();
+    const auto mutationA = takeRequest(peer.data());
+
+    auto *api = window.findChild<UserApi *>();
+    (void)api->loadCurrentOrder(301, 301, ev::user::ChargeOperation::Guard);
+    const auto currentB = takeRequest(peer.data());
+    QJsonObject orderB = canonicalOrderObject(QStringLiteral("reserved"), false, 8, 4);
+    orderB.insert(QStringLiteral("orderId"), 101);
+    orderB.insert(QStringLiteral("stationName"), QStringLiteral("测试充电站4"));
+    reply(peer.data(), currentB.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderB}});
+    const auto factsB = takeRequest(peer.data());
+    QCOMPARE(factsB.action, QStringLiteral("station.detail"));
+    reply(peer.data(), mutationA.requestId, false, QStringLiteral("DB_BUSY"),
+          QStringLiteral("old mutation busy"), QJsonObject{});
+    QTest::qWait(30);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+    reply(peer.data(), factsB.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(4, 0.0, false, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(8, 4, QStringLiteral("reserved")),
+                                  chargerObject(9, 4), chargerObject(10, 4),
+                                  chargerObject(11, 4, QStringLiteral("fault"))}}});
+    auto *status = window.findChild<QLabel *>(QStringLiteral("chargeStatus"));
+    auto *error = window.findChild<QLabel *>(QStringLiteral("chargeError"));
+    auto *startB = window.findChild<QPushButton *>(QStringLiteral("chargeStartButton"));
+    QTRY_COMPARE(status->text(), QStringLiteral("已预约"));
+    QTRY_VERIFY(startB->isEnabled());
+    QVERIFY(error->text().isEmpty());
+    QVERIFY(window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"))->isEnabled());
+    QVERIFY(!window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"))->isEnabled());
+}
+
+void UserApiTest::reserveFactsFailureRemainsRetryable_data()
+{
+    QTest::addColumn<int>("failureMode");
+    QTest::newRow("detail-transport-failure") << 0;
+    QTest::newRow("detail-missing-target") << 1;
+    QTest::newRow("detail-target-status-mismatch") << 2;
+}
+
+void UserApiTest::reserveFactsFailureRemainsRetryable()
+{
+    QFETCH(int, failureMode);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    phone->setText(QString::fromLatin1(kMobile));
+    window.findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("reserve-facts-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto guard = takeRequest(peer.data());
+    reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+    QTRY_VERIFY(window.findChild<QWidget *>(QStringLiteral("authenticatedNavigation"))
+                    ->isVisibleTo(&window));
+
+    auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
+    auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    ev::user::Station station = stationValue();
+    station.forecastEnabled = false;
+    nearbyPage->displayStations({origin, {station}});
+    nearbyPage->displayStationDetail({station, {chargerValue()}});
+    nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
+
+    auto *reserve = window.findChild<QPushButton *>(QStringLiteral("chargeReserveButton"));
+    auto *start = window.findChild<QPushButton *>(QStringLiteral("chargeStartButton"));
+    auto *cancel = window.findChild<QPushButton *>(QStringLiteral("chargeCancelButton"));
+    auto *retry = window.findChild<QPushButton *>(QStringLiteral("chargeRetryButton"));
+    auto *status = window.findChild<QLabel *>(QStringLiteral("chargeStatus"));
+    auto *nearby = window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"));
+    auto *current = window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"));
+    auto *profile = window.findChild<QPushButton *>(QStringLiteral("profileNavigationButton"));
+    QTRY_VERIFY(reserve->isEnabled());
+    QSignalSpy flow(chargePage, &ChargePage::chargeFlowBlockedChanged);
+    reserve->click();
+    const auto reserveMutation = takeRequest(peer.data());
+    QCOMPARE(reserveMutation.action, QStringLiteral("charge.reserve"));
+    QVERIFY(!nearby->isEnabled());
+    QVERIFY(!profile->isEnabled());
+    flow.clear();
+    reply(peer.data(), reserveMutation.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"),
+                       canonicalOrderObject(QStringLiteral("reserved"))}});
+    const auto first = takeRequest(peer.data());
+    const auto second = takeRequest(peer.data());
+    const auto detail = first.action == QStringLiteral("station.detail") ? first : second;
+    const auto list = first.action == QStringLiteral("station.list") ? first : second;
+    QCOMPARE(detail.action, QStringLiteral("station.detail"));
+    QCOMPARE(list.action, QStringLiteral("station.list"));
+    if (failureMode == 0) {
+        reply(peer.data(), detail.requestId, false, QStringLiteral("DB_BUSY"),
+              QStringLiteral("busy"), QJsonObject{});
+    } else if (failureMode == 1) {
+        reply(peer.data(), detail.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(8, 3), chargerObject(9, 3),
+                                      chargerObject(10, 3, QStringLiteral("charging")),
+                                      chargerObject(11, 3, QStringLiteral("fault"))}}});
+    } else {
+        reply(peer.data(), detail.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(7, 3), chargerObject(8, 3),
+                                      chargerObject(9, 3, QStringLiteral("charging")),
+                                      chargerObject(10, 3, QStringLiteral("fault"))}}});
+    }
+
+    QTRY_COMPARE(status->text(), QStringLiteral("已预约"));
+    QTRY_VERIFY(retry->isVisibleTo(&window));
+    QTRY_VERIFY(retry->isEnabled());
+    QVERIFY(!start->isEnabled());
+    QVERIFY(!cancel->isEnabled());
+    QVERIFY(!nearby->isEnabled());
+    QVERIFY(current->isVisible());
+    QVERIFY(!current->isEnabled());
+    QVERIFY(!profile->isEnabled());
+    for (const auto &arguments : flow) {
+        QVERIFY(arguments.at(0).toBool());
+    }
+
+    retry->click();
+    const auto reconciliation = takeRequest(peer.data());
+    QCOMPARE(reconciliation.action, QStringLiteral("order.current"));
+    QVERIFY(reconciliation.requestId != reserveMutation.requestId);
+    reply(peer.data(), reconciliation.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"),
+                       canonicalOrderObject(QStringLiteral("reserved"))}});
+    const auto retryFirst = takeRequest(peer.data());
+    const auto retrySecond = takeRequest(peer.data());
+    const auto retryDetail = retryFirst.action == QStringLiteral("station.detail")
+        ? retryFirst : retrySecond;
+    const auto retryList = retryFirst.action == QStringLiteral("station.list")
+        ? retryFirst : retrySecond;
+    QCOMPARE(retryDetail.action, QStringLiteral("station.detail"));
+    QCOMPARE(retryList.action, QStringLiteral("station.list"));
+    QVERIFY(retryDetail.action != QStringLiteral("charge.reserve"));
+    QVERIFY(retryList.action != QStringLiteral("charge.reserve"));
+    reply(peer.data(), retryList.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"),
+                       QJsonArray{stationObject(3, 0.1, true, false)}}});
+    reply(peer.data(), retryDetail.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(7, 3, QStringLiteral("reserved")),
+                                  chargerObject(8, 3), chargerObject(9, 3),
+                                  chargerObject(10, 3, QStringLiteral("fault"))}}});
+    QTRY_VERIFY(start->isEnabled());
+    QTRY_VERIFY(cancel->isEnabled());
+    QVERIFY(!retry->isVisibleTo(&window));
+    QVERIFY(current->isEnabled());
+    QVERIFY(!nearby->isEnabled());
+    QVERIFY(profile->isEnabled());
+    QTest::qWait(30);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
 }
 
 QTEST_MAIN(UserApiTest)

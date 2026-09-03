@@ -96,7 +96,10 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
             leavePage();
         }
         if (sessionChanged && pendingMutation_.has_value()) {
+            emit mutationFinished(*pendingMutation_);
             pendingMutation_.reset();
+            pendingMutationSubjectOrderId_ = 0;
+            pendingMutationSuperseded_ = false;
             emit mutationPendingChanged(false);
         }
         if (sessionChanged) {
@@ -112,7 +115,7 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
             selection_.reset();
             order_.reset();
             associatedCharger_.reset();
-            lastHandledCurrentContext_.reset();
+            pendingReadOwnerOrderId_ = 0;
         }
         sessionGeneration_ = sessionGeneration;
         updateChargeFlowBlock();
@@ -145,6 +148,12 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
                 break;
             }
         }
+        const bool reservedStatusMismatch = matched.has_value() && order_.has_value()
+            && order_->status == QStringLiteral("reserved")
+            && matched->status != QStringLiteral("reserved");
+        if (reservedStatusMismatch) {
+            matched.reset();
+        }
         if (order_.has_value()) {
             associatedCharger_ = matched;
         } else if (selection_.has_value() && matched.has_value()) {
@@ -155,7 +164,9 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
         if (!matched.has_value()) {
             const ev::user::ApiError failure{
                 completedRequestId, QStringLiteral("INVALID_RESPONSE"),
-                QStringLiteral("服务器返回的充电桩信息不匹配")};
+                reservedStatusMismatch
+                    ? QStringLiteral("服务器返回的预约充电桩状态不匹配")
+                    : QStringLiteral("服务器返回的充电桩信息不匹配")};
             if (exitRefreshRequired_) {
                 emit nearbyDetailRefreshFailed(exitRefreshAttemptId_,
                                                exitRefreshSelectionGeneration_,
@@ -254,14 +265,19 @@ void ChargePage::setNearbyRefreshAvailable(bool available)
 void ChargePage::observeAuthoritativeCurrent(const ev::user::RequestContext &context,
                                              const ev::user::CurrentOrderResult &result)
 {
-    if (lastHandledCurrentContext_.has_value()
-        && context == *lastHandledCurrentContext_) {
-        lastHandledCurrentContext_.reset();
-        return;
-    }
-    if (!pageActive_ || !result.order.has_value()
+    if (!result.order.has_value()
         || (result.order->status != QStringLiteral("reserved")
             && result.order->status != QStringLiteral("charging"))) {
+        emit currentAuthorityObserved(context, result, false, 0);
+        return;
+    }
+    if (pendingMutation_.has_value()
+        && (pendingMutationSubjectOrderId_ == 0
+            || pendingMutationSubjectOrderId_ != result.order->orderId)) {
+        pendingMutationSuperseded_ = true;
+    }
+    if (!pageActive_) {
+        emit currentAuthorityObserved(context, result, false, 0);
         return;
     }
     const bool selectionMismatch = selection_.has_value()
@@ -285,9 +301,9 @@ void ChargePage::observeAuthoritativeCurrent(const ev::user::RequestContext &con
         selection_.reset();
         emit rememberedSelectionInvalidated();
     }
-    emit activeOrderResolved(true);
     updateChargeFlowBlock();
     render();
+    emit currentAuthorityObserved(context, result, false, 0);
     requestFacts(true);
 }
 
@@ -448,6 +464,9 @@ void ChargePage::requestPoll()
         pageGeneration_, selectionGeneration_, ev::user::ChargeOperation::Poll);
     if (pendingRead_->requestId.isEmpty()) {
         pendingRead_.reset();
+        pendingReadOwnerOrderId_ = 0;
+    } else {
+        pendingReadOwnerOrderId_ = order_->orderId;
     }
 }
 
@@ -466,6 +485,9 @@ void ChargePage::requestReconciliation()
         pageGeneration_, selectionGeneration_, ev::user::ChargeOperation::Reconcile);
     if (pendingRead_->requestId.isEmpty()) {
         pendingRead_.reset();
+        pendingReadOwnerOrderId_ = 0;
+    } else {
+        pendingReadOwnerOrderId_ = order_.has_value() ? order_->orderId : 0;
     }
     updateChargeFlowBlock();
     render();
@@ -531,6 +553,7 @@ void ChargePage::invalidateSafeReads()
 {
     readEpoch_ = api_->invalidateChargeReads();
     pendingRead_.reset();
+    pendingReadOwnerOrderId_ = 0;
     if (!pendingFactsRequestId_.isEmpty()) {
         api_->cancelSafeRead(pendingFactsRequestId_);
     }
@@ -548,6 +571,8 @@ void ChargePage::beginMutation(ev::user::ChargeOperation operation)
     if (!pageActive_ || !connected_ || chargeFlowBlocked()) {
         return;
     }
+    pendingMutationSubjectOrderId_ = order_.has_value() ? order_->orderId : 0;
+    pendingMutationSuperseded_ = false;
     if (operation == ev::user::ChargeOperation::Reserve && selection_.has_value()) {
         pendingMutation_ = api_->reserveCharger(
             selection_->charger.chargerId, pageGeneration_, selectionGeneration_);
@@ -568,8 +593,14 @@ void ChargePage::beginMutation(ev::user::ChargeOperation operation)
     }
     if (pendingMutation_.has_value() && pendingMutation_->requestId.isEmpty()) {
         pendingMutation_.reset();
+        pendingMutationSubjectOrderId_ = 0;
+        pendingMutationSuperseded_ = false;
     } else if (pendingMutation_.has_value()) {
+        emit mutationDispatched(*pendingMutation_, pendingMutationSubjectOrderId_);
         emit mutationPendingChanged(true);
+    } else {
+        pendingMutationSubjectOrderId_ = 0;
+        pendingMutationSuperseded_ = false;
     }
     updateChargeFlowBlock();
     render();
@@ -582,8 +613,17 @@ void ChargePage::acceptMutation(const ev::user::RequestContext &context,
         return;
     }
     const bool updatePage = matchesMutationPage(context);
-    if (!updatePage) {
+    const bool currentDifferentActive = pendingMutationSuperseded_
+        && order_.has_value()
+        && (order_->status == QStringLiteral("reserved")
+            || order_->status == QStringLiteral("charging"))
+        && order_->orderId != order.orderId;
+    emit mutationAuthorityObserved(context, order);
+    emit mutationFinished(context);
+    if (!updatePage || currentDifferentActive) {
         pendingMutation_.reset();
+        pendingMutationSubjectOrderId_ = 0;
+        pendingMutationSuperseded_ = false;
         emit mutationPendingChanged(false);
         updateChargeFlowBlock();
         render();
@@ -603,37 +643,45 @@ void ChargePage::acceptMutation(const ev::user::RequestContext &context,
     const bool canRefreshNearby = terminal && nearbyRefreshAvailable_
         && selection_.has_value()
         && matchingSelection(*selection_, order);
+    const bool reserveFactsRequired = context.operation == ev::user::ChargeOperation::Reserve
+        && order.status == QStringLiteral("reserved");
     exitRefreshRequired_ = canRefreshNearby;
     exitRefreshFailed_ = false;
     exitRefreshAttemptId_ = 0;
     exitRefreshSelectionGeneration_ = canRefreshNearby ? selection_->selectionGeneration : 0;
     exitRefreshStationId_ = canRefreshNearby ? order.stationId : 0;
-    reconciliationRequired_ = canRefreshNearby;
-    const bool active = order.status == QStringLiteral("reserved")
-        || order.status == QStringLiteral("charging");
-    emit activeOrderResolved(active);
+    reconciliationRequired_ = canRefreshNearby || reserveFactsRequired;
     pendingMutation_.reset();
+    pendingMutationSubjectOrderId_ = 0;
+    pendingMutationSuperseded_ = false;
     emit mutationPendingChanged(false);
     updateChargeFlowBlock();
     render();
-    requestFacts(canRefreshNearby, canRefreshNearby);
+    requestFacts(canRefreshNearby || reserveFactsRequired, canRefreshNearby);
 }
 
 void ChargePage::handleCurrentOrder(const ev::user::RequestContext &context,
                                     const ev::user::CurrentOrderResult &result)
 {
-    if (!pendingRead_.has_value() || context != *pendingRead_
-        || !matchesPage(context) || context.readEpoch != readEpoch_) {
+    if (!pendingRead_.has_value() || context != *pendingRead_) {
+        observeAuthoritativeCurrent(context, result);
+        return;
+    }
+    if (!matchesPage(context) || context.readEpoch != readEpoch_) {
+        pendingRead_.reset();
+        pendingReadOwnerOrderId_ = 0;
         return;
     }
     const bool poll = context.operation == ev::user::ChargeOperation::Poll;
     const bool hardReconciliation = !poll && reconciliationRequired_;
+    const qint64 resolvedOwnerOrderId = pendingReadOwnerOrderId_;
     pendingRead_.reset();
+    pendingReadOwnerOrderId_ = 0;
     if (poll && order_.has_value() && result.order.has_value()
         && result.order->orderId != order_->orderId) {
+        observeAuthoritativeCurrent(context, result);
         return;
     }
-    lastHandledCurrentContext_ = context;
     const bool keepTerminalPresentation = !result.order.has_value()
         && exitRefreshRequired_ && order_.has_value()
         && (order_->status == QStringLiteral("completed")
@@ -664,9 +712,9 @@ void ChargePage::handleCurrentOrder(const ev::user::RequestContext &context,
     reconciliationRequired_ = factsRequired;
     factsFailed_ = false;
     error_->clear();
-    emit activeOrderResolved(result.order.has_value());
     updateChargeFlowBlock();
     render();
+    emit currentAuthorityObserved(context, result, true, resolvedOwnerOrderId);
     if (!poll && hasFactsTarget) {
         requestFacts(factsRequired, exitRefreshRequired_);
     }
@@ -682,6 +730,7 @@ void ChargePage::handleChargeFailure(const ev::user::RequestContext &context,
             return;
         }
         pendingRead_.reset();
+        pendingReadOwnerOrderId_ = 0;
         reconciliationRequired_ = true;
         error_->setText(localizedError(failure));
         updateChargeFlowBlock();
@@ -691,20 +740,40 @@ void ChargePage::handleChargeFailure(const ev::user::RequestContext &context,
     if (!pendingMutation_.has_value() || context != *pendingMutation_) {
         return;
     }
-    const bool updatePage = matchesMutationPage(context);
-    reconciliationRequired_ = true;
-    if (!updatePage) {
+    const bool supersededByDifferentAuthority = pendingMutationSuperseded_
+        && order_.has_value()
+        && (order_->status == QStringLiteral("reserved")
+            || order_->status == QStringLiteral("charging"))
+        && (pendingMutationSubjectOrderId_ == 0
+            || pendingMutationSubjectOrderId_ != order_->orderId);
+    emit mutationFinished(context);
+    if (supersededByDifferentAuthority) {
         pendingMutation_.reset();
+        pendingMutationSubjectOrderId_ = 0;
+        pendingMutationSuperseded_ = false;
         emit mutationPendingChanged(false);
         updateChargeFlowBlock();
         render();
         return;
     }
+    const bool updatePage = matchesMutationPage(context);
+    if (!updatePage) {
+        pendingMutation_.reset();
+        pendingMutationSubjectOrderId_ = 0;
+        pendingMutationSuperseded_ = false;
+        emit mutationPendingChanged(false);
+        updateChargeFlowBlock();
+        render();
+        return;
+    }
+    reconciliationRequired_ = true;
     invalidateSafeReads();
     pollTimer_->stop();
     readEpoch_ = api_->currentChargeReadEpoch();
     error_->setText(uncertain ? kUncertain : localizedError(failure));
     pendingMutation_.reset();
+    pendingMutationSubjectOrderId_ = 0;
+    pendingMutationSuperseded_ = false;
     emit mutationPendingChanged(false);
     updateChargeFlowBlock();
     render();
