@@ -336,7 +336,7 @@ Expected: FAIL.
 
 Provide connection badge, Run/Pause, simulated time, event count, charger table, Fault, Recover, Refresh and “Prepare for Reset” controls, plus newest-first event log. Prepare pauses telemetry and displays “请在管理端确认重置”; the simulator token never sends admin-only `demo.reset` and never touches a DB path. After reconnect/status refresh it shows that the reset state has been loaded.
 
-- [ ] **Step 4: Run all data/simulator verification**
+- [x] **Step 4: Run all data/simulator verification**
 
 ```bash
 python3 -m pytest database/tests -v
