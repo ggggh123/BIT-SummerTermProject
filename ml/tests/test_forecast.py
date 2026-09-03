@@ -210,9 +210,8 @@ class TestRunIdentity:
 
 # Helpers
 def build_supervised_split_train(csv_path):
-    from evml.features import build_supervised, chronological_split
+    from evml.features import chronological_split
     history = load_history(csv_path)
-    supervised = build_supervised(history)
     split = chronological_split(history)
     return split.train
 

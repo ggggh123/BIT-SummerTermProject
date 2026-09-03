@@ -105,55 +105,76 @@ def build_supervised(history: pd.DataFrame) -> pd.DataFrame:
     enriched = pd.concat(rows, ignore_index=True)
 
     # Now build horizon samples: for each (station, origin, horizon) pair,
-    # the target is the row at observed_at = origin + horizon hours
+    # the target is the row at observed_at = origin + horizon hours.
+    # Columns are converted to numpy arrays so per-row access is O(1);
+    # repeated DataFrame .loc lookups made the naive version quadratic.
     supervised_rows = []
+    horizon_deltas = [pd.Timedelta(hours=h) for h in HORIZONS]
     for sid, grp in enriched.groupby("station_id"):
-        g = grp.sort_values("observed_at").reset_index(drop=True).copy()
+        g = grp.sort_values("observed_at").reset_index(drop=True)
+
         ts_list = g["observed_at"].tolist()
         ts_to_idx = {ts: i for i, ts in enumerate(ts_list)}
 
-        for i, origin_ts in enumerate(ts_list):
-            # Need at least 24 prior rows for lags
-            if i < 24:
-                continue
-            for h in HORIZONS:
-                target_ts = origin_ts + pd.Timedelta(hours=h)
-                if target_ts not in ts_to_idx:
+        sid_int = int(sid)
+        pile = g["pile_count"].to_numpy()
+        rated = g["rated_power_kw"].to_numpy()
+        is_holiday = g["is_holiday"].to_numpy()
+        temperature = g["temperature_c"].to_numpy()
+        load_lag_1 = g["load_lag_1"].to_numpy()
+        load_lag_24 = g["load_lag_24"].to_numpy()
+        load_roll_6 = g["load_roll_6"].to_numpy()
+        load_roll_24 = g["load_roll_24"].to_numpy()
+        busy_lag_1 = g["busy_lag_1"].to_numpy()
+        busy_lag_24 = g["busy_lag_24"].to_numpy()
+        busy_roll_6 = g["busy_roll_6"].to_numpy()
+        busy_roll_24 = g["busy_roll_24"].to_numpy()
+        seasonal_load = g["seasonal_load_kw"].to_numpy()
+        seasonal_busy = g["seasonal_busy_count"].to_numpy()
+        load_kw = g["load_kw"].to_numpy()
+        busy_count = g["busy_count"].to_numpy()
+        source_max_at = g["source_max_at"].to_numpy()
+
+        for i in range(24, len(ts_list)):
+            origin_ts = ts_list[i]
+            for h, delta in zip(HORIZONS, horizon_deltas):
+                target_ts = origin_ts + delta
+                j = ts_to_idx.get(target_ts)
+                if j is None:
                     continue
-                j = ts_to_idx[target_ts]
 
                 row = {
-                    "station_id": int(sid),
+                    "station_id": sid_int,
                     "origin_at": origin_ts,
                     "target_at": target_ts,
                     "horizon_h": h,
-                    "pile_count": int(g.loc[i, "pile_count"]),
-                    "rated_power_kw": float(g.loc[i, "rated_power_kw"]),
+                    "pile_count": int(pile[i]),
+                    "rated_power_kw": float(rated[i]),
                     # Target calendar features (known at forecast time)
                     "target_hour_sin": _hour_sin(target_ts.hour),
                     "target_hour_cos": _hour_cos(target_ts.hour),
                     "target_dow_sin": _dow_sin(target_ts.dayofweek),
                     "target_dow_cos": _dow_cos(target_ts.dayofweek),
                     "target_is_weekend": int(target_ts.dayofweek >= 5),
-                    "target_is_holiday": int(g.loc[j, "is_holiday"]),
-                    "target_temperature_c": float(g.loc[j, "temperature_c"]),
+                    "target_is_holiday": int(is_holiday[j]),
+                    "target_temperature_c": float(temperature[j]),
                     # Lag/rolling features from origin
-                    "load_lag_1": float(g.loc[i, "load_lag_1"]),
-                    "load_lag_24": float(g.loc[i, "load_lag_24"]),
-                    "load_roll_6": float(g.loc[i, "load_roll_6"]),
-                    "load_roll_24": float(g.loc[i, "load_roll_24"]),
-                    "busy_lag_1": float(g.loc[i, "busy_lag_1"]),
-                    "busy_lag_24": float(g.loc[i, "busy_lag_24"]),
-                    "busy_roll_6": float(g.loc[i, "busy_roll_6"]),
-                    "busy_roll_24": float(g.loc[i, "busy_roll_24"]),
+                    "load_lag_1": float(load_lag_1[i]),
+                    "load_lag_24": float(load_lag_24[i]),
+                    "load_roll_6": float(load_roll_6[i]),
+                    "load_roll_24": float(load_roll_24[i]),
+                    "busy_lag_1": float(busy_lag_1[i]),
+                    "busy_lag_24": float(busy_lag_24[i]),
+                    "busy_roll_6": float(busy_roll_6[i]),
+                    "busy_roll_24": float(busy_roll_24[i]),
                     # Seasonal baseline
-                    "seasonal_load_kw": float(g.loc[i, "seasonal_load_kw"]),
-                    "seasonal_busy_count": float(g.loc[i, "seasonal_busy_count"]),
+                    "seasonal_load_kw": float(seasonal_load[i]),
+                    "seasonal_busy_count": float(seasonal_busy[i]),
                     # Targets
-                    "target_load_kw": float(g.loc[j, "load_kw"]),
-                    "target_busy_count": int(g.loc[j, "busy_count"]),
+                    "target_load_kw": float(load_kw[j]),
+                    "target_busy_count": int(busy_count[j]),
                     # Source tracking
-                    "source_max_at": g.loc[i, "source_max_at"],
+                    "source_max_at": source_max_at[i],
                 }
                 supervised_rows.append(row)
 
