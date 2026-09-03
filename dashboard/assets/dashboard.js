@@ -9,6 +9,7 @@ import {
   formatPercent,
   isForecastStale,
 } from './contracts.js';
+import { createPoller } from './poller.js';
 import {
   buildRevenueOption,
   buildLoadForecastOption,
@@ -214,7 +215,7 @@ function selectStation(snapshot, stationId) {
 
 export function renderSnapshot(snapshot) {
   lastSnapshot = snapshot;
-  setConnection('live', '已连接（实时快照）');
+  // Connection state is driven by the poller's onStatus, not by rendering.
   setGeneratedAt(snapshot);
   renderKpis(snapshot);
   renderStationPicker(snapshot);
@@ -257,21 +258,30 @@ async function boot() {
     }, 150);
   });
 
-  try {
-    const res = await fetch(`${SNAPSHOT_URL}?ts=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const snapshot = await res.json();
-    validateSnapshot(snapshot);
-    renderSnapshot(snapshot);
-  } catch (error) {
-    setConnection('error', '快照加载失败');
-    const note = el('load-note');
-    if (note) {
-      note.hidden = false;
-      note.textContent = `无法加载快照（${error.message}）。保留最后成功数据显示与轮询降级将在连接恢复后生效。`;
-    }
-    console.error('dashboard boot failed:', error);
-  }
+  const STATUS_LABELS = {
+    live: '已连接（实时快照）',
+    stale: '连接超时 · 显示最后成功数据',
+    cached: '正在展示缓存快照（非实时）',
+    error: '快照加载失败 · 保留旧数据',
+  };
+  createPoller({
+    fetchImpl: (url, options) => fetch(url, options),
+    liveUrl: SNAPSHOT_URL,
+    fallbackUrl: 'fallback/dashboard_snapshot.json',
+    intervalMs: 2000,
+    staleThresholdMs: 10000,
+    onData: (snapshot) => {
+      // Poller already validated; re-validate defensively before render.
+      validateSnapshot(snapshot);
+      renderSnapshot(snapshot);
+    },
+    onStatus: (state, info) => {
+      setConnection(state, STATUS_LABELS[state] || state);
+      if (state === 'live' && info.heartbeat && lastSnapshot) {
+        setGeneratedAt(lastSnapshot); // heartbeat: refresh time without redraw
+      }
+    },
+  }).start();
 }
 
 boot();
