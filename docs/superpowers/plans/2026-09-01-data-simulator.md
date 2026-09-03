@@ -370,7 +370,7 @@ git commit -m "feat(simulator): add visible controls and live telemetry demo"
 - Consumes: the frozen presentation forecast origin, schema/seed, then the acknowledged `runtime/ml/forecast_last_good.json` from ML Task 6.
 - Produces: `runtime/golden/demo.db`, `demo.db.sha256`, and a manifest naming the run ID/payload hash/144-record count.
 
-- [ ] **Step 1: Freeze and record the presentation forecast window**
+- [x] **Step 1: Freeze and record the presentation forecast window**
 
 #1 records the expected Sep 10 presentation slot; #4 and #5 freeze one explicit `DEMO_FORECAST_ORIGIN` such that horizons 1–24 cover that slot. #4 rebuilds the release base/history with the same cutoff before #5's final ML run:
 
@@ -396,6 +396,6 @@ sqlite3 runtime/golden/demo.db "PRAGMA integrity_check; SELECT count(*) FROM for
 
 Expected: `ok`, one active run and 144 forecast rows; manifest hash matches the final file and `request_log` is empty.
 
-- [ ] **Step 3: Commit only reproducible inputs/scripts and record the artifact hash**
+- [x] **Step 3: Commit only reproducible inputs/scripts and record the artifact hash**
 
 Follow the repository artifact policy decided in Foundation Task 1. If the DB is intentionally tracked for the classroom release, force-add only this explicit file and its manifest; otherwise package it through the release script and commit only the manifest. Never weaken the global `*.db` ignore broadly.
