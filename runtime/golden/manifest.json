@@ -1,0 +1,23 @@
+{
+  "name": "demo.db",
+  "schema_version": 1,
+  "run_id": "forecast-20260901T090000-b11664b1",
+  "payload_hash": "5ab2759c22230eebe9e2b8b4b057851f90ff89364bece1baedba4a5c8e994675",
+  "model_version": "load-ridge_busy-ridge-v1",
+  "generated_at": "2026-09-01T12:00:00+08:00",
+  "data_cutoff": "2026-09-01T09:00:00+08:00",
+  "row_counts": {
+    "admins": 1,
+    "users": 30,
+    "stations": 6,
+    "chargers": 48,
+    "orders": 431,
+    "telemetry": 0,
+    "station_hourly_history": 12960,
+    "forecast_runs": 1,
+    "forecasts": 144,
+    "events": 0,
+    "request_log": 0
+  },
+  "sha256": "97138f35a68e5f0963dd715e570a2bb27696731d883e22df80d339fd62ca12ad"
+}
