@@ -834,7 +834,14 @@ void ChargePageTest::ordinaryReconnectRejectsOutstandingPollReplayAfterFreshCurr
           QJsonObject{{QStringLiteral("order"),
                        orderObject(QStringLiteral("charging"), false, 3.0, 405, 180)}});
     QTRY_VERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("3.000")));
-    QVERIFY(button(page, "chargeStopButton")->isEnabled());
+    QVERIFY(!button(page, "chargeStopButton")->isEnabled());
+    const auto facts = takeRequest(secondPeer.data());
+    QCOMPARE(facts.action, QStringLiteral("station.detail"));
+    reply(secondPeer.data(), facts.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(0)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(QStringLiteral("charging"))}}});
+    QTRY_VERIFY(button(page, "chargeStopButton")->isEnabled());
 }
 
 void ChargePageTest::factsFailureRetryReconcilesCurrentBeforeRestoringReservedActions()

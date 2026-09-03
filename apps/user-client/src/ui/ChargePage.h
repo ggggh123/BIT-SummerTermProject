@@ -23,18 +23,25 @@ public:
                     std::optional<ev::user::StationSelection> rememberedSelection = std::nullopt);
     void enterGuardOrder(const ev::user::Order &order,
                          std::optional<ev::user::StationSelection> rememberedSelection = std::nullopt);
+    void setNearbyRefreshAvailable(bool available);
     void resume();
     void leavePage();
     void invalidateSelection(quint64 selectionGeneration);
 
 public slots:
     void setConnectionAvailable(bool available);
+    void nearbyRefreshCommitted(quint64 selectionGeneration);
+    void nearbyRefreshFailed(quint64 selectionGeneration, ev::user::ApiError error);
+    void nearbyRefreshUnavailable(quint64 selectionGeneration);
 
 signals:
     void backRequested();
     void activeOrderResolved(bool active);
     void nearbyRefreshRequested(ev::user::GeoPoint origin, qint64 stationId,
                                 quint64 selectionGeneration);
+    void nearbyDetailRefreshReady(ev::user::StationDetailResult result,
+                                  quint64 selectionGeneration);
+    void rememberedSelectionInvalidated();
     void mutationPendingChanged(bool pending);
     void chargeFlowBlockedChanged(bool blocked);
     void chargeSafeReadsInvalidated();
@@ -45,7 +52,7 @@ private:
     void updatePolling();
     void requestPoll();
     void requestReconciliation();
-    void requestFacts(bool gateActions = false);
+    void requestFacts(bool gateActions = false, bool requireNearbyCommit = false);
     void invalidateSafeReads();
     void beginMutation(ev::user::ChargeOperation operation);
     void acceptMutation(const ev::user::RequestContext &context,
@@ -85,6 +92,10 @@ private:
     bool factsGateRequired_ = false;
     bool reconciledNoOrder_ = false;
     bool reportedChargeFlowBlocked_ = false;
+    bool exitRefreshRequired_ = false;
+    bool exitRefreshFailed_ = false;
+    bool nearbyRefreshAvailable_ = false;
+    quint64 exitRefreshSelectionGeneration_ = 0;
     quint64 pageGeneration_ = 0;
     quint64 sessionGeneration_ = 0;
     quint64 selectionGeneration_ = 0;

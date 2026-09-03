@@ -653,7 +653,8 @@ void UserApi::cancelSafeRead(const QString &requestId)
     }
     if (it->operation != Operation::ChargeCurrent
         && it->operation != Operation::StationDetail
-        && it->operation != Operation::NearbyStations) {
+        && it->operation != Operation::NearbyStations
+        && it->operation != Operation::LatestForecast) {
         return;
     }
     client_->cancelRequest(requestId);

@@ -26,6 +26,8 @@ public slots:
     void cancelChargeRefresh();
     void refreshAfterCharge(ev::user::GeoPoint origin, qint64 stationId,
                             quint64 selectionGeneration);
+    void applyChargeStationDetail(ev::user::StationDetailResult result,
+                                  quint64 selectionGeneration);
     void displayStations(ev::user::StationListResult result);
     void displayForecast(ev::user::ForecastLatestResult result);
     void displayStationDetail(ev::user::StationDetailResult result);
@@ -34,6 +36,9 @@ signals:
     void chargerSelected(ev::user::StationSelection selection);
     void navigationRequested(ev::user::GeoPoint origin, ev::user::Station station);
     void selectionInvalidated(quint64 selectionGeneration);
+    void chargeRefreshCommitted(quint64 selectionGeneration);
+    void chargeRefreshFailed(quint64 selectionGeneration, ev::user::ApiError error);
+    void chargeRefreshUnavailable(quint64 selectionGeneration);
 
 private:
     friend class UserApiTest;
@@ -45,6 +50,8 @@ private:
     void requestStationDetail(const ev::user::Station &station);
     void cancelPendingStationList();
     void applyStations(ev::user::StationListResult result, bool invalidateCurrentSelection);
+    void applyStationDetail(ev::user::StationDetailResult result, bool invalidateCurrentSelection);
+    void finishChargeRefreshIfReady();
     void invalidateSelection();
     void rebuildStationCards();
     void showError(const QString &message);
@@ -73,6 +80,10 @@ private:
     quint64 pendingStationsOriginGeneration_ = 0;
     quint64 pendingStationsSearchGeneration_ = 0;
     std::optional<quint64> pendingStationsSelectionGeneration_;
+    std::optional<quint64> pendingForecastSelectionGeneration_;
+    std::optional<quint64> chargeRefreshGeneration_;
+    bool chargeListApplied_ = false;
+    bool chargeDetailApplied_ = false;
     quint64 pendingForecastOriginGeneration_ = 0;
     quint64 pendingForecastSearchGeneration_ = 0;
     quint64 pendingDetailOriginGeneration_ = 0;

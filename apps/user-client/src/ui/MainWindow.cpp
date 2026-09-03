@@ -87,6 +87,11 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     connect(userApi_, &UserApi::currentOrderLoaded, this,
             [this](const ev::user::RequestContext &context,
                    const ev::user::CurrentOrderResult &result) {
+        if (result.order.has_value() && rememberedSelection_.has_value()
+            && (rememberedSelection_->station.stationId != result.order->stationId
+                || rememberedSelection_->charger.chargerId != result.order->chargerId)) {
+            rememberedSelection_.reset();
+        }
         authoritativeActiveOrder_ = result.order;
         hasActiveOrder_ = result.order.has_value();
         updateAuthenticatedNavigation();
@@ -175,6 +180,18 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     });
     connect(chargePage_, &ChargePage::nearbyRefreshRequested,
             nearbyPage_, &NearbyPage::refreshAfterCharge);
+    connect(chargePage_, &ChargePage::nearbyDetailRefreshReady,
+            nearbyPage_, &NearbyPage::applyChargeStationDetail);
+    connect(nearbyPage_, &NearbyPage::chargeRefreshCommitted,
+            chargePage_, &ChargePage::nearbyRefreshCommitted);
+    connect(nearbyPage_, &NearbyPage::chargeRefreshFailed,
+            chargePage_, &ChargePage::nearbyRefreshFailed);
+    connect(nearbyPage_, &NearbyPage::chargeRefreshUnavailable,
+            chargePage_, &ChargePage::nearbyRefreshUnavailable);
+    connect(chargePage_, &ChargePage::rememberedSelectionInvalidated, this, [this] {
+        rememberedSelection_.reset();
+    });
+    chargePage_->setNearbyRefreshAvailable(true);
     connect(chargePage_, &ChargePage::chargeSafeReadsInvalidated,
             nearbyPage_, &NearbyPage::cancelChargeRefresh);
     connect(chargePage_, &ChargePage::chargeFlowBlockedChanged, this, [this](bool blocked) {
