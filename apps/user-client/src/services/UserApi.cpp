@@ -2,11 +2,11 @@
 
 #include "contracts/Actions.h"
 #include "contracts/Statuses.h"
+#include "domain/ContractTimestamp.h"
 #include "domain/Formatters.h"
 #include "net/TcpJsonClient.h"
 #include "protocol/Envelope.h"
 
-#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
@@ -24,8 +24,6 @@ const QString kInvalidResponse = QStringLiteral("INVALID_RESPONSE");
 const QString kInvalidResponseMessage = QStringLiteral("服务器响应无效");
 const QString kUncertainMessage = QStringLiteral("结果未确认，请重新连接后刷新账户信息");
 const QRegularExpression kMobilePattern(QStringLiteral("^1[3-9][0-9]{9}$"));
-const QRegularExpression kTimestampPattern(
-    QStringLiteral("^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.\\d+)?\\+08:00$"));
 const QRegularExpression kPayloadHashPattern(QStringLiteral("^[0-9a-f]{64}$"));
 
 bool hasExactlyKeys(const QJsonObject &object, std::initializer_list<const char *> keys)
@@ -82,11 +80,7 @@ bool validTimestamp(const QJsonValue &value, QString *result)
         return false;
     }
     const QString timestamp = value.toString();
-    if (!kTimestampPattern.match(timestamp).hasMatch()) {
-        return false;
-    }
-    const QDateTime dateTime = QDateTime::fromString(timestamp, Qt::ISODateWithMs);
-    if (!dateTime.isValid() || dateTime.offsetFromUtc() != 8 * 60 * 60) {
+    if (!ev::user::compareContractTimestamps(timestamp, timestamp).has_value()) {
         return false;
     }
     *result = timestamp;
@@ -211,8 +205,10 @@ bool parseForecastRun(const QJsonValue &value, ev::user::ForecastRun *run)
         || !object.value(QStringLiteral("stale")).isBool()) {
         return false;
     }
-    if (QDateTime::fromString(decoded.dataCutoff, Qt::ISODate)
-        > QDateTime::fromString(decoded.generatedAt, Qt::ISODate)) {
+    const auto cutoffOrder = ev::user::compareContractTimestamps(
+        decoded.dataCutoff, decoded.generatedAt);
+    if (!cutoffOrder.has_value()
+        || *cutoffOrder == ev::user::TimestampComparison::Later) {
         return false;
     }
     decoded.payloadHash = object.value(QStringLiteral("payloadHash")).toString();
@@ -349,7 +345,6 @@ bool parseLatestForecast(const QJsonObject &data,
     qint64 previousHorizon = 0;
     QSet<QString> unique;
     QHash<qint64, int> stationCounts;
-    const QDateTime cutoff = QDateTime::fromString(run.dataCutoff, Qt::ISODate);
     for (const QJsonValue &value : records) {
         ev::user::ForecastRecord record;
         if (!parseForecastRecord(value, &record)) {
@@ -361,8 +356,13 @@ bool parseLatestForecast(const QJsonObject &data,
             || record.predictedBusyCount + record.predictedIdleCount != expectedCount.value()
             || unique.contains(key)
             || (record.stationId < previousStationId)
-            || (record.stationId == previousStationId && record.horizonH <= previousHorizon)
-            || QDateTime::fromString(record.forecastAt, Qt::ISODate) != cutoff.addSecs(record.horizonH * 3600)) {
+            || (record.stationId == previousStationId && record.horizonH <= previousHorizon)) {
+            return false;
+        }
+        const auto forecastTimeOrder = ev::user::compareContractTimestamps(
+            record.forecastAt, run.dataCutoff, record.horizonH * 3600);
+        if (!forecastTimeOrder.has_value()
+            || *forecastTimeOrder != ev::user::TimestampComparison::Equal) {
             return false;
         }
         unique.insert(key);
@@ -497,17 +497,21 @@ bool parseOrderList(const QJsonObject &data, qint64 requestedLimit, qint64 userI
     if (items.size() > requestedLimit) {
         return false;
     }
-    QDateTime previousReservedAt;
+    QString previousReservedAt;
     for (const QJsonValue &value : items) {
         ev::user::Order order;
         if (!parseOrder(value, &order) || order.userId != userId) {
             return false;
         }
-        const QDateTime reservedAt = QDateTime::fromString(order.reservedAt, Qt::ISODate);
-        if (previousReservedAt.isValid() && reservedAt > previousReservedAt) {
-            return false;
+        if (!previousReservedAt.isEmpty()) {
+            const auto orderRelation = ev::user::compareContractTimestamps(
+                order.reservedAt, previousReservedAt);
+            if (!orderRelation.has_value()
+                || *orderRelation == ev::user::TimestampComparison::Later) {
+                return false;
+            }
         }
-        previousReservedAt = reservedAt;
+        previousReservedAt = order.reservedAt;
         decoded.items.append(std::move(order));
     }
     *result = std::move(decoded);

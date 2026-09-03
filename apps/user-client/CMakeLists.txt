@@ -7,6 +7,7 @@ find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Widgets Network WebEngineWidge
 add_library(ev_user_client_core STATIC
     src/app/UserAppConfig.cpp
     src/app/WebEngineRuntime.cpp
+    src/domain/ContractTimestamp.cpp
     src/domain/Formatters.cpp
     src/net/TcpJsonClient.cpp
     src/net/TencentMapClient.cpp

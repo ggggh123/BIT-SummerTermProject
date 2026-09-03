@@ -1,9 +1,9 @@
 #include "ui/HistoryPage.h"
 
+#include "domain/ContractTimestamp.h"
 #include "domain/Formatters.h"
 #include "services/UserApi.h"
 
-#include <QDateTime>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -243,16 +243,18 @@ void HistoryPage::renderCommittedPage()
             return leftEnded;
         }
         if (leftEnded) {
-            const QDateTime leftEndedAt = QDateTime::fromString(left.endedAt, Qt::ISODate);
-            const QDateTime rightEndedAt = QDateTime::fromString(right.endedAt, Qt::ISODate);
-            if (leftEndedAt != rightEndedAt) {
-                return leftEndedAt > rightEndedAt;
+            const auto endedOrder = ev::user::compareContractTimestamps(
+                left.endedAt, right.endedAt);
+            if (endedOrder.has_value()
+                && *endedOrder != ev::user::TimestampComparison::Equal) {
+                return *endedOrder == ev::user::TimestampComparison::Later;
             }
         }
-        const QDateTime leftReservedAt = QDateTime::fromString(left.reservedAt, Qt::ISODate);
-        const QDateTime rightReservedAt = QDateTime::fromString(right.reservedAt, Qt::ISODate);
-        if (leftReservedAt != rightReservedAt) {
-            return leftReservedAt > rightReservedAt;
+        const auto reservedOrder = ev::user::compareContractTimestamps(
+            left.reservedAt, right.reservedAt);
+        if (reservedOrder.has_value()
+            && *reservedOrder != ev::user::TimestampComparison::Equal) {
+            return *reservedOrder == ev::user::TimestampComparison::Later;
         }
         return left.orderId > right.orderId;
     });

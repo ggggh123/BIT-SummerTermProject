@@ -102,7 +102,8 @@ QJsonObject forecastRunObject(bool stale)
 }
 
 QJsonArray forecastRecords(const QHash<qint64, qint64> &horizonOneBusy,
-                           const QHash<qint64, qint64> &chargerCounts = {})
+                           const QHash<qint64, qint64> &chargerCounts = {},
+                           const QString &fraction = {})
 {
     QJsonArray records;
     const QDateTime cutoff = QDateTime::fromString(
@@ -116,9 +117,15 @@ QJsonArray forecastRecords(const QHash<qint64, qint64> &horizonOneBusy,
                 / static_cast<long double>(chargerCount);
             const QString congestion = ratio < 0.5L ? QStringLiteral("low")
                 : (ratio < 0.8L ? QStringLiteral("medium") : QStringLiteral("high"));
+            QString forecastAt = cutoff.addSecs(horizon * 3600)
+                                     .toString(QStringLiteral("yyyy-MM-ddTHH:mm:ss"));
+            if (!fraction.isEmpty()) {
+                forecastAt += QLatin1Char('.') + fraction;
+            }
+            forecastAt += QStringLiteral("+08:00");
             records.append(QJsonObject{
                 {QStringLiteral("stationId"), stationId},
-                {QStringLiteral("forecastAt"), cutoff.addSecs(horizon * 3600).toString(Qt::ISODate)},
+                {QStringLiteral("forecastAt"), forecastAt},
                 {QStringLiteral("horizonH"), horizon},
                 {QStringLiteral("predictedLoadKw"), 60.0 + stationId},
                 {QStringLiteral("predictedBusyCount"), busy},
@@ -370,13 +377,17 @@ private slots:
     void orderListRejectsInvalidRequestPagination();
     void orderListRejectsInvalidPages_data();
     void orderListRejectsInvalidPages();
+    void orderListAcceptsDescendingAndExactlyEqualFractions();
     void historyRendersOnlyReceivedPageWithExactPagination();
     void historyDropsSupersededAndSessionForeignResponses();
     void historyFailureAndDisconnectPreserveCommittedCache();
     void historyLabelsStoppedChargingFromEndedAt();
     void historyUsesFallbackKeysForEquivalentTimestampInstants();
+    void historyOrdersExactEndedAtFractions();
+    void historyOrdersExactReservedAtFractions();
     void historyFormatsLargeFenExactly();
     void historyNeverExposesRawFailureMessages();
+    void forecastTimestampRelationsUseExactFractions();
     void freshForecastUsesRealTransportAndDeterministicRanking();
     void staleNullDisabledAndNoMatchLoseRecommendationPriority();
     void nearbyDisconnectKeepsSelectableCacheAndRedBanner();
@@ -477,6 +488,8 @@ void RecommendationTest::orderListRejectsInvalidPages_data()
     QTest::newRow("too many items") << QStringLiteral("too-many");
     QTest::newRow("foreign user") << QStringLiteral("foreign-user");
     QTest::newRow("reservedAt ascending") << QStringLiteral("ascending");
+    QTest::newRow("reservedAt within millisecond ascending")
+        << QStringLiteral("submillisecond-ascending");
     QTest::newRow("malformed canonical order") << QStringLiteral("bad-order");
 }
 
@@ -522,6 +535,16 @@ void RecommendationTest::orderListRejectsInvalidPages()
         items.replace(0, items.at(1));
         items.replace(1, first);
         data.insert(QStringLiteral("items"), items);
+    } else if (kind == QStringLiteral("submillisecond-ascending")) {
+        QJsonObject first = items.at(0).toObject();
+        QJsonObject second = items.at(1).toObject();
+        first.insert(QStringLiteral("reservedAt"),
+                     QStringLiteral("2026-09-01T10:00:00.123455+08:00"));
+        second.insert(QStringLiteral("reservedAt"),
+                      QStringLiteral("2026-09-01T10:00:00.123456+08:00"));
+        items.replace(0, first);
+        items.replace(1, second);
+        data.insert(QStringLiteral("items"), items);
     } else if (kind == QStringLiteral("bad-order")) {
         QJsonObject bad = items.at(0).toObject();
         bad.insert(QStringLiteral("unexpected"), true);
@@ -533,6 +556,49 @@ void RecommendationTest::orderListRejectsInvalidPages()
     QCOMPARE(loaded.size(), 0);
     const auto error = failed.at(0).at(1).value<ev::user::ApiError>();
     QCOMPARE(error.code, QStringLiteral("INVALID_RESPONSE"));
+}
+
+void RecommendationTest::orderListAcceptsDescendingAndExactlyEqualFractions()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    QSignalSpy loaded(&api, &UserApi::orderHistoryLoaded);
+    QSignalSpy failed(&api, &UserApi::orderHistoryRequestFailed);
+
+    (void)api.loadOrderHistory(20, 0, 1, 1);
+    auto request = takeRequest(peer.data());
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{
+                           orderObject(1, QStringLiteral("reserved"),
+                                       QStringLiteral("2026-09-01T10:00:00.123456789012345678901+08:00")),
+                           orderObject(2, QStringLiteral("reserved"),
+                                       QStringLiteral("2026-09-01T10:00:00.123456789012345678900+08:00"))}},
+                      {QStringLiteral("total"), 2}});
+    QTRY_COMPARE(loaded.size(), 1);
+    QCOMPARE(failed.size(), 0);
+    loaded.clear();
+
+    (void)api.loadOrderHistory(20, 0, 2, 2);
+    request = takeRequest(peer.data());
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{
+                           orderObject(3, QStringLiteral("reserved"),
+                                       QStringLiteral("2026-09-01T10:00:00.0+08:00")),
+                           orderObject(4, QStringLiteral("reserved"),
+                                       QStringLiteral("2026-09-01T10:00:00.00+08:00")),
+                           orderObject(5, QStringLiteral("reserved"),
+                                       QStringLiteral("2026-09-01T10:00:00+08:00")),
+                           orderObject(6, QStringLiteral("reserved"),
+                                       QStringLiteral("2026-09-01T10:00:00.000000+08:00"))}},
+                      {QStringLiteral("total"), 4}});
+    QTRY_COMPARE(loaded.size(), 1);
+    QCOMPARE(failed.size(), 0);
 }
 
 void RecommendationTest::historyRendersOnlyReceivedPageWithExactPagination()
@@ -763,6 +829,61 @@ void RecommendationTest::historyUsesFallbackKeysForEquivalentTimestampInstants()
     QVERIFY(list->item(1)->text().contains(QStringLiteral("订单 #91")));
 }
 
+void RecommendationTest::historyOrdersExactEndedAtFractions()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    HistoryPage page(&api);
+    page.setConnectionAvailable(true);
+    page.activate();
+    const auto request = takeRequest(peer.data());
+    const QString reservedAt = QStringLiteral("2026-09-01T09:00:00+08:00");
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{
+                           orderObject(92, QStringLiteral("completed"), reservedAt,
+                                       QStringLiteral("2026-09-01T10:00:00.123455+08:00")),
+                           orderObject(91, QStringLiteral("completed"), reservedAt,
+                                       QStringLiteral("2026-09-01T10:00:00.123456+08:00"))}},
+                      {QStringLiteral("total"), 2}});
+    auto *list = required<QListWidget>(&page, "historyList");
+    QTRY_COMPARE(list->count(), 2);
+    QVERIFY(list->item(0)->text().contains(QStringLiteral("订单 #91")));
+    QVERIFY(list->item(1)->text().contains(QStringLiteral("订单 #92")));
+}
+
+void RecommendationTest::historyOrdersExactReservedAtFractions()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    HistoryPage page(&api);
+    page.setConnectionAvailable(true);
+    page.activate();
+    const auto request = takeRequest(peer.data());
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{
+                           orderObject(91, QStringLiteral("reserved"),
+                                       QStringLiteral("2026-09-01T09:00:00.123456+08:00")),
+                           orderObject(92, QStringLiteral("reserved"),
+                                       QStringLiteral("2026-09-01T09:00:00.123455+08:00"))}},
+                      {QStringLiteral("total"), 2}});
+    auto *list = required<QListWidget>(&page, "historyList");
+    QTRY_COMPARE(list->count(), 2);
+    QVERIFY(list->item(0)->text().contains(QStringLiteral("订单 #91")));
+    QVERIFY(list->item(1)->text().contains(QStringLiteral("订单 #92")));
+}
+
 void RecommendationTest::historyFormatsLargeFenExactly()
 {
     QTcpServer server;
@@ -810,6 +931,69 @@ void RecommendationTest::historyNeverExposesRawFailureMessages()
     QTRY_VERIFY(!error->text().isEmpty());
     QVERIFY(!error->text().contains(QStringLiteral("raw english")));
     QVERIFY(error->text().contains(QStringLiteral("服务繁忙")));
+}
+
+void RecommendationTest::forecastTimestampRelationsUseExactFractions()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    login(api, peer.data());
+    QSignalSpy stationsLoaded(&api, &UserApi::nearbyStationsLoaded);
+    QSignalSpy forecastsLoaded(&api, &UserApi::latestForecastLoaded);
+    QSignalSpy failures(&api, &UserApi::requestFailed);
+
+    const QString stationSnapshotRequestId = api.loadNearbyStations({39.962, 116.318});
+    auto request = takeRequest(peer.data());
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("stations"), encodedStations()}});
+    QTRY_COMPARE(stationsLoaded.size(), 1);
+    const QHash<qint64, qint64> busy;
+    const QJsonArray exactRecords = forecastRecords(busy, {}, QStringLiteral("123456"));
+
+    QJsonObject run = forecastRunObject(false);
+    run.insert(QStringLiteral("generatedAt"),
+               QStringLiteral("2026-09-01T07:00:00.123455+08:00"));
+    run.insert(QStringLiteral("dataCutoff"),
+               QStringLiteral("2026-09-01T07:00:00.123456+08:00"));
+    (void)api.loadLatestForecast(stationSnapshotRequestId);
+    request = takeRequest(peer.data());
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), run},
+                      {QStringLiteral("records"), exactRecords}});
+    QTRY_VERIFY(failures.size() + forecastsLoaded.size() == 1);
+    QCOMPARE(failures.size(), 1);
+    QCOMPARE(forecastsLoaded.size(), 0);
+    failures.clear();
+
+    run.insert(QStringLiteral("generatedAt"),
+               QStringLiteral("2026-09-01T07:00:00.123456+08:00"));
+    QJsonArray mismatchedRecords = exactRecords;
+    QJsonObject first = mismatchedRecords.at(0).toObject();
+    first.insert(QStringLiteral("forecastAt"),
+                 QStringLiteral("2026-09-01T08:00:00.123455+08:00"));
+    mismatchedRecords.replace(0, first);
+    (void)api.loadLatestForecast(stationSnapshotRequestId);
+    request = takeRequest(peer.data());
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), run},
+                      {QStringLiteral("records"), mismatchedRecords}});
+    QTRY_VERIFY(failures.size() + forecastsLoaded.size() == 1);
+    QCOMPARE(failures.size(), 1);
+    QCOMPARE(forecastsLoaded.size(), 0);
+    failures.clear();
+
+    (void)api.loadLatestForecast(stationSnapshotRequestId);
+    request = takeRequest(peer.data());
+    reply(peer.data(), request.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("forecastRun"), run},
+                      {QStringLiteral("records"), exactRecords}});
+    QTRY_COMPARE(forecastsLoaded.size(), 1);
+    QCOMPARE(failures.size(), 0);
 }
 
 void RecommendationTest::freshForecastUsesRealTransportAndDeterministicRanking()
