@@ -482,6 +482,38 @@ bool parseCurrentOrder(const QJsonValue &value, ev::user::CurrentOrderResult *re
     return true;
 }
 
+bool parseOrderList(const QJsonObject &data, qint64 requestedLimit, qint64 userId,
+                    ev::user::OrderListResult *result)
+{
+    if (!hasExactlyKeys(data, {"items", "total"})
+        || !data.value(QStringLiteral("items")).isArray()) {
+        return false;
+    }
+    ev::user::OrderListResult decoded;
+    if (!nonnegativeInteger(data, "total", &decoded.total)) {
+        return false;
+    }
+    const QJsonArray items = data.value(QStringLiteral("items")).toArray();
+    if (items.size() > requestedLimit) {
+        return false;
+    }
+    QDateTime previousReservedAt;
+    for (const QJsonValue &value : items) {
+        ev::user::Order order;
+        if (!parseOrder(value, &order) || order.userId != userId) {
+            return false;
+        }
+        const QDateTime reservedAt = QDateTime::fromString(order.reservedAt, Qt::ISODate);
+        if (previousReservedAt.isValid() && reservedAt > previousReservedAt) {
+            return false;
+        }
+        previousReservedAt = reservedAt;
+        decoded.items.append(std::move(order));
+    }
+    *result = std::move(decoded);
+    return true;
+}
+
 bool validFailure(const ev::protocol::ResponseEnvelope &response)
 {
     static const QSet<QString> failureCodes{
@@ -527,6 +559,8 @@ UserApi::UserApi(TcpJsonClient *client, QObject *parent)
     qRegisterMetaType<ev::user::StationListResult>();
     qRegisterMetaType<ev::user::StationDetailResult>();
     qRegisterMetaType<ev::user::ForecastLatestResult>();
+    qRegisterMetaType<ev::user::OrderListResult>();
+    qRegisterMetaType<ev::user::HistoryRequestContext>();
     connect(client_, &TcpJsonClient::responseReceived, this, &UserApi::handleResponse);
     connect(client_, &TcpJsonClient::transportFailed, this, &UserApi::handleTransportFailure);
     connect(client_, &TcpJsonClient::connectionChanged, this, &UserApi::handleConnectionState);
@@ -534,6 +568,19 @@ UserApi::UserApi(TcpJsonClient *client, QObject *parent)
 
 void UserApi::loginByPhone(const QString &mobile)
 {
+    const auto oldRequestIds = pendingOperations_.keys();
+    for (const QString &requestId : oldRequestIds) {
+        const auto it = pendingOperations_.constFind(requestId);
+        if (it != pendingOperations_.cend()
+            && (it->operation == Operation::ChargeCurrent
+                || it->operation == Operation::NearbyStations
+                || it->operation == Operation::StationDetail
+                || it->operation == Operation::LatestForecast
+                || it->operation == Operation::HistoryList)) {
+            client_->cancelRequest(requestId);
+            pendingOperations_.remove(requestId);
+        }
+    }
     ++sessionGeneration_;
     userRevision_ = 0;
     ++chargeReadEpoch_;
@@ -654,7 +701,8 @@ void UserApi::cancelSafeRead(const QString &requestId)
     if (it->operation != Operation::ChargeCurrent
         && it->operation != Operation::StationDetail
         && it->operation != Operation::NearbyStations
-        && it->operation != Operation::LatestForecast) {
+        && it->operation != Operation::LatestForecast
+        && it->operation != Operation::HistoryList) {
         return;
     }
     client_->cancelRequest(requestId);
@@ -712,6 +760,42 @@ QString UserApi::loadLatestForecast(const QString &stationListRequestId)
     pending.forecastStationCounts = snapshot.value();
     pendingOperations_.insert(requestId, std::move(pending));
     return requestId;
+}
+
+ev::user::HistoryRequestContext UserApi::loadOrderHistory(
+    qint64 limit, qint64 offset, quint64 pageGeneration, quint64 readEpoch)
+{
+    ev::user::HistoryRequestContext context;
+    context.sessionGeneration = sessionGeneration_;
+    context.pageGeneration = pageGeneration;
+    context.readEpoch = readEpoch;
+    context.limit = limit;
+    context.offset = offset;
+    if (!user_.has_value() || token_.isEmpty()) {
+        const ev::user::ApiError error{
+            {}, QStringLiteral("AUTH_REQUIRED"), QStringLiteral("请先登录")};
+        emit orderHistoryRequestFailed(context, error);
+        return context;
+    }
+    if (limit < 1 || limit > 100 || offset < 0 || offset > kMaxSafeInteger) {
+        const ev::user::ApiError error{
+            {}, QStringLiteral("INVALID_REQUEST"), QStringLiteral("分页参数无效")};
+        emit orderHistoryRequestFailed(context, error);
+        return context;
+    }
+    context.requestId = client_->send(
+        ev::actions::OrderList,
+        QJsonObject{{QStringLiteral("limit"), limit},
+                    {QStringLiteral("offset"), offset}}, token_);
+    PendingOperation pending{Operation::HistoryList, sessionGeneration_};
+    pending.historyContext = context;
+    pendingOperations_.insert(context.requestId, std::move(pending));
+    return context;
+}
+
+void UserApi::retryConnection()
+{
+    client_->connectToServer();
 }
 
 QString UserApi::loadProfile()
@@ -1092,6 +1176,38 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
         emit chargeSettled(*pending.chargeContext, order, balanceFen);
         return;
     }
+    if (pending.operation == Operation::HistoryList) {
+        if (!pending.historyContext.has_value()) {
+            return;
+        }
+        const auto fail = [this, &pending, &response](const QString &code,
+                                                      const QString &message) {
+            emit orderHistoryRequestFailed(
+                *pending.historyContext,
+                {response.requestId, code, message});
+        };
+        if (!response.ok) {
+            if (!validFailure(response)) {
+                fail(kInvalidResponse, kInvalidResponseMessage);
+            } else {
+                fail(response.code, response.message);
+            }
+            return;
+        }
+        if (response.code != QStringLiteral("OK") || !response.data.isObject()
+            || !user_.has_value()) {
+            fail(kInvalidResponse, kInvalidResponseMessage);
+            return;
+        }
+        ev::user::OrderListResult result;
+        if (!parseOrderList(response.data.toObject(), pending.historyContext->limit,
+                            user_->userId, &result)) {
+            fail(kInvalidResponse, kInvalidResponseMessage);
+            return;
+        }
+        emit orderHistoryLoaded(*pending.historyContext, result);
+        return;
+    }
     if (!response.ok) {
         if (!validFailure(response)) {
             emitInvalidResponse(response.requestId);
@@ -1185,6 +1301,13 @@ void UserApi::handleTransportFailure(const QString &requestId, const QString &co
         const bool uncertain = isChargeMutation(pending.operation)
             && code != QStringLiteral("NOT_CONNECTED");
         finishChargeFailure(pending, requestId, code, message, uncertain);
+        return;
+    }
+    if (pending.operation == Operation::HistoryList) {
+        if (pending.historyContext.has_value()) {
+            emit orderHistoryRequestFailed(
+                *pending.historyContext, {requestId, code, message});
+        }
         return;
     }
     emitFailure(requestId, code, message);

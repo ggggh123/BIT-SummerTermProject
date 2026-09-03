@@ -4,6 +4,7 @@
 #include "net/TencentMapClient.h"
 #include "services/UserApi.h"
 #include "ui/ChargePage.h"
+#include "ui/HistoryPage.h"
 #include "ui/LoginPage.h"
 #include "ui/NavigationPage.h"
 #include "ui/NearbyPage.h"
@@ -47,10 +48,13 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     currentOrderNavigationButton_ = new QPushButton(QStringLiteral("当前订单"), authenticatedNavigation_);
     currentOrderNavigationButton_->setObjectName(QStringLiteral("currentOrderNavigationButton"));
     currentOrderNavigationButton_->setVisible(false);
+    historyNavigationButton_ = new QPushButton(QStringLiteral("历史订单"), authenticatedNavigation_);
+    historyNavigationButton_->setObjectName(QStringLiteral("historyNavigationButton"));
     profileNavigationButton_ = new QPushButton(QStringLiteral("我的账户"), authenticatedNavigation_);
     profileNavigationButton_->setObjectName(QStringLiteral("profileNavigationButton"));
     navigationLayout->addWidget(nearbyNavigationButton_);
     navigationLayout->addWidget(currentOrderNavigationButton_);
+    navigationLayout->addWidget(historyNavigationButton_);
     navigationLayout->addWidget(profileNavigationButton_);
     navigationLayout->addStretch();
     authenticatedNavigation_->setVisible(false);
@@ -60,10 +64,12 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     pages_->setObjectName(QStringLiteral("mainPages"));
     loginPage_ = new LoginPage(pages_);
     nearbyPage_ = new NearbyPage(userApi_, mapClient_, pages_);
+    historyPage_ = new HistoryPage(userApi_, pages_);
     profilePage_ = new ProfilePage(userApi_, pages_);
     chargePage_ = new ChargePage(userApi_, pages_);
     pages_->addWidget(loginPage_);
     pages_->addWidget(nearbyPage_);
+    pages_->addWidget(historyPage_);
     pages_->addWidget(profilePage_);
     pages_->addWidget(chargePage_);
     pages_->setCurrentWidget(loginPage_);
@@ -83,6 +89,8 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         rememberedSelection_.reset();
         deferredSelectionInvalidation_.reset();
         mutationAuthorityStamps_.clear();
+        reconnectCurrentContext_.reset();
+        reconnectCurrentOwnerOrderId_ = 0;
         authoritativeActiveOrder_.reset();
         hasActiveOrder_ = false;
         ++authorityRevision_;
@@ -129,6 +137,9 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     });
     connect(nearbyNavigationButton_, &QPushButton::clicked, this, [this] {
         if (!hasActiveOrder_ && !chargeFlowBlocked_) {
+            if (pages_->currentWidget() == historyPage_) {
+                historyPage_->deactivate();
+            }
             if (pages_->currentWidget() == chargePage_) {
                 chargePage_->leavePage();
             }
@@ -137,6 +148,10 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     });
     connect(currentOrderNavigationButton_, &QPushButton::clicked, this, [this] {
         if (hasActiveOrder_ && !chargeFlowBlocked_ && authoritativeActiveOrder_.has_value()) {
+            cancelReconnectCurrent();
+            if (pages_->currentWidget() == historyPage_) {
+                historyPage_->deactivate();
+            }
             std::optional<ev::user::StationSelection> matching;
             if (rememberedSelection_.has_value()
                 && rememberedSelection_->station.stationId == authoritativeActiveOrder_->stationId
@@ -148,6 +163,16 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             pages_->setCurrentWidget(chargePage_);
         }
     });
+    connect(historyNavigationButton_, &QPushButton::clicked, this, [this] {
+        if (chargeFlowBlocked_) {
+            return;
+        }
+        if (pages_->currentWidget() == chargePage_) {
+            chargePage_->leavePage();
+        }
+        pages_->setCurrentWidget(historyPage_);
+        historyPage_->activate();
+    });
     connect(profileNavigationButton_, &QPushButton::clicked, this, [this] {
         if (chargeFlowBlocked_) {
             return;
@@ -155,15 +180,21 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         if (pages_->currentWidget() == chargePage_) {
             chargePage_->leavePage();
         }
+        if (pages_->currentWidget() == historyPage_) {
+            historyPage_->deactivate();
+        }
         pages_->setCurrentWidget(profilePage_);
         profilePage_->refresh();
     });
     connect(nearbyPage_, &NearbyPage::chargerSelected, this,
             [this](const ev::user::StationSelection &selection) {
-        if (hasActiveOrder_ || chargeFlowBlocked_) {
+        if (hasActiveOrder_ || chargeFlowBlocked_ || reconnectCurrentContext_.has_value()) {
             return;
         }
         rememberedSelection_ = selection;
+        if (pages_->currentWidget() == historyPage_) {
+            historyPage_->deactivate();
+        }
         chargePage_->enterSelection(selection);
         pages_->setCurrentWidget(chargePage_);
     });
@@ -200,6 +231,13 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             [this](const ev::user::RequestContext &context,
                    const ev::user::CurrentOrderResult &result,
                    bool pageOwned, qint64 resolvedOwnerOrderId) {
+        const bool reconnectOwned = reconnectCurrentContext_.has_value()
+            && context == *reconnectCurrentContext_;
+        const qint64 reconnectOwnerOrderId = reconnectCurrentOwnerOrderId_;
+        if (reconnectOwned) {
+            reconnectCurrentContext_.reset();
+            reconnectCurrentOwnerOrderId_ = 0;
+        }
         if (result.order.has_value()) {
             adoptActiveOrder(*result.order);
             return;
@@ -207,8 +245,19 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         const bool guardOwned = guardContext_.has_value() && context == *guardContext_;
         if (guardOwned) {
             clearActiveOrder(0, true);
+        } else if (reconnectOwned) {
+            clearActiveOrder(reconnectOwnerOrderId);
         } else if (pageOwned) {
             clearActiveOrder(resolvedOwnerOrderId);
+        }
+    });
+    connect(userApi_, &UserApi::chargeRequestFailed, this,
+            [this](const ev::user::RequestContext &context,
+                   const ev::user::ApiError &, bool) {
+        if (reconnectCurrentContext_.has_value()
+            && context == *reconnectCurrentContext_) {
+            reconnectCurrentContext_.reset();
+            reconnectCurrentOwnerOrderId_ = 0;
         }
     });
     connect(chargePage_, &ChargePage::mutationDispatched, this,
@@ -293,6 +342,24 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         pages_->setCurrentWidget(navigationPage_);
     });
 
+    connect(userApi_, &UserApi::connectionChanged, this, [this](bool connected) {
+        if (!connected || !userApi_->sessionUser().has_value()
+            || pages_->currentWidget() == chargePage_
+            || guardContext_.has_value()
+            || reconnectCurrentContext_.has_value()) {
+            return;
+        }
+        reconnectCurrentOwnerOrderId_ = authoritativeActiveOrder_.has_value()
+            ? authoritativeActiveOrder_->orderId : 0;
+        reconnectCurrentContext_ = userApi_->loadCurrentOrder(
+            0, 0, ev::user::ChargeOperation::Reconcile);
+        if (reconnectCurrentContext_->requestId.isEmpty()) {
+            reconnectCurrentContext_.reset();
+            reconnectCurrentOwnerOrderId_ = 0;
+        }
+        nearbyPage_->refreshAfterReconnect();
+    });
+
     if (!config.serverHost.isEmpty() && config.serverPort != 0) {
         client_->configure(config.serverHost, config.serverPort);
         client_->connectToServer();
@@ -307,6 +374,7 @@ void MainWindow::updateAuthenticatedNavigation()
     nearbyNavigationButton_->setEnabled(!chargeFlowBlocked_ && !hasActiveOrder_);
     currentOrderNavigationButton_->setVisible(hasActiveOrder_);
     currentOrderNavigationButton_->setEnabled(!chargeFlowBlocked_ && hasActiveOrder_);
+    historyNavigationButton_->setEnabled(!chargeFlowBlocked_);
     profileNavigationButton_->setEnabled(!chargeFlowBlocked_);
 }
 
@@ -343,4 +411,14 @@ void MainWindow::clearActiveOrder(qint64 resolvedOwnerOrderId, bool force)
         ++authorityRevision_;
     }
     updateAuthenticatedNavigation();
+}
+
+void MainWindow::cancelReconnectCurrent()
+{
+    if (reconnectCurrentContext_.has_value()
+        && !reconnectCurrentContext_->requestId.isEmpty()) {
+        userApi_->cancelSafeRead(reconnectCurrentContext_->requestId);
+    }
+    reconnectCurrentContext_.reset();
+    reconnectCurrentOwnerOrderId_ = 0;
 }

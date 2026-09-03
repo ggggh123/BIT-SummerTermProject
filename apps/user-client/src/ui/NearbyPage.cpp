@@ -11,6 +11,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -56,6 +57,37 @@ QString chargerStatusText(const QString &status)
     return QStringLiteral("状态未知");
 }
 
+const ev::user::ForecastRecord *horizonOneRecord(
+    const ev::user::Station &station,
+    const ev::user::ForecastLatestResult &forecast)
+{
+    if (!station.forecastEnabled || !forecast.forecastRun.has_value()) {
+        return nullptr;
+    }
+    const auto it = std::find_if(
+        forecast.records.cbegin(), forecast.records.cend(),
+        [&station](const ev::user::ForecastRecord &record) {
+            return record.stationId == station.stationId && record.horizonH == 1;
+        });
+    return it == forecast.records.cend() ? nullptr : &*it;
+}
+
+int congestionRank(const QString &level)
+{
+    if (level == QStringLiteral("low")) {
+        return 0;
+    }
+    if (level == QStringLiteral("medium")) {
+        return 1;
+    }
+    return 2;
+}
+
+double stationDistance(const ev::user::Station &station)
+{
+    return station.distanceKm.value_or(std::numeric_limits<double>::max());
+}
+
 } // namespace
 
 NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *parent)
@@ -64,8 +96,10 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
     , mapClient_(mapClient)
     , addressBox_(new QComboBox(this))
     , searchButton_(new QPushButton(QStringLiteral("查找附近充电站"), this))
+    , retryButton_(new QPushButton(QStringLiteral("重试连接"), this))
     , connectionBanner_(new QLabel(QStringLiteral("服务器连接中…"), this))
     , statusLabel_(new QLabel(QStringLiteral("请选择预设地点或输入地址"), this))
+    , forecastSource_(new QLabel(QStringLiteral("暂无预测来源"), this))
     , detailStatus_(new QLabel(QStringLiteral("请选择充电站查看充电桩"), this))
 {
     setObjectName(QStringLiteral("nearbyPage"));
@@ -77,9 +111,12 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
     addressBox_->setEditable(true);
     addressBox_->addItems(presetAddresses());
     searchButton_->setObjectName(QStringLiteral("nearbySearchButton"));
+    retryButton_->setObjectName(QStringLiteral("nearbyRetryButton"));
     connectionBanner_->setObjectName(QStringLiteral("nearbyConnectionBanner"));
     statusLabel_->setObjectName(QStringLiteral("nearbyStatus"));
     statusLabel_->setWordWrap(true);
+    forecastSource_->setObjectName(QStringLiteral("forecastSource"));
+    forecastSource_->setWordWrap(true);
     detailStatus_->setObjectName(QStringLiteral("detailStatus"));
     detailStatus_->setWordWrap(true);
 
@@ -98,12 +135,22 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
     layout->addWidget(addressBox_);
     layout->addWidget(searchButton_);
     layout->addWidget(connectionBanner_);
+    layout->addWidget(retryButton_);
     layout->addWidget(statusLabel_);
+    layout->addWidget(forecastSource_);
     layout->addWidget(stationScroll, 1);
     layout->addWidget(detailStatus_);
     layout->addWidget(detailContainer);
 
     connect(searchButton_, &QPushButton::clicked, this, &NearbyPage::searchCurrentAddress);
+    connect(retryButton_, &QPushButton::clicked, this, [this] {
+        if (!connected_) {
+            reconnectRefreshPending_ = origin_.has_value();
+            userApi_->retryConnection();
+            return;
+        }
+        refreshAfterReconnect();
+    });
     if (mapClient_ != nullptr) {
         connect(mapClient_, &TencentMapClient::geocodeSucceeded, this,
                 [this](const QString &requestId, ev::user::GeoPoint origin) {
@@ -117,11 +164,18 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
             invalidateSelection();
             origin_ = origin;
             pendingStationsRequestId_.clear();
+            if (!pendingForecastRequestId_.isEmpty()) {
+                supersededSafeReadIds_.insert(pendingForecastRequestId_);
+            }
             pendingForecastRequestId_.clear();
+            if (!pendingDetailRequestId_.isEmpty()) {
+                supersededSafeReadIds_.insert(pendingDetailRequestId_);
+            }
             pendingDetailRequestId_.clear();
             pendingDetailOrigin_.reset();
             displayedDetailOrigin_.reset();
             forecast_ = {};
+            forecastSource_->setText(QStringLiteral("暂无预测来源"));
             stations_.clear();
             rebuildStationCards();
             clearLayout(detailLayout_);
@@ -148,11 +202,13 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 return;
             }
             const bool chargeRefresh = pendingStationsSelectionGeneration_.has_value();
+            const bool reconnectRefresh = reconnectStationsPending_;
             const std::optional<quint64> forecastAttempt = chargeRefreshAttemptId_;
             if (pendingStationsOriginGeneration_ != originGeneration_
                 || pendingStationsSearchGeneration_ != searchGeneration_) {
                 pendingStationsRequestId_.clear();
                 pendingStationsSelectionGeneration_.reset();
+                reconnectStationsPending_ = false;
                 setSearchPending(false);
                 if (chargeRefresh) {
                     finishChargeRefreshUnavailable();
@@ -163,6 +219,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 && *pendingStationsSelectionGeneration_ != selectionGeneration_) {
                 pendingStationsRequestId_.clear();
                 pendingStationsSelectionGeneration_.reset();
+                reconnectStationsPending_ = false;
                 setSearchPending(false);
                 finishChargeRefreshUnavailable();
                 return;
@@ -171,7 +228,11 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 pendingStationsSelectionGeneration_;
             pendingStationsRequestId_.clear();
             pendingStationsSelectionGeneration_.reset();
-            if (!chargeRefresh) {
+            reconnectStationsPending_ = false;
+            if (!chargeRefresh && !reconnectRefresh) {
+                if (!pendingDetailRequestId_.isEmpty()) {
+                    supersededSafeReadIds_.insert(pendingDetailRequestId_);
+                }
                 pendingDetailRequestId_.clear();
                 pendingDetailOrigin_.reset();
             }
@@ -180,7 +241,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                                [this](const ev::user::Station &station) {
                     return station.stationId == *chargeRefreshStationId_;
                 });
-            applyStations(std::move(result), !chargeRefresh);
+            applyStations(std::move(result), !chargeRefresh && !reconnectRefresh);
             if (chargeGeneration.has_value()
                 && chargeRefreshSelectionGeneration_ == chargeGeneration) {
                 if (!containsExpectedStation) {
@@ -192,7 +253,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 }
             }
             setSearchPending(false);
-            if (!chargeRefresh) {
+            if (!chargeRefresh && !reconnectRefresh) {
                 clearLayout(detailLayout_);
                 detailStatus_->setText(QStringLiteral("请选择充电站查看充电桩"));
             }
@@ -218,6 +279,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
             if (requestId != pendingForecastRequestId_
                 || pendingForecastOriginGeneration_ != originGeneration_
                 || pendingForecastSearchGeneration_ != searchGeneration_) {
+                supersededSafeReadIds_.remove(requestId);
                 return;
             }
             pendingForecastRequestId_.clear();
@@ -232,6 +294,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
                 || pendingDetailSearchGeneration_ != searchGeneration_
                 || pendingDetailSelectionGeneration_ != selectionGeneration_
                 || !pendingDetailOrigin_.has_value()) {
+                supersededSafeReadIds_.remove(requestId);
                 return;
             }
             pendingDetailRequestId_.clear();
@@ -255,29 +318,66 @@ QStringList NearbyPage::presetAddresses()
 QString NearbyPage::forecastText(const ev::user::Station &station,
                                  const ev::user::ForecastLatestResult &forecast)
 {
-    if (!station.forecastEnabled || !forecast.forecastRun.has_value()) {
+    const auto *record = horizonOneRecord(station, forecast);
+    if (record == nullptr) {
         return QStringLiteral("暂无预测");
     }
-    for (const auto &record : forecast.records) {
-        if (record.stationId == station.stationId && record.horizonH == 1) {
-            QString text = QStringLiteral("1小时预测：繁忙 %1 / 空闲 %2，拥堵%3")
-                               .arg(record.predictedBusyCount)
-                               .arg(record.predictedIdleCount)
-                               .arg(congestionText(record.congestionLevel));
-            if (forecast.forecastRun->stale) {
-                text += QStringLiteral("（预测已过期）");
-            }
-            return text;
-        }
+    QString text = QStringLiteral("1小时预测：繁忙 %1 / 空闲 %2，拥堵%3")
+                       .arg(record->predictedBusyCount)
+                       .arg(record->predictedIdleCount)
+                       .arg(congestionText(record->congestionLevel));
+    if (forecast.forecastRun->stale) {
+        text += QStringLiteral("（预测已过期）");
     }
-    return QStringLiteral("暂无预测");
+    return text;
 }
 
 void NearbyPage::setConnectionAvailable(bool available)
 {
-    connectionBanner_->setText(available
-        ? QStringLiteral("服务器已连接")
-        : QStringLiteral("服务器连接不可用"));
+    connected_ = available;
+    if (!available) {
+        connectionBanner_->setText(stations_.isEmpty()
+            ? QStringLiteral("服务器连接不可用")
+            : QStringLiteral("服务器连接不可用 · 离线缓存"));
+        connectionBanner_->setStyleSheet(QStringLiteral("color: red; font-weight: bold;"));
+        reconnectRefreshPending_ = origin_.has_value();
+        const auto superseded = supersededSafeReadIds_.values();
+        for (const QString &requestId : superseded) {
+            userApi_->cancelSafeRead(requestId);
+        }
+        supersededSafeReadIds_.clear();
+        cancelChargeRefresh();
+        cancelPendingStationList();
+        if (!pendingForecastRequestId_.isEmpty()) {
+            userApi_->cancelSafeRead(pendingForecastRequestId_);
+            pendingForecastRequestId_.clear();
+        }
+        if (!pendingDetailRequestId_.isEmpty()) {
+            userApi_->cancelSafeRead(pendingDetailRequestId_);
+            pendingDetailRequestId_.clear();
+        }
+        pendingForecastSelectionGeneration_.reset();
+        pendingForecastRefreshAttemptId_.reset();
+        pendingDetailOrigin_.reset();
+        setDetailPending(false);
+        statusLabel_->setText(stations_.isEmpty()
+            ? QStringLiteral("离线，暂无可用站点缓存")
+            : QStringLiteral("离线缓存 · %1 个附近充电站").arg(stations_.size()));
+        retryButton_->setEnabled(true);
+        return;
+    }
+    connectionBanner_->setText(QStringLiteral("服务器已连接"));
+    connectionBanner_->setStyleSheet(QString());
+    retryButton_->setEnabled(true);
+}
+
+void NearbyPage::refreshAfterReconnect()
+{
+    if (!connected_) {
+        reconnectRefreshPending_ = origin_.has_value();
+        return;
+    }
+    requestReconnectStations();
 }
 
 void NearbyPage::cancelChargeRefresh()
@@ -317,6 +417,7 @@ void NearbyPage::cancelPendingStationList()
     }
     pendingStationsRequestId_.clear();
     pendingStationsSelectionGeneration_.reset();
+    reconnectStationsPending_ = false;
     setSearchPending(false);
 }
 
@@ -378,6 +479,14 @@ void NearbyPage::displayStations(ev::user::StationListResult result)
 {
     abandonChargeRefresh();
     cancelPendingStationList();
+    if (!pendingForecastRequestId_.isEmpty()) {
+        supersededSafeReadIds_.insert(pendingForecastRequestId_);
+        pendingForecastRequestId_.clear();
+    }
+    if (!pendingDetailRequestId_.isEmpty()) {
+        supersededSafeReadIds_.insert(pendingDetailRequestId_);
+        pendingDetailRequestId_.clear();
+    }
     applyStations(std::move(result), true);
     clearLayout(detailLayout_);
     displayedDetailOrigin_.reset();
@@ -401,12 +510,25 @@ void NearbyPage::applyStations(ev::user::StationListResult result,
 void NearbyPage::displayForecast(ev::user::ForecastLatestResult result)
 {
     forecast_ = std::move(result);
+    if (!forecast_.forecastRun.has_value()) {
+        forecastSource_->setText(QStringLiteral("暂无预测来源"));
+    } else {
+        const auto &run = *forecast_.forecastRun;
+        forecastSource_->setText(
+            QStringLiteral("activatedAt: %1 · generatedAt: %2 · dataCutoff: %3%4")
+                .arg(run.activatedAt, run.generatedAt, run.dataCutoff,
+                     run.stale ? QStringLiteral(" · 预测已过期") : QString()));
+    }
     rebuildStationCards();
 }
 
 void NearbyPage::displayStationDetail(ev::user::StationDetailResult result)
 {
     abandonChargeRefresh();
+    if (!pendingDetailRequestId_.isEmpty()) {
+        supersededSafeReadIds_.insert(pendingDetailRequestId_);
+        pendingDetailRequestId_.clear();
+    }
     applyStationDetail(std::move(result), true);
 }
 
@@ -494,13 +616,18 @@ void NearbyPage::requestNearbyStations(
         chargeDetailApplied_ = false;
         chargeBufferedDetail_.reset();
     }
+    if (!pendingForecastRequestId_.isEmpty()) {
+        supersededSafeReadIds_.insert(pendingForecastRequestId_);
+    }
     pendingForecastRequestId_.clear();
     pendingForecastSelectionGeneration_.reset();
     pendingForecastRefreshAttemptId_.reset();
     forecast_ = {};
+    forecastSource_->setText(QStringLiteral("暂无预测来源"));
     rebuildStationCards();
     if (!pendingDetailRequestId_.isEmpty()) {
         invalidateSelection();
+        supersededSafeReadIds_.insert(pendingDetailRequestId_);
         pendingDetailRequestId_.clear();
         pendingDetailOrigin_.reset();
         setDetailPending(false);
@@ -538,6 +665,30 @@ void NearbyPage::requestStationDetail(const ev::user::Station &station)
     }
 }
 
+void NearbyPage::requestReconnectStations()
+{
+    if (userApi_ == nullptr || !connected_ || !origin_.has_value()
+        || chargeRefreshAttemptId_.has_value()) {
+        return;
+    }
+    reconnectRefreshPending_ = false;
+    cancelPendingStationList();
+    ++searchGeneration_;
+    pendingStationsOriginGeneration_ = originGeneration_;
+    pendingStationsSearchGeneration_ = searchGeneration_;
+    reconnectStationsPending_ = true;
+    statusLabel_->setText(stations_.isEmpty()
+        ? QStringLiteral("正在重新加载附近充电站…")
+        : QStringLiteral("正在刷新附近充电站（保留当前缓存）…"));
+    pendingStationsRequestId_ = userApi_->loadNearbyStations(*origin_);
+    if (pendingStationsRequestId_.isEmpty()) {
+        reconnectStationsPending_ = false;
+        statusLabel_->setText(stations_.isEmpty()
+            ? QStringLiteral("重新连接后刷新失败")
+            : QStringLiteral("刷新失败，继续显示缓存"));
+    }
+}
+
 void NearbyPage::invalidateSelection()
 {
     ++selectionGeneration_;
@@ -547,7 +698,32 @@ void NearbyPage::invalidateSelection()
 void NearbyPage::rebuildStationCards()
 {
     clearLayout(stationLayout_);
-    for (const auto &station : stations_) {
+    QVector<ev::user::Station> displayStations = stations_;
+    const bool freshRun = forecast_.forecastRun.has_value()
+        && !forecast_.forecastRun->stale;
+    std::sort(displayStations.begin(), displayStations.end(),
+              [this, freshRun](const auto &left, const auto &right) {
+        const auto *leftRecord = freshRun ? horizonOneRecord(left, forecast_) : nullptr;
+        const auto *rightRecord = freshRun ? horizonOneRecord(right, forecast_) : nullptr;
+        if ((leftRecord != nullptr) != (rightRecord != nullptr)) {
+            return leftRecord != nullptr;
+        }
+        if (leftRecord != nullptr && rightRecord != nullptr) {
+            const int leftCongestion = congestionRank(leftRecord->congestionLevel);
+            const int rightCongestion = congestionRank(rightRecord->congestionLevel);
+            if (leftCongestion != rightCongestion) {
+                return leftCongestion < rightCongestion;
+            }
+            if (leftRecord->predictedIdleCount != rightRecord->predictedIdleCount) {
+                return leftRecord->predictedIdleCount > rightRecord->predictedIdleCount;
+            }
+        }
+        if (stationDistance(left) != stationDistance(right)) {
+            return stationDistance(left) < stationDistance(right);
+        }
+        return left.stationId < right.stationId;
+    });
+    for (const auto &station : displayStations) {
         auto *card = new QFrame(this);
         card->setFrameShape(QFrame::StyledPanel);
         auto *layout = new QVBoxLayout(card);
@@ -609,13 +785,18 @@ void NearbyPage::setDetailControlsEnabled(bool enabled)
 
 void NearbyPage::handleApiFailure(const ev::user::ApiError &error)
 {
+    if (supersededSafeReadIds_.remove(error.requestId) > 0) {
+        return;
+    }
     if (!pendingStationsRequestId_.isEmpty()
         && error.requestId == pendingStationsRequestId_) {
         const bool chargeRefresh = pendingStationsSelectionGeneration_.has_value();
+        const bool reconnectRefresh = reconnectStationsPending_;
         if (pendingStationsOriginGeneration_ != originGeneration_
             || pendingStationsSearchGeneration_ != searchGeneration_) {
             pendingStationsRequestId_.clear();
             pendingStationsSelectionGeneration_.reset();
+            reconnectStationsPending_ = false;
             setSearchPending(false);
             if (chargeRefresh) {
                 finishChargeRefreshUnavailable();
@@ -626,14 +807,21 @@ void NearbyPage::handleApiFailure(const ev::user::ApiError &error)
             && *pendingStationsSelectionGeneration_ != selectionGeneration_) {
             pendingStationsRequestId_.clear();
             pendingStationsSelectionGeneration_.reset();
+            reconnectStationsPending_ = false;
             setSearchPending(false);
             finishChargeRefreshUnavailable();
             return;
         }
         pendingStationsRequestId_.clear();
         pendingStationsSelectionGeneration_.reset();
+        reconnectStationsPending_ = false;
         setSearchPending(false);
-        showError(errorText(error));
+        if (reconnectRefresh && !stations_.isEmpty()) {
+            statusLabel_->setText(QStringLiteral("刷新失败，继续显示缓存：%1")
+                                      .arg(errorText(error)));
+        } else {
+            showError(errorText(error));
+        }
         if (chargeRefresh) {
             finishChargeRefreshFailed(error);
         }
@@ -646,7 +834,12 @@ void NearbyPage::handleApiFailure(const ev::user::ApiError &error)
         pendingForecastRequestId_.clear();
         pendingForecastSelectionGeneration_.reset();
         pendingForecastRefreshAttemptId_.reset();
-        showError(errorText(error));
+        if (!forecast_.records.isEmpty()) {
+            statusLabel_->setText(QStringLiteral("预测刷新失败，继续显示缓存：%1")
+                                      .arg(errorText(error)));
+        } else {
+            showError(errorText(error));
+        }
         return;
     }
     if (!pendingDetailRequestId_.isEmpty()

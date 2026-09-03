@@ -38,6 +38,9 @@ public:
     [[nodiscard]] QString loadNearbyStations(const ev::user::GeoPoint &origin);
     [[nodiscard]] QString loadStationDetail(qint64 stationId);
     [[nodiscard]] QString loadLatestForecast(const QString &stationListRequestId);
+    [[nodiscard]] ev::user::HistoryRequestContext loadOrderHistory(
+        qint64 limit, qint64 offset, quint64 pageGeneration, quint64 readEpoch);
+    void retryConnection();
     [[nodiscard]] QString loadProfile();
     [[nodiscard]] QString updateNickname(const QString &nickname);
     [[nodiscard]] QString rechargeWallet(const QString &amount);
@@ -56,6 +59,10 @@ signals:
     void nearbyStationsLoaded(QString requestId, ev::user::StationListResult result);
     void stationDetailLoaded(QString requestId, ev::user::StationDetailResult result);
     void latestForecastLoaded(QString requestId, ev::user::ForecastLatestResult result);
+    void orderHistoryLoaded(ev::user::HistoryRequestContext context,
+                            ev::user::OrderListResult result);
+    void orderHistoryRequestFailed(ev::user::HistoryRequestContext context,
+                                   ev::user::ApiError error);
     void sessionUserApplied(ev::user::User user, quint64 sessionGeneration, quint64 revision);
     void profileReadPendingChanged(bool pending);
     void profileMutationPendingChanged(bool pending);
@@ -72,6 +79,7 @@ private:
         NearbyStations,
         StationDetail,
         LatestForecast,
+        HistoryList,
         ProfileGet,
         ProfileUpdate,
         ProfileRecharge,
@@ -92,6 +100,7 @@ private:
         bool reconciliation = false;
         quint64 userRevision = 0;
         std::optional<ev::user::RequestContext> chargeContext;
+        std::optional<ev::user::HistoryRequestContext> historyContext;
         qint64 expectedEntityId = 0;
     };
 

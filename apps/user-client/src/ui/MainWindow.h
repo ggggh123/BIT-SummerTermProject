@@ -22,6 +22,7 @@ private:
     void applySelectionInvalidation(quint64 selectionGeneration);
     void adoptActiveOrder(const ev::user::Order &order);
     void clearActiveOrder(qint64 resolvedOwnerOrderId, bool force = false);
+    void cancelReconnectCurrent();
 
     class TcpJsonClient *client_;
     class UserApi *userApi_;
@@ -29,11 +30,13 @@ private:
     class LoginPage *loginPage_;
     class QStackedWidget *pages_;
     class NearbyPage *nearbyPage_;
+    class HistoryPage *historyPage_;
     class ProfilePage *profilePage_;
     class NavigationPage *navigationPage_ = nullptr;
     QWidget *authenticatedNavigation_;
     class QPushButton *nearbyNavigationButton_;
     class QPushButton *currentOrderNavigationButton_;
+    class QPushButton *historyNavigationButton_;
     class QPushButton *profileNavigationButton_;
     class ChargePage *chargePage_;
     QString mapKey_;
@@ -43,6 +46,8 @@ private:
     std::optional<ev::user::Order> authoritativeActiveOrder_;
     std::optional<ev::user::StationSelection> rememberedSelection_;
     std::optional<ev::user::RequestContext> guardContext_;
+    std::optional<ev::user::RequestContext> reconnectCurrentContext_;
+    qint64 reconnectCurrentOwnerOrderId_ = 0;
     std::optional<quint64> deferredSelectionInvalidation_;
     QHash<QString, MutationAuthorityStamp> mutationAuthorityStamps_;
 };

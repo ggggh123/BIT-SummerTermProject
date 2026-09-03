@@ -3,6 +3,7 @@
 #include "domain/Models.h"
 
 #include <QHash>
+#include <QSet>
 #include <QWidget>
 
 #include <optional>
@@ -23,6 +24,7 @@ public:
 
 public slots:
     void setConnectionAvailable(bool available);
+    void refreshAfterReconnect();
     void cancelChargeRefresh();
     void refreshAfterCharge(ev::user::GeoPoint origin, qint64 stationId,
                             quint64 selectionGeneration, quint64 refreshAttemptId = 0);
@@ -55,6 +57,7 @@ private:
         std::optional<qint64> expectedStationId = std::nullopt,
         quint64 refreshAttemptId = 0);
     void requestStationDetail(const ev::user::Station &station);
+    void requestReconnectStations();
     void cancelPendingStationList();
     void abandonChargeRefresh();
     void clearDisplayedDetailForMissingStation();
@@ -77,8 +80,10 @@ private:
     TencentMapClient *mapClient_;
     class QComboBox *addressBox_;
     class QPushButton *searchButton_;
+    class QPushButton *retryButton_;
     class QLabel *connectionBanner_;
     class QLabel *statusLabel_;
+    class QLabel *forecastSource_;
     class QLabel *detailStatus_;
     class QVBoxLayout *stationLayout_;
     class QVBoxLayout *detailLayout_;
@@ -86,6 +91,10 @@ private:
     QString pendingStationsRequestId_;
     QString pendingForecastRequestId_;
     QString pendingDetailRequestId_;
+    QSet<QString> supersededSafeReadIds_;
+    bool connected_ = false;
+    bool reconnectRefreshPending_ = false;
+    bool reconnectStationsPending_ = false;
     quint64 originGeneration_ = 0;
     quint64 searchGeneration_ = 0;
     quint64 selectionGeneration_ = 0;

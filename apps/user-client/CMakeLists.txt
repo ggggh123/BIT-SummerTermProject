@@ -12,6 +12,7 @@ add_library(ev_user_client_core STATIC
     src/net/TencentMapClient.cpp
     src/services/UserApi.cpp
     src/ui/ChargePage.cpp
+    src/ui/HistoryPage.cpp
     src/ui/LoginPage.cpp
     src/ui/MainWindow.cpp
     src/ui/NavigationPage.cpp
@@ -60,3 +61,8 @@ add_executable(tst_user_chargepage tests/tst_chargepage.cpp resources/resources.
 target_link_libraries(tst_user_chargepage PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_chargepage COMMAND tst_user_chargepage)
 set_tests_properties(user_chargepage PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_executable(tst_user_recommendation tests/tst_recommendation.cpp resources/resources.qrc)
+target_link_libraries(tst_user_recommendation PRIVATE ev_user_client_core Qt6::Test)
+add_test(NAME user_recommendation COMMAND tst_user_recommendation)
+set_tests_properties(user_recommendation PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

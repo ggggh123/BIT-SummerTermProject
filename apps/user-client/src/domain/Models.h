@@ -151,6 +151,37 @@ inline bool operator!=(const RequestContext &left, const RequestContext &right)
 
 using HistoryOrder = Order;
 
+struct OrderListResult final {
+    QVector<Order> items;
+    qint64 total = 0;
+};
+
+struct HistoryRequestContext final {
+    QString requestId;
+    quint64 sessionGeneration = 0;
+    quint64 pageGeneration = 0;
+    quint64 readEpoch = 0;
+    qint64 limit = 0;
+    qint64 offset = 0;
+};
+
+inline bool operator==(const HistoryRequestContext &left,
+                       const HistoryRequestContext &right)
+{
+    return left.requestId == right.requestId
+        && left.sessionGeneration == right.sessionGeneration
+        && left.pageGeneration == right.pageGeneration
+        && left.readEpoch == right.readEpoch
+        && left.limit == right.limit
+        && left.offset == right.offset;
+}
+
+inline bool operator!=(const HistoryRequestContext &left,
+                       const HistoryRequestContext &right)
+{
+    return !(left == right);
+}
+
 struct ApiError final {
     QString requestId;
     QString code;
@@ -174,3 +205,5 @@ Q_DECLARE_METATYPE(ev::user::ForecastRun)
 Q_DECLARE_METATYPE(ev::user::ForecastRecord)
 Q_DECLARE_METATYPE(ev::user::ForecastLatestResult)
 Q_DECLARE_METATYPE(ev::user::StationSelection)
+Q_DECLARE_METATYPE(ev::user::OrderListResult)
+Q_DECLARE_METATYPE(ev::user::HistoryRequestContext)
