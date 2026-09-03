@@ -344,6 +344,7 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
         });
         connect(userApi_, &UserApi::requestFailed, this, &NearbyPage::handleApiFailure);
     }
+    setSearchPending(false);
 }
 
 QStringList NearbyPage::presetAddresses()
@@ -398,12 +399,15 @@ void NearbyPage::setConnectionAvailable(bool available)
         statusLabel_->setText(stations_.isEmpty()
             ? QStringLiteral("离线，暂无可用站点缓存")
             : QStringLiteral("离线缓存 · %1 个附近充电站").arg(stations_.size()));
+        setSearchPending(false);
         retryButton_->setEnabled(true);
         return;
     }
     connectionBanner_->setText(QStringLiteral("服务器已连接"));
     connectionBanner_->setStyleSheet(QString());
     retryButton_->setEnabled(true);
+    setSearchPending(foregroundSearchPending_ || !pendingGeocodeId_.isEmpty()
+                     || !pendingStationsRequestId_.isEmpty());
     if (pendingStationsRequestId_.isEmpty() && !foregroundSearchPending_) {
         setDetailControlsEnabled(true);
     }
@@ -678,6 +682,13 @@ void NearbyPage::applyStationDetail(ev::user::StationDetailResult result,
 
 void NearbyPage::searchCurrentAddress()
 {
+    if (!connected_) {
+        setSearchPending(false);
+        statusLabel_->setText(stations_.isEmpty()
+            ? QStringLiteral("离线，暂无可用站点缓存")
+            : QStringLiteral("离线缓存 · %1 个附近充电站").arg(stations_.size()));
+        return;
+    }
     const QString address = addressBox_->currentText().trimmed();
     if (mapClient_ == nullptr) {
         showError(QStringLiteral("地图服务不可用"));
@@ -918,7 +929,7 @@ void NearbyPage::showError(const QString &message)
 
 void NearbyPage::setSearchPending(bool pending)
 {
-    searchButton_->setEnabled(!pending);
+    searchButton_->setEnabled(connected_ && !pending);
     addressBox_->setEnabled(!pending);
     searchButton_->setText(pending ? QStringLiteral("加载中…") : QStringLiteral("查找附近充电站"));
 }

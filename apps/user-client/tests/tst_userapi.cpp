@@ -12,6 +12,7 @@
 
 #include <QEventLoop>
 #include <QElapsedTimer>
+#include <QComboBox>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
@@ -55,14 +56,21 @@ protected:
 
 class HangingNetworkAccessManager final : public QNetworkAccessManager
 {
+public:
+    [[nodiscard]] int requestCount() const { return requestCount_; }
+
 protected:
     QNetworkReply *createRequest(Operation operation, const QNetworkRequest &request,
                                  QIODevice *outgoingData) override
     {
         Q_UNUSED(operation)
         Q_UNUSED(outgoingData)
+        ++requestCount_;
         return new HangingNetworkReply(request, this);
     }
+
+private:
+    int requestCount_ = 0;
 };
 
 constexpr auto kMobile = "13800138000";
@@ -351,6 +359,7 @@ private slots:
     void foregroundSearchRetainsCommittedCacheUntilListCommit_data();
     void foregroundSearchRetainsCommittedCacheUntilListCommit();
     void foregroundSearchOwnsGeocodePhaseAndRestoresCachedControls();
+    void offlineNearbyCacheRemainsBrowsableAndCannotStartSearch();
     void activeOrderExistsChargingStatesWaitForMatchingFacts();
     void terminalBackWaitsForNearbyFactsToCommit();
     void terminalAndNullBackRemainReachableAcrossReconnect();
@@ -1446,6 +1455,7 @@ void UserApiTest::chargeRefreshRejectsStaleSelectionAndCannotOverwriteNewDetail(
           QJsonObject{{QStringLiteral("token"), QStringLiteral("refresh-generation-token")},
                       {QStringLiteral("user"), userObject()}});
     QTRY_VERIFY(api.sessionUser().has_value());
+    page.setConnectionAvailable(true);
 
     const ev::user::GeoPoint origin{39.958, 116.317};
     ev::user::Station station;
@@ -1567,6 +1577,7 @@ void UserApiTest::nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates()
           QJsonObject{{QStringLiteral("token"), QStringLiteral("state-token")},
                       {QStringLiteral("user"), userObject()}});
     QTRY_VERIFY(api.sessionUser().has_value());
+    page.setConnectionAvailable(true);
 
     const ev::user::GeoPoint origin{39.958, 116.317};
     page.origin_ = origin;
@@ -2822,6 +2833,77 @@ void UserApiTest::foregroundSearchOwnsGeocodePhaseAndRestoresCachedControls()
     QTest::qWait(30);
     QVERIFY(page.findChild<QPushButton *>(QStringLiteral("stationButton_3")) != nullptr);
     QCOMPARE(peer->bytesAvailable(), qint64{0});
+}
+
+void UserApiTest::offlineNearbyCacheRemainsBrowsableAndCannotStartSearch()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("offline-search-token")},
+                      {QStringLiteral("user"), userObject()}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+
+    HangingNetworkAccessManager network;
+    TencentMapClient map(QStringLiteral("test-only-key"), &network,
+                         QUrl(QStringLiteral("https://unit.invalid/geocode")), 60'000);
+    NearbyPage page(&api, &map);
+    page.setConnectionAvailable(true);
+    page.show();
+    const ev::user::GeoPoint origin{39.958, 116.317};
+    const auto station = stationValue();
+    page.displayStations({origin, {station}});
+    page.displayStationDetail({station, {chargerValue()}});
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    auto *search = page.findChild<QPushButton *>(QStringLiteral("nearbySearchButton"));
+    auto *address = page.findChild<QComboBox *>(QStringLiteral("addressBox"));
+    auto *cachedStation = page.findChild<QPushButton *>(QStringLiteral("stationButton_3"));
+    auto *cachedCharger = page.findChild<QPushButton *>(QStringLiteral("chargerButton_7"));
+    auto *cachedNavigate = page.findChild<QPushButton *>(QStringLiteral("navigateButton"));
+    auto *banner = page.findChild<QLabel *>(QStringLiteral("nearbyConnectionBanner"));
+    auto *status = page.findChild<QLabel *>(QStringLiteral("nearbyStatus"));
+    QVERIFY(search != nullptr);
+    QVERIFY(address != nullptr);
+    QVERIFY(cachedStation != nullptr);
+    QVERIFY(cachedCharger != nullptr);
+    QVERIFY(cachedNavigate != nullptr);
+    QVERIFY(banner != nullptr);
+    QVERIFY(status != nullptr);
+
+    page.setConnectionAvailable(false);
+    const quint64 searchGenerationBefore = page.searchGeneration_;
+    page.searchCurrentAddress(); // Programmatic invocation must obey the same offline guard.
+
+    const bool offlineInvariant = !search->isEnabled()
+        && address->isEnabled()
+        && cachedStation->isEnabled()
+        && cachedCharger->isEnabled()
+        && cachedNavigate->isEnabled()
+        && network.requestCount() == 0
+        && page.pendingGeocodeId_.isEmpty()
+        && !page.foregroundSearchPending_
+        && page.searchGeneration_ == searchGenerationBefore
+        && banner->text().contains(QStringLiteral("离线缓存"))
+        && banner->styleSheet().contains(QStringLiteral("red"))
+        && status->text().contains(QStringLiteral("离线缓存"));
+    QVERIFY2(offlineInvariant,
+             "offline search changed cache controls or dispatched a geocode request");
+
+    page.setConnectionAvailable(true);
+    QVERIFY(search->isEnabled());
+    QVERIFY(address->isEnabled());
+    QVERIFY(cachedStation->isEnabled());
+    QVERIFY(cachedCharger->isEnabled());
+    QVERIFY(cachedNavigate->isEnabled());
+    QCOMPARE(network.requestCount(), 0);
 }
 
 void UserApiTest::activeOrderExistsChargingStatesWaitForMatchingFacts()
