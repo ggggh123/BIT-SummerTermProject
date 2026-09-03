@@ -20,3 +20,7 @@ dashboard/runtime/
 *.log
 config.local.ini
 .env
+.superdesign
+
+# Office temporary lock files (e.g. ~$xxx.xlsx while the workbook is open)
+~$*
