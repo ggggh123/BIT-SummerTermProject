@@ -317,6 +317,8 @@ private slots:
     void lateMutationCannotOverwriteNewerAuthority_data();
     void lateMutationCannotOverwriteNewerAuthority();
     void lateMutationFailureCannotDisruptNewerAuthority();
+    void supersededMutationKeepsChargingPollAndFactsLive_data();
+    void supersededMutationKeepsChargingPollAndFactsLive();
     void reserveFactsFailureRemainsRetryable_data();
     void reserveFactsFailureRemainsRetryable();
     void nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates();
@@ -3945,6 +3947,201 @@ void UserApiTest::lateMutationFailureCannotDisruptNewerAuthority()
     QVERIFY(error->text().isEmpty());
     QVERIFY(window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"))->isEnabled());
     QVERIFY(!window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"))->isEnabled());
+}
+
+void UserApiTest::supersededMutationKeepsChargingPollAndFactsLive_data()
+{
+    QTest::addColumn<int>("outcomeKind");
+    QTest::addColumn<bool>("factsBeforeOutcome");
+    QTest::addColumn<bool>("pollBeforeOutcome");
+    QTest::newRow("cancel-facts-first") << 0 << true << false;
+    QTest::newRow("cancel-outcome-first") << 0 << false << false;
+    QTest::newRow("settle-facts-first") << 1 << true << false;
+    QTest::newRow("settle-outcome-first") << 1 << false << false;
+    QTest::newRow("failure-facts-first") << 2 << true << false;
+    QTest::newRow("failure-outcome-first") << 2 << false << false;
+    QTest::newRow("cancel-invalidates-in-flight-poll") << 0 << true << true;
+    QTest::newRow("failure-invalidates-in-flight-poll") << 2 << true << true;
+}
+
+void UserApiTest::supersededMutationKeepsChargingPollAndFactsLive()
+{
+    QFETCH(int, outcomeKind);
+    QFETCH(bool, factsBeforeOutcome);
+    QFETCH(bool, pollBeforeOutcome);
+    const bool settle = outcomeKind == 1;
+    const bool failure = outcomeKind == 2;
+
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5'000);
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+
+    auto *phone = window.findChild<QLineEdit *>(QStringLiteral("phoneEdit"));
+    phone->setText(QString::fromLatin1(kMobile));
+    window.findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    const auto login = takeRequest(peer.data());
+    reply(peer.data(), login.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("token"), QStringLiteral("charging-epoch-token")},
+                      {QStringLiteral("user"), userObject()}});
+    const auto guard = takeRequest(peer.data());
+    const QJsonObject orderA = canonicalOrderObject(
+        settle ? QStringLiteral("charging") : QStringLiteral("reserved"), settle);
+    reply(peer.data(), guard.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), orderA}});
+    const auto factsA = takeRequest(peer.data());
+    QCOMPARE(factsA.action, QStringLiteral("station.detail"));
+    reply(peer.data(), factsA.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("station"), stationObject(3, 0.0, false, false)},
+                      {QStringLiteral("chargers"),
+                       QJsonArray{chargerObject(7, 3, settle ? QStringLiteral("charging")
+                                                            : QStringLiteral("reserved")),
+                                  chargerObject(8, 3), chargerObject(9, 3),
+                                  chargerObject(10, 3, QStringLiteral("fault"))}}});
+
+    auto *api = window.findChild<UserApi *>();
+    auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
+    auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
+    auto *status = window.findChild<QLabel *>(QStringLiteral("chargeStatus"));
+    auto *meter = window.findChild<QLabel *>(QStringLiteral("chargeMeter"));
+    auto *back = window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"));
+    auto *nearby = window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"));
+    auto *current = window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"));
+    auto *profile = window.findChild<QPushButton *>(QStringLiteral("profileNavigationButton"));
+    auto *mutationButton = window.findChild<QPushButton *>(settle
+        ? QStringLiteral("chargeSettleButton") : QStringLiteral("chargeCancelButton"));
+    QTRY_VERIFY(mutationButton->isEnabled());
+    QSignalSpy changed(api, &UserApi::chargeOrderChanged);
+    QSignalSpy settled(api, &UserApi::chargeSettled);
+    QSignalSpy userApplied(api, &UserApi::sessionUserApplied);
+    QSignalSpy failures(api, &UserApi::chargeRequestFailed);
+    mutationButton->click();
+    const auto mutationA = takeRequest(peer.data());
+    QCOMPARE(mutationA.action, settle ? QStringLiteral("charge.settle")
+                                      : QStringLiteral("order.cancel"));
+
+    (void)api->loadCurrentOrder(401, 401, ev::user::ChargeOperation::Guard);
+    const auto currentB = takeRequest(peer.data());
+    QJsonObject initialB = canonicalOrderObject(QStringLiteral("charging"), false, 8, 4);
+    initialB.insert(QStringLiteral("orderId"), 101);
+    initialB.insert(QStringLiteral("stationName"), QStringLiteral("测试充电站4"));
+    initialB.insert(QStringLiteral("energyKwh"), 1.25);
+    initialB.insert(QStringLiteral("amountFen"), 321);
+    initialB.insert(QStringLiteral("elapsedSec"), 60);
+    reply(peer.data(), currentB.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), initialB}});
+    const auto factsB = takeRequest(peer.data());
+    QCOMPARE(factsB.action, QStringLiteral("station.detail"));
+
+    const auto replyFactsB = [&] {
+        reply(peer.data(), factsB.requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("station"), stationObject(4, 0.0, false, false)},
+                          {QStringLiteral("chargers"),
+                           QJsonArray{chargerObject(8, 4, QStringLiteral("charging")),
+                                      chargerObject(9, 4), chargerObject(10, 4),
+                                      chargerObject(11, 4, QStringLiteral("fault"))}}});
+    };
+    const auto replyMutationA = [&] {
+        if (failure) {
+            reply(peer.data(), mutationA.requestId, false, QStringLiteral("DB_BUSY"),
+                  QStringLiteral("old mutation busy"), QJsonObject{});
+        } else if (settle) {
+            reply(peer.data(), mutationA.requestId, true, QStringLiteral("OK"), QString(),
+                  QJsonObject{{QStringLiteral("order"),
+                               canonicalOrderObject(QStringLiteral("completed"))},
+                              {QStringLiteral("balanceFen"), 7'777}});
+        } else {
+            reply(peer.data(), mutationA.requestId, true, QStringLiteral("OK"), QString(),
+                  QJsonObject{{QStringLiteral("order"),
+                               canonicalOrderObject(QStringLiteral("cancelled"))}});
+        }
+    };
+
+    std::optional<ev::protocol::RequestEnvelope> invalidatedPoll;
+    if (factsBeforeOutcome) {
+        replyFactsB();
+        QTRY_COMPARE(status->text(), QStringLiteral("充电中"));
+        if (pollBeforeOutcome) {
+            auto *pollTimer = chargePage->findChild<QTimer *>();
+            QVERIFY(pollTimer != nullptr);
+            QVERIFY(QMetaObject::invokeMethod(pollTimer, "timeout", Qt::DirectConnection));
+            invalidatedPoll = takeRequest(peer.data());
+            QCOMPARE(invalidatedPoll->action, QStringLiteral("order.current"));
+        }
+        replyMutationA();
+    } else {
+        replyMutationA();
+        if (failure) {
+            QTRY_COMPARE(failures.size(), 1);
+        } else if (settle) {
+            QTRY_COMPARE(settled.size(), 1);
+        } else {
+            QTRY_COMPARE(changed.size(), 1);
+        }
+        QTest::qWait(30);
+        QCOMPARE(peer->bytesAvailable(), qint64{0});
+        replyFactsB();
+    }
+
+    QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(chargePage));
+    QTRY_COMPARE(status->text(), QStringLiteral("充电中"));
+    QCOMPARE(meter->text(), QStringLiteral("已充电 60 秒 · 电量 1.250 kWh · 金额 3.21 元"));
+    QVERIFY(!back->isEnabled());
+    QVERIFY(!nearby->isEnabled());
+    QTRY_VERIFY(current->isVisible());
+    QTRY_VERIFY(current->isEnabled());
+    QTRY_VERIFY(profile->isEnabled());
+    QVERIFY(window.findChild<QLabel *>(QStringLiteral("chargeError"))->text().isEmpty());
+
+    if (settle) {
+        QTRY_COMPARE(api->sessionUser()->balanceFen, qint64{7'777});
+        QCOMPARE(settled.size(), 1);
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(userApplied.size(), 1);
+        QCOMPARE(userApplied.at(0).at(2).toULongLong(), quint64{2});
+    } else if (failure) {
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(settled.size(), 0);
+        QCOMPARE(userApplied.size(), 0);
+        QCOMPARE(failures.size(), 1);
+    } else {
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(settled.size(), 0);
+        QCOMPARE(userApplied.size(), 0);
+    }
+
+    if (invalidatedPoll.has_value()) {
+        QJsonObject ignoredB = initialB;
+        ignoredB.insert(QStringLiteral("energyKwh"), 4.5);
+        ignoredB.insert(QStringLiteral("amountFen"), 654);
+        ignoredB.insert(QStringLiteral("elapsedSec"), 180);
+        reply(peer.data(), invalidatedPoll->requestId, true, QStringLiteral("OK"), QString(),
+              QJsonObject{{QStringLiteral("order"), ignoredB}});
+        QTest::qWait(30);
+        QCOMPARE(meter->text(),
+                 QStringLiteral("已充电 60 秒 · 电量 1.250 kWh · 金额 3.21 元"));
+    }
+
+    QTest::qWait(250);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+    const auto freshPoll = takeRequest(peer.data());
+    QCOMPARE(freshPoll.action, QStringLiteral("order.current"));
+    QVERIFY(!invalidatedPoll.has_value()
+            || freshPoll.requestId != invalidatedPoll->requestId);
+    QTest::qWait(pollBeforeOutcome && !failure ? 2'100 : 30);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+    QJsonObject updatedB = initialB;
+    updatedB.insert(QStringLiteral("energyKwh"), 6.75);
+    updatedB.insert(QStringLiteral("amountFen"), 987);
+    updatedB.insert(QStringLiteral("elapsedSec"), 300);
+    reply(peer.data(), freshPoll.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("order"), updatedB}});
+    QTRY_COMPARE(meter->text(),
+                 QStringLiteral("已充电 300 秒 · 电量 6.750 kWh · 金额 9.87 元"));
+    QTest::qWait(30);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
 }
 
 void UserApiTest::reserveFactsFailureRemainsRetryable_data()

@@ -566,6 +566,16 @@ void ChargePage::invalidateSafeReads()
     emit chargeSafeReadsInvalidated();
 }
 
+void ChargePage::adoptMutationReadEpoch()
+{
+    readEpoch_ = api_->currentChargeReadEpoch();
+    pendingRead_.reset();
+    pendingReadOwnerOrderId_ = 0;
+    if (!pendingFactsRequestId_.isEmpty()) {
+        pendingFactsReadEpoch_ = readEpoch_;
+    }
+}
+
 void ChargePage::beginMutation(ev::user::ChargeOperation operation)
 {
     if (!pageActive_ || !connected_ || chargeFlowBlocked()) {
@@ -621,6 +631,7 @@ void ChargePage::acceptMutation(const ev::user::RequestContext &context,
     emit mutationAuthorityObserved(context, order);
     emit mutationFinished(context);
     if (!updatePage || currentDifferentActive) {
+        adoptMutationReadEpoch();
         pendingMutation_.reset();
         pendingMutationSubjectOrderId_ = 0;
         pendingMutationSuperseded_ = false;
@@ -748,6 +759,7 @@ void ChargePage::handleChargeFailure(const ev::user::RequestContext &context,
             || pendingMutationSubjectOrderId_ != order_->orderId);
     emit mutationFinished(context);
     if (supersededByDifferentAuthority) {
+        adoptMutationReadEpoch();
         pendingMutation_.reset();
         pendingMutationSubjectOrderId_ = 0;
         pendingMutationSuperseded_ = false;
@@ -758,6 +770,7 @@ void ChargePage::handleChargeFailure(const ev::user::RequestContext &context,
     }
     const bool updatePage = matchesMutationPage(context);
     if (!updatePage) {
+        adoptMutationReadEpoch();
         pendingMutation_.reset();
         pendingMutationSubjectOrderId_ = 0;
         pendingMutationSuperseded_ = false;

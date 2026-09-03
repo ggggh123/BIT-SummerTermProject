@@ -67,6 +67,7 @@ private:
     void requestReconciliation();
     void requestFacts(bool gateActions = false, bool requireNearbyCommit = false);
     void invalidateSafeReads();
+    void adoptMutationReadEpoch();
     void beginMutation(ev::user::ChargeOperation operation);
     void acceptMutation(const ev::user::RequestContext &context,
                         const ev::user::Order &order);
