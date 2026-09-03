@@ -384,7 +384,7 @@ python3 database/export_ml_history.py \
 
 If the timetable is not yet published, use a documented candidate time and regenerate these data artifacts—not source code—before the Sep 9 code freeze. #5 then executes ML Tasks 5–6 with that same cutoff and returns the acknowledged last-good file.
 
-- [ ] **Step 2: After ML acknowledgement, run the finalizer and integrity checks**
+- [x] **Step 2: After ML acknowledgement, run the finalizer and integrity checks**
 
 ```bash
 python3 database/finalize_golden.py \
