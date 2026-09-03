@@ -2,6 +2,7 @@
 
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QList>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -78,25 +79,40 @@ TencentMapClient::TencentMapClient(QString apiKey, QNetworkAccessManager *networ
 
 TencentMapClient::~TencentMapClient()
 {
-    const auto outstanding = outstandingReplies_;
+    struct TeardownGuards final {
+        QPointer<QNetworkReply> reply;
+        QPointer<QTimer> deadline;
+    };
+    QList<TeardownGuards> outstanding;
+    outstanding.reserve(outstandingReplies_.size());
+    for (auto it = outstandingReplies_.cbegin(); it != outstandingReplies_.cend(); ++it) {
+        outstanding.append({it.key(), it.value()});
+    }
     outstandingReplies_.clear();
-    for (auto it = outstanding.cbegin(); it != outstanding.cend(); ++it) {
-        QNetworkReply *reply = it.key();
-        QTimer *deadline = it.value();
-        if (reply == nullptr) {
+
+    // Disconnect every client callback before aborting any reply: an external direct slot
+    // may destroy the manager and therefore every other reply during the first abort.
+    for (const TeardownGuards &entry : std::as_const(outstanding)) {
+        if (entry.deadline != nullptr) {
+            entry.deadline->stop();
+        }
+        if (entry.deadline != nullptr) {
+            QObject::disconnect(entry.deadline.data(), nullptr, this, nullptr);
+        }
+        if (entry.reply != nullptr) {
+            QObject::disconnect(entry.reply.data(), nullptr, this, nullptr);
+        }
+    }
+    for (const TeardownGuards &entry : std::as_const(outstanding)) {
+        if (entry.reply == nullptr) {
             continue;
         }
-        if (deadline != nullptr) {
-            deadline->stop();
-            QObject::disconnect(deadline, nullptr, this, nullptr);
+        const bool finished = entry.reply->isFinished();
+        if (entry.reply != nullptr && !finished) {
+            entry.reply->abort();
         }
-        QObject::disconnect(reply, nullptr, this, nullptr);
-        QPointer<QNetworkReply> guardedReply(reply);
-        if (!reply->isFinished()) {
-            reply->abort();
-        }
-        if (guardedReply != nullptr) {
-            guardedReply->deleteLater();
+        if (entry.reply != nullptr) {
+            entry.reply->deleteLater();
         }
     }
 }
@@ -142,39 +158,53 @@ QString TencentMapClient::geocode(const QString &address)
         outstandingReplies_.remove(reply);
     });
     connect(deadline, &QTimer::timeout, this, [this, guardedReply, requestId] {
-        if (guardedReply == nullptr
-            || outstandingReplies_.remove(guardedReply.data()) == 0) {
+        QPointer<TencentMapClient> guardedClient(this);
+        QPointer<QNetworkReply> replyGuard = guardedReply;
+        if (replyGuard == nullptr
+            || outstandingReplies_.remove(replyGuard.data()) == 0) {
             return;
         }
-        guardedReply->abort();
-        emit geocodeFailed({requestId, QStringLiteral("MAP_TIMEOUT"), QStringLiteral("腾讯地图请求超时，请重试")});
-        if (guardedReply != nullptr) {
-            guardedReply->deleteLater();
+        replyGuard->abort();
+        if (guardedClient == nullptr) {
+            return;
+        }
+        emit guardedClient->geocodeFailed(
+            {requestId, QStringLiteral("MAP_TIMEOUT"),
+             QStringLiteral("腾讯地图请求超时，请重试")});
+        if (replyGuard != nullptr) {
+            replyGuard->deleteLater();
         }
     });
     connect(reply, &QNetworkReply::finished, this, [this, guardedReply, requestId] {
-        if (guardedReply == nullptr) {
+        QPointer<QNetworkReply> replyGuard = guardedReply;
+        if (replyGuard == nullptr) {
             return;
         }
-        const auto it = outstandingReplies_.find(guardedReply.data());
+        const auto it = outstandingReplies_.find(replyGuard.data());
         if (it == outstandingReplies_.end()) {
             return;
         }
-        QTimer *deadline = it.value();
+        QPointer<QTimer> deadline = it.value();
         outstandingReplies_.erase(it);
-        deadline->stop();
-        if (guardedReply->error() != QNetworkReply::NoError) {
+        if (deadline != nullptr) {
+            deadline->stop();
+        }
+        if (replyGuard->error() != QNetworkReply::NoError) {
             emit geocodeFailed({requestId, QStringLiteral("NETWORK_ERROR"), QStringLiteral("腾讯地图网络请求失败，请重试")});
-            guardedReply->deleteLater();
+            if (replyGuard != nullptr) {
+                replyGuard->deleteLater();
+            }
             return;
         }
-        const ParsedGeocode parsed = parseResponse(guardedReply->readAll());
+        const ParsedGeocode parsed = parseResponse(replyGuard->readAll());
         if (parsed.success) {
             emit geocodeSucceeded(requestId, parsed.coordinate);
         } else {
             emit geocodeFailed({requestId, parsed.code, parsed.message});
         }
-        guardedReply->deleteLater();
+        if (replyGuard != nullptr) {
+            replyGuard->deleteLater();
+        }
     });
     deadline->start();
     return requestId;

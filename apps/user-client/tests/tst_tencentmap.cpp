@@ -111,6 +111,7 @@ class FakeNetworkAccessManager final : public QNetworkAccessManager {
 public:
     QList<ReplyPlan> plans;
     QList<QNetworkRequest> requests;
+    QList<QPointer<QNetworkReply>> replies;
     QPointer<QNetworkReply> lastReply;
 
 protected:
@@ -122,6 +123,7 @@ protected:
         requests.append(request);
         const ReplyPlan plan = plans.isEmpty() ? ReplyPlan{} : plans.takeFirst();
         auto *reply = new FakeReply(request, plan, this);
+        replies.append(reply);
         lastReply = reply;
         return reply;
     }
@@ -319,6 +321,9 @@ private slots:
     void requestBuilderUsesOfficialEndpointAndEncodedQueryOnly();
     void asyncGeocoderHandlesSuccessTencentNetworkMalformedAndTimeoutOnce();
     void destructionCancelsExternalManagerReplyWithoutLateSignals();
+    void destructionSurvivesManagerDeletingAllRepliesDuringFirstAbort();
+    void terminalSignalReceiverMayDestroyClientAndExternalManager_data();
+    void terminalSignalReceiverMayDestroyClientAndExternalManager();
     void navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState();
     void routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess();
     void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
@@ -440,6 +445,109 @@ void TencentMapClientTest::destructionCancelsExternalManagerReplyWithoutLateSign
     QTest::qWait(50);
     QCOMPARE(succeeded.count(), 0);
     QCOMPARE(failed.count(), 0);
+}
+
+void TencentMapClientTest::destructionSurvivesManagerDeletingAllRepliesDuringFirstAbort()
+{
+    auto *manager = new FakeNetworkAccessManager;
+    manager->plans = {
+        {{}, QNetworkReply::NoError, true},
+        {{}, QNetworkReply::NoError, true},
+    };
+    QPointer<FakeNetworkAccessManager> guardedManager(manager);
+    auto *client = new TencentMapClient(
+        QStringLiteral("test-only-key"), manager,
+        QUrl(QStringLiteral("https://offline.invalid/geocode")), 1'000);
+    QSignalSpy succeeded(client, &TencentMapClient::geocodeSucceeded);
+    QSignalSpy failed(client, &TencentMapClient::geocodeFailed);
+
+    (void)client->geocode(QStringLiteral("第一个悬挂地址"));
+    (void)client->geocode(QStringLiteral("第二个悬挂地址"));
+    QCOMPARE(manager->replies.count(), 2);
+    QPointer<QNetworkReply> firstReply = manager->replies.at(0);
+    QPointer<QNetworkReply> secondReply = manager->replies.at(1);
+    QVERIFY(firstReply != nullptr);
+    QVERIFY(secondReply != nullptr);
+
+    QObject observer;
+    bool managerDestroyedByAbort = false;
+    const auto destroyManager = [&guardedManager, &managerDestroyedByAbort] {
+        if (guardedManager != nullptr) {
+            managerDestroyedByAbort = true;
+            delete guardedManager.data();
+        }
+    };
+    connect(firstReply.data(), &QNetworkReply::finished, &observer, destroyManager,
+            Qt::DirectConnection);
+    connect(secondReply.data(), &QNetworkReply::finished, &observer, destroyManager,
+            Qt::DirectConnection);
+
+    delete client;
+
+    QVERIFY(managerDestroyedByAbort);
+    QVERIFY(guardedManager.isNull());
+    QVERIFY(firstReply.isNull());
+    QVERIFY(secondReply.isNull());
+    QCOMPARE(succeeded.count(), 0);
+    QCOMPARE(failed.count(), 0);
+}
+
+void TencentMapClientTest::terminalSignalReceiverMayDestroyClientAndExternalManager_data()
+{
+    QTest::addColumn<int>("networkError");
+    QTest::newRow("success") << static_cast<int>(QNetworkReply::NoError);
+    QTest::newRow("network-error")
+        << static_cast<int>(QNetworkReply::ConnectionRefusedError);
+}
+
+void TencentMapClientTest::terminalSignalReceiverMayDestroyClientAndExternalManager()
+{
+    QFETCH(int, networkError);
+    auto *manager = new FakeNetworkAccessManager;
+    manager->plans = {{
+        networkError == QNetworkReply::NoError
+            ? QByteArray(R"({"status":0,"result":{"location":{"lat":39.958,"lng":116.317}}})")
+            : QByteArray{},
+        static_cast<QNetworkReply::NetworkError>(networkError), false}};
+    QPointer<FakeNetworkAccessManager> guardedManager(manager);
+    auto *client = new TencentMapClient(
+        QStringLiteral("test-only-key"), manager,
+        QUrl(QStringLiteral("https://offline.invalid/geocode")), 1'000);
+    QPointer<TencentMapClient> guardedClient(client);
+    QObject observer;
+    int successCount = 0;
+    int failureCount = 0;
+    const auto destroyOwners = [&guardedManager, &guardedClient] {
+        if (guardedManager != nullptr) {
+            delete guardedManager.data();
+        }
+        if (guardedClient != nullptr) {
+            delete guardedClient.data();
+        }
+    };
+    connect(client, &TencentMapClient::geocodeSucceeded, &observer,
+            [&successCount, destroyOwners](const QString &, const ev::user::GeoPoint &) {
+                ++successCount;
+                destroyOwners();
+            }, Qt::DirectConnection);
+    connect(client, &TencentMapClient::geocodeFailed, &observer,
+            [&failureCount, destroyOwners](const ev::user::ApiError &) {
+                ++failureCount;
+                destroyOwners();
+            }, Qt::DirectConnection);
+
+    (void)client->geocode(QStringLiteral("同步销毁测试地址"));
+    QPointer<QNetworkReply> guardedReply = manager->lastReply;
+    QVERIFY(guardedReply != nullptr);
+
+    QTRY_VERIFY_WITH_TIMEOUT(guardedClient.isNull(), 500);
+    QVERIFY(guardedManager.isNull());
+    QVERIFY(guardedReply.isNull());
+    QCOMPARE(successCount + failureCount, 1);
+    QCOMPARE(successCount, networkError == QNetworkReply::NoError ? 1 : 0);
+    QCOMPARE(failureCount, networkError == QNetworkReply::NoError ? 0 : 1);
+    QTest::qWait(30);
+    QCOMPARE(successCount + failureCount, 1);
 }
 
 void TencentMapClientTest::navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState()
