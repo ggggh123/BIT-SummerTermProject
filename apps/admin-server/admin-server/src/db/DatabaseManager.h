@@ -8,7 +8,7 @@
 class DatabaseManager
 {
 public:
-    Result open();
+    Result open(const QString &databasePath = QString());
     QSqlDatabase database() const;
     QString databasePath() const;
 

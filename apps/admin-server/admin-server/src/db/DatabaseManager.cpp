@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QIODevice>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -108,14 +109,22 @@ int scalarInt(QSqlDatabase database, const QString &sql)
 
 } // namespace
 
-Result DatabaseManager::open()
+Result DatabaseManager::open(const QString &databasePath)
 {
-    QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (dataDir.isEmpty()) {
-        dataDir = QDir::currentPath() + QStringLiteral("/runtime");
+    if (databasePath.trimmed().isEmpty()) {
+        QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        if (dataDir.isEmpty()) {
+            dataDir = QDir::currentPath() + QStringLiteral("/runtime");
+        }
+        QDir().mkpath(dataDir);
+        m_databasePath = dataDir + QStringLiteral("/charging_platform_server_data_v1.db");
+    } else {
+        m_databasePath = QDir::cleanPath(databasePath);
+        const QFileInfo databaseFile(m_databasePath);
+        if (!databaseFile.absolutePath().isEmpty()) {
+            QDir().mkpath(databaseFile.absolutePath());
+        }
     }
-    QDir().mkpath(dataDir);
-    m_databasePath = dataDir + QStringLiteral("/charging_platform_server_data_v1.db");
 
     QSqlDatabase db = QSqlDatabase::contains(m_connectionName)
         ? QSqlDatabase::database(m_connectionName)
