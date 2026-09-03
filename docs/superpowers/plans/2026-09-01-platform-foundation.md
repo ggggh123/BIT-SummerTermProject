@@ -99,7 +99,7 @@ Expected before bootstrap: non-zero exit with named `MISSING ...` lines for ever
 
 - [ ] **Step 3: Write the bootstrap script**
 
-Create `scripts/bootstrap.sh`:
+Create `scripts/bootstrap.sh` with the exact global APT list from kickoff Task 3. It installs all dependencies system-wide and never creates a virtual environment:
 
 ```bash
 #!/usr/bin/env bash
