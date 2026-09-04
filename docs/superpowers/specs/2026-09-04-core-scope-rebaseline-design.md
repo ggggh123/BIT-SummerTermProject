@@ -48,11 +48,11 @@ Qt 用户端（含腾讯地图 Web API 导航）
         |
         | 长度前缀 JSON/TCP
         v
-Qt 管理/服务端（唯一运行时 SQLite writer）
-        ^                    |
-        |                    | 串行事务
-        |                    v
-Qt 设备模拟器 ----------> SQLite / 黄金库
+Qt 管理/服务端（唯一运行时 SQLite writer） -- 串行事务 --> SQLite / 黄金库
+        ^
+        | 状态/遥测/故障
+        |
+Qt 设备模拟器
 ```
 
 核心验收链路为：
