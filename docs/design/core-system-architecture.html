@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="2026-09-04 起电动汽车充电平台的当前核心交付架构。">
+  <title>核心交付架构｜电动汽车充电平台</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17233b;
+      --muted: #53647d;
+      --line: #cbd7e8;
+      --canvas: #f4f8fc;
+      --panel: #ffffff;
+      --blue: #1769d1;
+      --blue-soft: #eaf3ff;
+      --green: #0b7a55;
+      --green-soft: #e8f8ef;
+      --orange: #9b5300;
+      --orange-soft: #fff2dc;
+      --red: #a92929;
+      --red-soft: #ffebeb;
+      --shadow: 0 12px 32px rgb(36 68 110 / 10%);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; min-width: 0; background: var(--canvas); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; overflow-x: hidden; }
+    a { color: #075bbd; font-weight: 700; text-underline-offset: .18em; }
+    a:hover { color: #003f8a; }
+    a:focus-visible { outline: 3px solid #f0a52b; outline-offset: 3px; border-radius: 3px; }
+    .shell { width: min(1160px, calc(100% - 2rem)); margin: 0 auto; }
+    .status-bar { background: #102a4d; color: #f5f9ff; border-bottom: 4px solid #36b37e; }
+    .status-inner { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .65rem 0; }
+    .status-label { margin: 0; font-weight: 800; letter-spacing: .03em; }
+    .status-note { margin: 0; color: #d4e7ff; font-size: .92rem; text-align: right; }
+    .hero { padding: clamp(2.25rem, 5vw, 4.6rem) 0 2.2rem; background: radial-gradient(circle at 88% 8%, #d8ecff 0, transparent 29rem), linear-gradient(145deg, #fff 0%, #edf5ff 100%); border-bottom: 1px solid var(--line); }
+    .eyebrow { display: inline-flex; align-items: center; gap: .45rem; margin: 0 0 .75rem; color: var(--green); font-size: .86rem; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+    .eyebrow::before { width: .7rem; height: .7rem; background: var(--green); border-radius: 50%; content: ""; box-shadow: 0 0 0 5px rgb(11 122 85 / 14%); }
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { max-width: 14ch; margin: 0; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: -.045em; }
+    .lead { max-width: 50rem; margin: 1rem 0 0; color: var(--muted); font-size: clamp(1.04rem, 2vw, 1.2rem); }
+    .facts { display: flex; flex-wrap: wrap; gap: .65rem; margin: 1.35rem 0 0; padding: 0; list-style: none; }
+    .facts li { padding: .38rem .67rem; border: 1px solid #b7d4f7; border-radius: 999px; background: #fff; color: #1a528f; font-size: .9rem; font-weight: 700; }
+    main { padding: 2rem 0 3.6rem; }
+    .notice { display: grid; grid-template-columns: auto 1fr; gap: .8rem; align-items: start; padding: 1rem 1.1rem; border: 1px solid #edc369; border-left: 6px solid #c77900; border-radius: .7rem; background: var(--orange-soft); color: #593400; }
+    .notice strong { white-space: nowrap; }
+    .notice p { margin: 0; }
+    .section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .6rem 1.4rem; margin: 2.5rem 0 1rem; }
+    .section-heading h2 { margin: 0; font-size: clamp(1.4rem, 3vw, 2rem); }
+    .section-heading p { margin: 0; color: var(--muted); }
+    .architecture { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 74px minmax(0, 1.1fr) 74px minmax(0, 1fr); gap: 1rem; align-items: stretch; padding: clamp(1rem, 3vw, 2rem); overflow: hidden; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); box-shadow: var(--shadow); }
+    .system { position: relative; z-index: 1; min-width: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .8rem; background: #fff; }
+    .system h3 { margin: 0; font-size: 1.05rem; }
+    .system p { margin: .45rem 0 0; color: var(--muted); font-size: .93rem; }
+    .system small { display: block; margin-top: .7rem; color: #4e617d; font-weight: 750; }
+    .client { border-top: 5px solid #3383dc; }
+    .server { border-top: 5px solid #07835c; background: linear-gradient(180deg, #fff, var(--green-soft)); }
+    .data { border-top: 5px solid #9a6600; background: linear-gradient(180deg, #fff, #fff8eb); }
+    .arrow { display: grid; place-items: center; min-width: 0; color: var(--blue); font-size: 2rem; font-weight: 900; }
+    .arrow span { display: block; max-width: 72px; color: var(--muted); font-size: .72rem; font-weight: 700; line-height: 1.25; text-align: center; }
+    .authority { grid-column: 2 / 5; z-index: 1; margin: .25rem 0; padding: .7rem .9rem; border-radius: .6rem; background: #e3f6eb; color: #07563d; font-weight: 800; text-align: center; }
+    .simulator { grid-column: 1 / 3; }
+    .simulator::after { position: absolute; top: 50%; right: -74px; width: 74px; border-top: 3px dashed #71839e; content: ""; }
+    .simulator::before { position: absolute; top: calc(50% - 6px); right: -74px; border-top: 7px solid transparent; border-bottom: 7px solid transparent; border-left: 10px solid #71839e; content: ""; }
+    .database { grid-column: 4 / 6; }
+    .flow-band { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: .5rem; margin-top: 1rem; padding: 1rem; border-radius: .8rem; background: #132f54; color: #fff; }
+    .flow-step { min-width: 0; padding: .45rem .55rem; border: 1px solid rgb(255 255 255 / 25%); border-radius: .45rem; background: rgb(255 255 255 / 10%); font-size: .82rem; font-weight: 700; text-align: center; }
+    .flow-step:not(:last-child)::after { position: relative; left: calc(50% + .7rem); color: #87c8ff; content: "→"; font-size: 1.2rem; }
+    .optional { margin-top: 1.2rem; padding: 1rem 1.15rem; border: 1px dashed #8b9bb3; border-radius: .8rem; background: #f8fbff; }
+    .optional h3 { margin: 0; font-size: 1rem; }
+    .optional p { margin: .35rem 0 0; color: var(--muted); }
+    .optional-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin-top: .85rem; }
+    .optional-card { padding: .8rem; border: 1px solid var(--line); border-radius: .6rem; background: #fff; }
+    .optional-card strong { color: #39536f; }
+    .optional-card p { margin-top: .25rem; font-size: .9rem; }
+    .links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .link-card { min-width: 0; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--panel); box-shadow: 0 4px 14px rgb(36 68 110 / 6%); }
+    .link-card h3 { margin: 0; font-size: 1rem; }
+    .link-card p { margin: .35rem 0 .75rem; color: var(--muted); font-size: .92rem; }
+    footer { padding: 1.4rem 0 2.4rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .88rem; }
+    @media (max-width: 780px) {
+      .status-inner { align-items: flex-start; flex-direction: column; }
+      .status-note { text-align: left; }
+      .architecture { grid-template-columns: 1fr; gap: .65rem; }
+      .arrow { min-height: 32px; transform: rotate(90deg); }
+      .authority, .simulator, .database { grid-column: auto; }
+      .simulator::after, .simulator::before { display: none; }
+      .flow-band { grid-template-columns: 1fr; gap: .35rem; }
+      .flow-step:not(:last-child)::after { display: block; position: static; margin-top: .2rem; content: "↓"; }
+      .optional-grid, .links { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) { .shell { width: min(100% - 1.25rem, 1160px); } .notice { grid-template-columns: 1fr; gap: .2rem; } }
+  </style>
+</head>
+<body>
+  <div class="status-bar">
+    <div class="shell status-inner">
+      <p class="status-label">当前核心交付架构 · 2026-09-04 生效</p>
+      <p class="status-note">核心：Qt 用户端 · Qt 管理/服务端 · SQLite/Qt 模拟器 ｜ Web/ML：成果保留、退出核心验收</p>
+    </div>
+  </div>
+  <header class="hero">
+    <div class="shell">
+      <p class="eyebrow">Core delivery profile</p>
+      <h1>可运行核心闭环，保留可选成果。</h1>
+      <p class="lead">答辩与发布以用户端、服务端、黄金库和模拟器组成的闭环为唯一主线。腾讯地图导航仍由 Qt 用户端承载；Web 大屏与机器学习不再阻塞核心发布，但其代码、数据、测试与历史证据都被保留。</p>
+      <ul class="facts" aria-label="当前架构关键事实">
+        <li>服务端是唯一运行时写库权威</li>
+        <li>SQLite 以受校验黄金库起步</li>
+        <li>开放 P0：服务端核心闭环</li>
+      </ul>
+    </div>
+  </header>
+  <main class="shell">
+    <aside class="notice" aria-label="当前 P0 提示">
+      <strong>当前 P0 · 服务端</strong>
+      <p>在用户端—服务端—数据库/模拟器的真实核心联调证据建立前，服务端核心闭环为最高优先级；不得以可选 Web/ML 的构建或测试结果替代该验收证据。</p>
+    </aside>
+
+    <section aria-labelledby="architecture-title">
+      <div class="section-heading">
+        <h2 id="architecture-title">核心系统与写入边界</h2>
+        <p>实线为核心调用；虚线为模拟器遥测入口。</p>
+      </div>
+      <div class="architecture" role="img" aria-label="Qt 用户端通过长度前缀 JSON TCP 连接 Qt 管理服务端；服务端唯一写入 SQLite 黄金库；Qt 模拟器向服务端发送遥测与故障事件。">
+        <article class="system client">
+          <h3>Qt 用户端</h3>
+          <p>登录/自动注册、找站查桩、预约、开始与停止充电、结算。</p>
+          <small>含腾讯地图驾车/步行导航</small>
+        </article>
+        <div class="arrow" aria-hidden="true">↔<span>长度前缀 JSON / TCP</span></div>
+        <article class="system server">
+          <h3>Qt 管理 / 服务端</h3>
+          <p>业务校验、订单状态机、管理统计与串行事务；唯一运行时 SQLite writer。</p>
+          <small>核心写入权威</small>
+        </article>
+        <div class="authority">所有运行时数据变更都经 Qt 管理 / 服务端串行事务落库</div>
+        <article class="system simulator">
+          <h3>Qt 模拟器</h3>
+          <p>发送电桩状态、功率、SOC 与故障事件；不直接写运行时数据库。</p>
+          <small>遥测 / 故障事件 → 服务端</small>
+        </article>
+        <article class="system database">
+          <h3>SQLite / 黄金库</h3>
+          <p>受校验种子数据、用户余额、订单、站点与电桩状态的可信起点与持久化结果。</p>
+          <small>服务端唯一写入 · 可审计</small>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="flow-title">
+      <div class="section-heading">
+        <h2 id="flow-title">核心主流程</h2>
+        <p>同一提交从黄金数据开始，连续两次通过才构成核心交付证据。</p>
+      </div>
+      <div class="flow-band" aria-label="登录到结算的核心流程">
+        <div class="flow-step">登录 / 自动注册</div>
+        <div class="flow-step">查站与查桩</div>
+        <div class="flow-step">腾讯地图导航</div>
+        <div class="flow-step">预约</div>
+        <div class="flow-step">开始充电</div>
+        <div class="flow-step">模拟器遥测 / 故障</div>
+        <div class="flow-step">停止</div>
+        <div class="flow-step">结算与一致性校验</div>
+      </div>
+    </section>
+
+    <section class="optional" aria-labelledby="optional-title">
+      <h3 id="optional-title">可选侧车：成果保留，不阻塞发布</h3>
+      <p>Web/ML 保留为独立可验证、可手动演示的参考能力。缺少 Web snapshot、静态 HTTP 服务、在线预测生产者或 active forecast 均是合法的核心运行状态。</p>
+      <div class="optional-grid">
+        <article class="optional-card">
+          <strong>Optional Web</strong>
+          <p><code>dashboard/</code> 静态 ECharts、fixture、fallback 与独立 Node 测试；不进入核心构建和发布闸门。</p>
+        </article>
+        <article class="optional-card">
+          <strong>Optional ML</strong>
+          <p><code>ml/</code> 离线训练、预测、模型/指标工件与独立 pytest；无 active forecast 时用户端正常降级为“暂无预测”。</p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="evidence-title">
+      <div class="section-heading">
+        <h2 id="evidence-title">范围、审计与合同入口</h2>
+        <p>这些文档共同定义当前口径；历史页面仍可访问。</p>
+      </div>
+      <div class="links">
+        <article class="link-card">
+          <h3>当前范围基线</h3>
+          <p>定义三条核心交付线与 Web/ML 的可选成果边界。</p>
+          <a href="../management/scope-baseline.md">打开范围基线 v2</a>
+        </article>
+        <article class="link-card">
+          <h3>仓库进展审计</h3>
+          <p>区分已提交、已构建、已测试、独立运行与真实端到端联调证据。</p>
+          <a href="../review/repository-progress-audit-2026-09-04.md">打开 2026-09-04 进展审计</a>
+        </article>
+        <article class="link-card">
+          <h3>冻结接口合同</h3>
+          <p>保留核心与可选模块的兼容性边界，避免范围调整变成破坏性删除。</p>
+          <a href="interface-contract.md">打开 Foundation v1 接口合同</a>
+        </article>
+        <article class="link-card">
+          <h3>历史五系统视图</h3>
+          <p>保留 2026-09-01 的完整五系统节点、说明和互动演示，供历史回溯。</p>
+          <a href="five-system-architecture.html">打开历史五系统架构</a>
+        </article>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <div class="shell">当前核心交付架构 · 2026-09-04 ｜ 本页为仓库自包含 HTML，无网络资源依赖。</div>
+  </footer>
+</body>
+</html>

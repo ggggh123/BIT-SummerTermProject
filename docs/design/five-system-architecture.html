@@ -6,10 +6,30 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>电动汽车充电平台五系统架构</title>
-<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+<style>
+  :root { color-scheme: light dark; background: light-dark(rgb(255 255 255), rgb(24 24 24)); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: inherit; color: light-dark(#162038, #edf3ff); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .legacy-banner { background: linear-gradient(110deg, #5b3500, #9a5900); color: #fff8ed; border-bottom: 4px solid #f7b84b; }
+  .legacy-banner__inner { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; padding: .9rem 0 1rem; }
+  .legacy-banner strong { display: block; font-size: clamp(1rem, 2.5vw, 1.2rem); letter-spacing: .01em; }
+  .legacy-banner p { margin: .35rem 0 0; line-height: 1.5; }
+  .legacy-banner a { display: inline-block; margin-top: .55rem; padding: .45rem .7rem; border-radius: .4rem; background: #fff; color: #713f00; font-weight: 700; text-decoration: none; }
+  .legacy-banner a:hover, .legacy-banner a:focus-visible { outline: 3px solid #ffe09a; outline-offset: 3px; background: #fff4dc; }
+  iframe { display: block; width: 100%; height: calc(100vh - 148px); min-height: 620px; margin: 0 auto; border: 0; }
+  @media (max-width: 600px) { .legacy-banner__inner { width: min(100% - 1.25rem, 1120px); } iframe { height: calc(100vh - 185px); min-height: 680px; } }
+</style>
 </head>
 <body>
-<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="电动汽车充电平台五系统架构" srcdoc="&lt;!doctype html&gt;
+<header class="legacy-banner" aria-label="历史架构状态">
+  <div class="legacy-banner__inner">
+    <strong>2026-09-01 历史五系统基线</strong>
+    <p>Web/ML 已于 2026-09-04 退出核心验收但成果保留。本页完整保留原五系统节点、说明与交互演示，供历史回溯和可选成果参考。</p>
+    <a href="core-system-architecture.html">查看当前核心交付架构（2026-09-04）</a>
+  </div>
+</header>
+<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="电动汽车充电平台五系统架构（历史基线）" srcdoc="&lt;!doctype html&gt;
 &lt;html lang=&quot;en&quot;&gt;
 &lt;head&gt;
 &lt;meta charset=&quot;utf-8&quot;&gt;
