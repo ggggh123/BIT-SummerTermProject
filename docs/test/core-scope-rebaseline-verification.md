@@ -18,7 +18,7 @@
 
 ```sh
 rg -n -g '!*.xlsx' '五个系统全部可运行|五系统连续两次|五系统 V1|默认.*Web|默认.*ML' README.md docs database/README.md scripts
-git grep -n -E '[A-Z0-9]{5}(-[A-Z0-9]{5}){5}' -- ':!references/**' ':!*.xlsx'
+git grep -n -E '[A-Z0-9]{5}(-[A-Z0-9]{5}){5}' -- ':!references/**' ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 python3 - <<'PY'
 import os, re, subprocess, sys
 files = subprocess.check_output(['git', 'ls-files', '--', '*.md', ':(exclude,glob)**/*.xlsx', ':(exclude,glob)*.xlsx'], text=True).splitlines()
