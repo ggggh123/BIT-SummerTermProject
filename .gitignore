@@ -20,3 +20,8 @@ dashboard/runtime/
 *.log
 config.local.ini
 .env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
