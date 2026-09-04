@@ -2,11 +2,11 @@
 
 > **执行方式：** 使用 `superpowers:subagent-driven-development` 逐任务实现、逐任务复核，并在全分支完成后进行整体代码审查。
 
-**目标：** 在不删除 Web/ML 成果、不篡改原始需求附件的前提下，把仓库的现行范围、计划、需求矩阵、环境门槛和架构入口统一为“三条核心交付线 + 两项可选参考成果”。
+**目标：** 在不删除 Web/ML 成果、不篡改原始需求附件的前提下，把仓库的现行范围、计划、环境门槛和架构入口统一为“三条核心交付线 + 两项可选参考成果”。需求矩阵由队员人工维护，不属于本 PR 的自动化范围。
 
 **架构：** 默认 core profile 只包含 Qt 用户端、Qt 管理/服务端、SQLite/设备模拟器；Web 与 ML 保留为独立 optional profile。旧五系统设计与 HTML 作为历史证据保留，新文件承载当前架构和验收口径。范围重置通过独立 PR 进入 `dev`，不直接修改共享分支。
 
-**技术栈：** Markdown、HTML/CSS/JavaScript、POSIX shell、CMake/CTest、Python/pytest、Node.js（仅可选 Web 检查）、`.xlsx` 与 `@oai/artifact-tool`。
+**技术栈：** Markdown、HTML/CSS/JavaScript、POSIX shell、CMake/CTest、Python/pytest、Node.js（仅可选 Web 检查）。
 
 **设计规范：** `docs/superpowers/specs/2026-09-04-core-scope-rebaseline-design.md`
 
@@ -18,7 +18,8 @@
 - 第一批 PR 不修改 `apps/`、`simulator/src/`、`database/*.py`、`database/schema.sql` 或 `shared/` 中的业务实现。
 - 原 `docs/design/five-system-architecture.html` 保留原路径；只增加历史状态说明，不删除原图主体。
 - 新的当前架构页面使用独立文件，不覆盖旧 HTML。
-- 最新需求矩阵必须以 `origin/main@fc7c67e` 的 `需求矩阵-第1组-王浩恩.xlsx` 为输入，保持该文件名、两张工作表和现有样式。
+- Task 1 已将 `origin/main@fc7c67e` 的 `需求矩阵-第1组-王浩恩.xlsx` 同步到整理基线，保留该文件名和版本这一历史事实；自此其内容、状态、样式、验收签字和后续维护均由队员人工负责。
+- 本 PR 后续不得自动读取、检查、编辑、导出、渲染或验证该工作簿，也不得就其内容作出自动化承诺。
 - Web/ML 行保留但退出核心验收；不得把已经完成的成果写成“未发生”，也不得把未联调能力写成“已完成”。
 - 默认 `scripts/check_env.sh` 不得因缺少 Node/npm、NumPy、pandas、scikit-learn 或 joblib 失败；可选参数分别启用 Web/ML 检查。
 - 保留当前一键全量 APT 安装能力；全量安装是便利超集，不代表所有包都是 core 必需项。
@@ -26,58 +27,9 @@
 - 不直接 push 到 `dev` 或 `main`；只推送当前整理分支并创建目标为 `dev` 的 PR。
 - 每个提交前执行 `git diff --check`，不得夹带审计构建目录、缓存、临时脚本或用户其他改动。
 
-## Task 1：吸收最新 main 需求矩阵并锁定整理基线
+## Task 1：已完成——从 main 同步需求矩阵并锁定整理基线
 
-**文件：**
-
-- 删除：`01需求矩阵-第1组-王浩恩.xlsx`（由上游提交的重命名产生）
-- 新增：`需求矩阵-第1组-王浩恩.xlsx`（来自 `fc7c67e`，本任务不编辑内容）
-
-**输入：**
-
-- 当前整理分支基于 `origin/dev@04e45fc`；
-- 已审计上游提交：`origin/main@fc7c67e`；
-- `c909b67..fc7c67e` 只包含需求矩阵重命名与新版二进制内容。
-
-- [ ] **Step 1：再次确认精确上游差异**
-
-```bash
-git fetch --prune origin
-git diff --name-status c909b67ee66f203c82a1fca5d390fc0f1ef3f8ec fc7c67e
-git log -1 --format='%H %an %s' fc7c67e
-```
-
-预期：只显示旧工作簿删除和新工作簿新增；提交作者为 SpiderBoy，主题为刷新需求矩阵。
-
-- [ ] **Step 2：合并精确提交而非可移动分支名**
-
-```bash
-git merge --no-ff fc7c67e -m "merge: sync refreshed requirement matrix from main"
-```
-
-预期：不修改设计规范，不产生业务代码冲突。
-
-- [ ] **Step 3：只读导入并渲染新版矩阵**
-
-使用 `@oai/artifact-tool` 导入 `需求矩阵-第1组-王浩恩.xlsx`，检查：
-
-- `需求进度管理表` 范围为 `A1:J28`；
-- `示例` 范围为 `A1:L31`；
-- 需求编号为 1–25；
-- Web 为 22–23，ML 为 24–25；
-- 没有公式错误；
-- 渲染图片可读且版式完整。
-
-本步骤只读，不运行 artifact edit operation marker，不导出覆盖工作簿。
-
-- [ ] **Step 4：验证提交边界**
-
-```bash
-git status --short
-git diff --check HEAD^ HEAD
-```
-
-预期：合并完成，工作区干净。
+`origin/main@fc7c67e` 的 `需求矩阵-第1组-王浩恩.xlsx` 已同步到本整理基线，保留了 main 的文件名和版本。此为已完成的上游同步历史；工作簿本身不再是本计划的实施、检查或验证对象，后续维护已移交队员人工负责。
 
 ## Task 2：重写当前治理入口并新增范围/进展证据
 
@@ -366,74 +318,11 @@ git add scripts/check_env.sh scripts/bootstrap.sh tests/scripts/test_check_env.s
 git commit -m "build(env): separate core and optional checks"
 ```
 
-## Task 6：更新最新版需求矩阵并完成视觉验证
+## Task 6：已取消／已移交——需求矩阵队员人工维护
 
-**文件：**
+用户于 2026-09-04 明确要求停止继续处理需求矩阵，工作簿全权交给队员人工负责。因此，原 Task 6 的自动读取、检查、编辑、导出、渲染和验证全部取消，不保留任何关于工作簿内容、公式、样式或指定行号的后续自动化步骤。
 
-- 修改：`需求矩阵-第1组-王浩恩.xlsx`
-
-**工具约束：** 必须使用 `@oai/artifact-tool`；不得用 openpyxl、LibreOffice 自动另存或手工 ZIP/XML 修改工作簿。
-
-- [ ] **Step 1：在首次编辑命令前登记 artifact edit operation**
-
-本任务只执行一次以下命令：
-
-```bash
-/home/hushengyuan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node \
-  /home/hushengyuan/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime/plugins/spreadsheets/skills/spreadsheets/container_tools/mark_artifact_operation_started.mjs \
-  --operation-kind edit --expected-output-count 1 --output-format xlsx
-```
-
-- [ ] **Step 2：先写转换断言并读取原始单元格**
-
-编辑脚本在保存前必须断言输入为最新矩阵：
-
-- 文件名为 `需求矩阵-第1组-王浩恩.xlsx`；
-- `需求进度管理表!A1:J28`；
-- NO. 1–25；
-- Web 行为 NO.22–23；
-- ML 行为 NO.24–25；
-- `示例!A1:L31` 存在。
-
-- [ ] **Step 3：实施精确单元格变更**
-
-保持行数、工作表、合并单元格和版式，至少完成：
-
-- 标题图例增加 `N/A：退出核心验收、成果保留`；
-- 用户端已完成客户端实现但待真实服务端联调的行标为 `△`，地图地址解析/导航可按已有验证证据标为 `✓`；
-- 服务端行统一反映“已有雏形、核心动作和真实联调未完成”，不得标 `✓`；
-- 数据库设计行保留 `✓`；
-- 通信/数据构建与模拟器根据尚待服务端联调及已知风险标 `△`；
-- NO.22–25 状态改为 `N/A`，详细说明前缀为 `【可选成果】`；
-- NO.22–23 困难/备注记录 `feat/web@1d07976`、36 项测试和未完成真实快照联调；
-- NO.24–25 困难/备注记录 `feat/ml@2b1563d`、78 passed/3 skipped 和未完成真实服务端发布；
-- 删除核心服务端/数据库行中“必须与 Web/ML 同源或必须回灌预测”的硬依赖措辞，同时保留 optional compatibility 说明；
-- `示例` 工作表保持逐单元格不变。
-
-- [ ] **Step 4：导出到新文件并原子替换仓库工作簿**
-
-先导出到该任务的临时输出目录，重新导入验证后再替换工作树中的目标文件。不得直接覆盖输入流，也不得创建第二个最终工作簿。
-
-- [ ] **Step 5：渲染与错误扫描**
-
-必须验证：
-
-- 两张工作表仍存在；
-- `需求进度管理表` 仍为 `A1:J28`；
-- `示例` 内容未改变；
-- 公式错误扫描为 0；
-- NO.22–25 均为 `N/A`；
-- 关键核心行不再将 Web/ML 写作验收前置；
-- 渲染图片中文字、状态列和备注列可读，没有截断、遮挡或样式破坏。
-
-- [ ] **Step 6：提交**
-
-```bash
-git diff --check
-git status --short
-git add -- '需求矩阵-第1组-王浩恩.xlsx'
-git commit -m "docs(requirements): align matrix with core acceptance"
-```
+历史自动编辑提交 `3f1c2c5 docs(requirements): align matrix with core acceptance` 已由 `ef9fb99 Revert "docs(requirements): align matrix with core acceptance"` 完整恢复。本 PR 不修改该工作簿。
 
 ## Task 7：全范围一致性验证和交付记录
 
@@ -450,6 +339,8 @@ git grep -n -E '[A-Z0-9]{5}(-[A-Z0-9]{5}){5}' -- ':!references/**'
 ```
 
 每个旧口径命中必须属于明确的历史引用、变更前说明或已标记 historical 文件；真实腾讯 Key 命中必须为 0。
+
+需求矩阵不在本任务的扫描、读取、检查或验证范围内；其人工维护结果不构成本 PR 的验收条件。
 
 - [ ] **Step 2：链接和文件边界检查**
 
