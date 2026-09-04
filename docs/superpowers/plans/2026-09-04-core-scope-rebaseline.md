@@ -274,7 +274,7 @@ scripts/check_env.sh --help
 - `--with-web` 通过；
 - `--with-ml` 通过；
 - 两参数组合通过；
-- 用 `sh -x` 或等价执行证据证明默认路径未执行 node/npm 和 ML import；
+- 用 `sh -x` 或等价执行证据证明默认路径精确检查 `git cmake ninja make g++ qmake6 qtpaths6 python3 pkg-config`，且未执行 node/npm 和 ML import；
 - Web 路径执行 node/npm 检查；
 - ML 路径执行 NumPy/pandas/sklearn/joblib import。
 
@@ -288,7 +288,7 @@ sh tests/scripts/test_check_env.sh
 
 - [ ] **Step 2：实现最小 profile 参数解析**
 
-- core command：`git cmake make g++ qmake6 qtpaths6 python3 pkg-config`；
+- core command：`git cmake ninja make g++ qmake6 qtpaths6 python3 pkg-config`；
 - core Qt：`Qt6Core Qt6Network Qt6Widgets Qt6WebEngineWidgets Qt6Charts Qt6Test`；
 - core Python：`pytest`；
 - Web optional：`node npm`；

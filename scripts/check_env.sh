@@ -38,7 +38,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 missing=0
-for command_name in git cmake make g++ qmake6 qtpaths6 python3 pkg-config; do
+for command_name in git cmake ninja make g++ qmake6 qtpaths6 python3 pkg-config; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'MISSING %s\n' "$command_name"
     missing=1

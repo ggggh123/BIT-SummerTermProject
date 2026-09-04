@@ -120,7 +120,7 @@ else
   fail 'optional profile order does not matter' 'reversed combined check returned non-zero'
 fi
 
-expected_core_commands='git cmake make g++ qmake6 qtpaths6 python3 pkg-config'
+expected_core_commands='git cmake ninja make g++ qmake6 qtpaths6 python3 pkg-config'
 expected_web_commands="$expected_core_commands node npm"
 expected_qt_modules='Qt6Core Qt6Network Qt6Widgets Qt6WebEngineWidgets Qt6Charts Qt6Test'
 expected_core_imports='import pytest'
