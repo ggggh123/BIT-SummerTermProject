@@ -161,10 +161,10 @@ git rev-parse HEAD
 
 ```sh
 git show --check 992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
-git diff --check origin/dev...992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
-git diff --quiet origin/dev...992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- references apps shared simulator/src database/schema.sql 'database/*.py' ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
+git diff --check 04e45fcb4eb8ab5f14f526588e01d28fb4ffffd5...992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
+git diff --quiet 04e45fcb4eb8ab5f14f526588e01d28fb4ffffd5...992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- references apps shared simulator/src database/schema.sql 'database/*.py' ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 ```
 
-结果（保留 2026-09-04 历史记录，并按当前安全复跑边界限定）：非 `.xlsx` 提交检查以 0 退出，未出现 whitespace-error 诊断；非 `.xlsx` 基线差异检查无输出且以 0 退出；非 `.xlsx` 受限路径检查返回 0。在非 `.xlsx` 受跟踪范围内，`992a17e` 的提交文件范围仅为本验证文档。
+结果（保留 2026-09-04 历史记录，并按当前安全复跑边界限定）：非 `.xlsx` 提交检查以 0 退出，未出现 whitespace-error 诊断；非 `.xlsx` 固定基线差异检查无输出且以 0 退出；非 `.xlsx` 固定基线受限路径检查返回 0。在非 `.xlsx` 受跟踪范围内，`992a17e` 的提交文件范围仅为本验证文档。
 
 风险证据修正已形成 `a759a55 docs(test): correct open risk evidence`。此后对验证历史措辞、扫描边界等的进一步校准属于文档-only 变更，未纳入上述针对 `992a17e` 的构建、测试和提交后检查；最终分支 HEAD 仍由后续全分支审查复核，不能据此虚构其已被旧测试覆盖。
