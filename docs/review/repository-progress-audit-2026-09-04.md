@@ -20,7 +20,8 @@
 
 ```text
 origin/main @ fc7c67e  （当前不可变上游工作簿输入）
-  └─ PR #5 已合并：feat/data -> main
+  └─ PR #5 已合并的 feat/data 端点 @ be9ce03
+      └─ current feat/data @ d3d4abf（be9ce03 后续提交，尚未进入 main）
 
 origin/dev  @ 04e45fc  （当前开发集成基准）
   └─ PR #4 已合并：feat/user -> dev
@@ -36,7 +37,7 @@ origin/dev  @ 04e45fc  （当前开发集成基准）
 | PR | 状态（审计时） | 含义 |
 |---|---|---|
 | [#4](https://github.com/ggggh123/BIT-SummerTermProject/pull/4) | 已合并，`feat/user -> dev`，2026-09-04 06:45:49Z | 用户端提交已进入 `dev`；尚不构成与真实服务端/模拟器闭环的证据 |
-| [#5](https://github.com/ggggh123/BIT-SummerTermProject/pull/5) | 已合并，`feat/data -> main`，2026-09-04 02:56:34Z | 数据模块提交已进入 `main`；尚不构成完整核心运行的证据 |
+| [#5](https://github.com/ggggh123/BIT-SummerTermProject/pull/5) | 已合并，`feat/data@be9ce03 -> main`，2026-09-04 02:56:34Z | PR 合入端点 `be9ce03` 已进入 `main@fc7c67e`；当前 `feat/data@d3d4abf` 是其后续提交，**尚未进入 main**，且尚不构成完整核心运行的证据 |
 
 ## 3. 模块审计结果
 
