@@ -157,9 +157,11 @@ git rev-parse HEAD
 提交 `992a17e` 后，已完成下列复核：
 
 ```sh
-git show --check HEAD
-git diff --check origin/dev...HEAD
-git diff --quiet origin/dev...HEAD -- references apps shared simulator/src database/schema.sql 'database/*.py'
+git show --check 992a17e41741ec6a08dfe28c7a6d545d8fd39577
+git diff --check origin/dev...992a17e41741ec6a08dfe28c7a6d545d8fd39577
+git diff --quiet origin/dev...992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- references apps shared simulator/src database/schema.sql 'database/*.py'
 ```
 
-结果：前两项均无输出；受限路径检查返回 0；`992a17e` 的提交文件范围仅为本验证文档。本次仅补充风险证据和提交时序的文档修正会形成一个新的提交；它不属于先前构建、测试或 `992a17e` 提交后检查的对象，必须由后续全分支审查重新复核，不能据此虚构其 SHA 已被先前测试。
+结果：`git show --check 992a17e...` 以 0 退出，输出仅含提交元数据，未出现 whitespace-error 诊断；`git diff --check origin/dev...992a17e...` 无输出且以 0 退出；受限路径检查返回 0。`992a17e` 的提交文件范围仅为本验证文档。
+
+风险证据修正已形成 `a759a55 docs(test): correct open risk evidence`。此后对验证历史措辞的进一步校准属于文档-only 变更，未纳入上述针对 `992a17e` 的构建、测试和提交后检查；最终分支 HEAD 仍由后续全分支审查复核，不能据此虚构其已被旧测试覆盖。
