@@ -25,7 +25,7 @@
 - 保留当前一键全量 APT 安装能力；全量安装是便利超集，不代表所有包都是 core 必需项。
 - C++ 正式验证使用 `/tmp` 下的 Linux 原生 build 目录，避免 VMware 共享目录时钟偏差产生假失败。
 - 不直接 push 到 `dev` 或 `main`；只推送当前整理分支并创建目标为 `dev` 的 PR。
-- 每个提交前执行 `git diff --check`，不得夹带审计构建目录、缓存、临时脚本或用户其他改动。
+- 每个提交前执行 `git diff --check -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'`，不得夹带审计构建目录、缓存、临时脚本或用户其他改动。
 
 ## Task 1：已完成——从 main 同步需求矩阵并锁定整理基线
 
@@ -116,8 +116,8 @@ Web/ML 只列在“可选加分演示”，不影响 GO/NO-GO。
 - [ ] **Step 7：检查并提交**
 
 ```bash
-rg -n '五个系统全部|五系统连续|五系统 V1|五端按冻结接口并行实施' README.md docs/management docs/release
-git diff --check
+rg -n -g '!*.xlsx' '五个系统全部|五系统连续|五系统 V1|五端按冻结接口并行实施' README.md docs/management docs/release
+git diff --check -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 git add README.md docs/management docs/review docs/release
 git commit -m "docs(scope): rebaseline governance around core delivery"
 ```
@@ -180,8 +180,8 @@ git commit -m "docs(scope): rebaseline governance around core delivery"
 - [ ] **Step 6：检查并提交**
 
 ```bash
-rg -n '当前.*五系统|默认.*Web|默认.*ML|全部子系统.*Release' docs/design docs/plans docs/superpowers/plans database/README.md docs/management/environment-matrix.md
-git diff --check
+rg -n -g '!*.xlsx' '当前.*五系统|默认.*Web|默认.*ML|全部子系统.*Release' docs/design docs/plans docs/superpowers/plans database/README.md docs/management/environment-matrix.md
+git diff --check -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 git add docs/design/interface-contract.md docs/plans docs/superpowers/plans database/README.md docs/management/environment-matrix.md
 git commit -m "docs(plans): separate core and optional delivery profiles"
 ```
@@ -237,8 +237,8 @@ python3 -m http.server 8184 --bind 127.0.0.1 --directory .
 - [ ] **Step 5：检查并提交**
 
 ```bash
-rg -n 'TENCENT_MAP_KEY|历史五系统基线|核心交付架构' docs/design/*.html
-git diff --check
+rg -n -g '!*.xlsx' 'TENCENT_MAP_KEY|历史五系统基线|核心交付架构' docs/design/*.html
+git diff --check -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 git add docs/design/five-system-architecture.html docs/design/core-system-architecture.html
 git commit -m "docs(architecture): publish core profile and retain legacy view"
 ```
@@ -313,7 +313,7 @@ sh -n scripts/check_env.sh
 sh -n scripts/bootstrap.sh
 scripts/check_env.sh
 scripts/check_env.sh --with-web --with-ml
-git diff --check
+git diff --check -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 git add scripts/check_env.sh scripts/bootstrap.sh tests/scripts/test_check_env.sh
 git commit -m "build(env): separate core and optional checks"
 ```
@@ -347,7 +347,7 @@ git grep -n -E '[A-Z0-9]{5}(-[A-Z0-9]{5}){5}' -- ':!references/**' ':!*.xlsx'
 编写或使用一次性只读检查，验证仓库内 Markdown 相对链接和新旧 HTML 相互链接存在。确认：
 
 ```bash
-git diff --name-only origin/dev...HEAD -- references apps shared simulator/src database/schema.sql 'database/*.py'
+git diff --name-only origin/dev...HEAD -- references apps shared simulator/src database/schema.sql 'database/*.py' ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 ```
 
 预期：无输出。
@@ -383,8 +383,8 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir "$build_dir" --output-on-failure
 - [ ] **Step 6：最终差异检查并提交**
 
 ```bash
-git diff --check
-git status --short
+git diff --check -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
+git status --short -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 git add docs/test/core-scope-rebaseline-verification.md
 git commit -m "test(scope): record rebaseline verification evidence"
 ```

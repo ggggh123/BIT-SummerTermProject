@@ -14,15 +14,14 @@
 
 ## 范围、敏感信息与链接
 
-执行命令：
+当前可安全复跑的等价命令（仅覆盖非 `.xlsx` 范围；这些排除参数用于当前安全复跑，不表示其在页首历史验证时已逐字执行）：
 
 ```sh
 rg -n -g '!*.xlsx' '五个系统全部可运行|五系统连续两次|五系统 V1|默认.*Web|默认.*ML' README.md docs database/README.md scripts
 git grep -n -E '[A-Z0-9]{5}(-[A-Z0-9]{5}){5}' -- ':!references/**' ':!*.xlsx'
 python3 - <<'PY'
 import os, re, subprocess, sys
-files = [p for p in subprocess.check_output(['git', 'ls-files', '*.md'], text=True).splitlines()
-         if not p.lower().endswith('.xlsx')]
+files = subprocess.check_output(['git', 'ls-files', '--', '*.md', ':(exclude,glob)**/*.xlsx', ':(exclude,glob)*.xlsx'], text=True).splitlines()
 pat = re.compile(r'!?(?:\[[^\]]*\])\(([^)\s]+)(?:\s+["\'][^)]*["\'])?\)')
 errors = []; checked = 0
 for path in files:
@@ -34,6 +33,8 @@ for path in files:
             continue
         target = dest.split('#', 1)[0]
         if not target:
+            continue
+        if target.lower().endswith('.xlsx'):
             continue
         candidate = os.path.normpath(os.path.join(os.path.dirname(path), target))
         checked += 1
@@ -53,8 +54,10 @@ for page, href in [
 if errors:
     sys.exit(1)
 PY
-git diff --quiet origin/dev...HEAD -- references apps shared simulator/src database/schema.sql 'database/*.py'
+git diff --quiet origin/dev...HEAD -- references apps shared simulator/src database/schema.sql 'database/*.py' ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 ```
+
+下表保留 2026-09-04 的原始结果；本轮只固化安全复跑边界，不重新生成或改写这些历史计数。
 
 实际结果：
 
@@ -142,26 +145,26 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir /tmp/ev-core-scope-build-ezVFkh --out
 - **Web/ML**：Web 尚无真实 snapshot writer/服务端快照联调；ML 尚未真实发布到服务端。二者是 optional 成果，未纳入 default core gate，不阻塞 core 范围重置，但也不得宣称已完成真实联调。
 - **核心真实 E2E（`R7`、`R12`）**：用户端、真实服务端、黄金库和模拟器尚未在同一候选提交上完成完整链路及连续两次彩排；`R9`–`R15` 也均未被本记录关闭。因此当前 core 结论仍为 **NO-GO**，本记录不能替代后续验收清单的双彩排证据。
 
-## `992a17e` 提交前与提交后检查
+## `992a17e` 提交前与提交后检查（非 `.xlsx` 受跟踪范围）
 
-证据前提交上已执行：
+证据前提交上的历史检查现以如下当前可安全复跑的等价命令表示（仅覆盖非 `.xlsx` 受跟踪范围；不表示这些排除 pathspec 当时已逐字使用）：
 
 ```sh
-git diff --check
-git status --short
+git diff --check -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
+git status --short -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 git rev-parse HEAD
 ```
 
-在提交 `992a17e41741ec6a08dfe28c7a6d545d8fd39577` 前，已完成上述 `git diff --check`、`git status --short` 与精确暂存范围检查：`git diff --check` 无输出，工作树在写入本文件前干净，且暂存范围仅为本文件。该提交的证据前代码提交精确为 `fc55668b1ed92d9872dad3f0044626de61574f5e`。
+在提交 `992a17e41741ec6a08dfe28c7a6d545d8fd39577` 前，历史记录表明已完成差异格式、工作树状态与精确暂存范围检查。按本页当前的安全复跑口径，这些结论限定为：非 `.xlsx` 受跟踪差异没有空白错误，非 `.xlsx` 受跟踪范围在写入本文件前干净，且非 `.xlsx` 暂存范围仅为本文件。该提交的证据前代码提交精确为 `fc55668b1ed92d9872dad3f0044626de61574f5e`。
 
-提交 `992a17e` 后，已完成下列复核：
+提交 `992a17e` 后的历史复核现以如下当前可安全复跑的等价命令表示（仅覆盖非 `.xlsx` 受跟踪范围；不表示这些排除 pathspec 当时已逐字使用）：
 
 ```sh
-git show --check 992a17e41741ec6a08dfe28c7a6d545d8fd39577
-git diff --check origin/dev...992a17e41741ec6a08dfe28c7a6d545d8fd39577
-git diff --quiet origin/dev...992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- references apps shared simulator/src database/schema.sql 'database/*.py'
+git show --check 992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
+git diff --check origin/dev...992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- . ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
+git diff --quiet origin/dev...992a17e41741ec6a08dfe28c7a6d545d8fd39577 -- references apps shared simulator/src database/schema.sql 'database/*.py' ':(exclude,glob)**/*.xlsx' ':(exclude,glob)*.xlsx'
 ```
 
-结果：`git show --check 992a17e...` 以 0 退出，输出仅含提交元数据，未出现 whitespace-error 诊断；`git diff --check origin/dev...992a17e...` 无输出且以 0 退出；受限路径检查返回 0。`992a17e` 的提交文件范围仅为本验证文档。
+结果（保留 2026-09-04 历史记录，并按当前安全复跑边界限定）：非 `.xlsx` 提交检查以 0 退出，未出现 whitespace-error 诊断；非 `.xlsx` 基线差异检查无输出且以 0 退出；非 `.xlsx` 受限路径检查返回 0。在非 `.xlsx` 受跟踪范围内，`992a17e` 的提交文件范围仅为本验证文档。
 
-风险证据修正已形成 `a759a55 docs(test): correct open risk evidence`。此后对验证历史措辞的进一步校准属于文档-only 变更，未纳入上述针对 `992a17e` 的构建、测试和提交后检查；最终分支 HEAD 仍由后续全分支审查复核，不能据此虚构其已被旧测试覆盖。
+风险证据修正已形成 `a759a55 docs(test): correct open risk evidence`。此后对验证历史措辞、扫描边界等的进一步校准属于文档-only 变更，未纳入上述针对 `992a17e` 的构建、测试和提交后检查；最终分支 HEAD 仍由后续全分支审查复核，不能据此虚构其已被旧测试覆盖。
