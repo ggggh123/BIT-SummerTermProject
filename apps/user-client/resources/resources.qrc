@@ -1,0 +1,8 @@
+<!DOCTYPE RCC><RCC version="1.0">
+  <qresource prefix="/map">
+    <file alias="navigation.html">map/navigation.html</file>
+  </qresource>
+  <qresource prefix="/images">
+    <file alias="default-avatar.svg">images/default-avatar.svg</file>
+  </qresource>
+</RCC>

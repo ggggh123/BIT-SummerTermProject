@@ -1,6 +1,9 @@
 # AI 工作数据（未允许勿动工作区）
 .workbuddy/
 
+# CodeBuddy 本地工作数据（计划/会话状态，仅本地保留，不进仓库）
+.codebuddy/
+
 # 本地临时脚本（一次性工具，永不提交）
 .local-tools/
 
@@ -20,3 +23,8 @@ dashboard/runtime/
 *.log
 config.local.ini
 .env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
