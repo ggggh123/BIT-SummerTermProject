@@ -56,6 +56,11 @@ bool jsonBool(const QJsonValue &value, bool *ok)
     return false;
 }
 
+QString chinaTimestampNow()
+{
+    return QDateTime::currentDateTimeUtc().addSecs(8 * 60 * 60).toString(QStringLiteral("yyyy-MM-dd'T'HH:mm:ss'+08:00'"));
+}
+
 QJsonObject runFromQuery(const QSqlQuery &query)
 {
     const QString activatedAt = query.value(3).toString();
@@ -162,7 +167,7 @@ QJsonObject ForecastService::healthState() const
         {QStringLiteral("schemaVersion"), 1},
         {QStringLiteral("snapshotVersion"), snapshotVersion},
         {QStringLiteral("forecastRunId"), runId.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(runId)},
-        {QStringLiteral("serverTime"), QDateTime::currentDateTime().toString(Qt::ISODate)},
+        {QStringLiteral("serverTime"), chinaTimestampNow()},
         {QStringLiteral("service"), QStringLiteral("charging-platform-admin-server")}
     };
 }
@@ -314,7 +319,7 @@ Result ForecastService::validatePayload(const QJsonObject &payload, QString *run
 Result ForecastService::insertForecastRun(const QJsonObject &payload, const QString &runId) const
 {
     const QString currentPayloadHash = payloadHash(payload);
-    const QString activatedAt = QDateTime::currentDateTime().toString(Qt::ISODate);
+    const QString activatedAt = chinaTimestampNow();
 
     QSqlDatabase database = m_database;
     if (!database.transaction()) {
