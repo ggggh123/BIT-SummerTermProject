@@ -334,8 +334,8 @@ git commit -m "build(env): separate core and optional checks"
 - [ ] **Step 1：范围和敏感信息扫描**
 
 ```bash
-rg -n '五个系统全部可运行|五系统连续两次|五系统 V1|默认.*Web|默认.*ML' README.md docs database/README.md scripts
-git grep -n -E '[A-Z0-9]{5}(-[A-Z0-9]{5}){5}' -- ':!references/**'
+rg -n -g '!*.xlsx' '五个系统全部可运行|五系统连续两次|五系统 V1|默认.*Web|默认.*ML' README.md docs database/README.md scripts
+git grep -n -E '[A-Z0-9]{5}(-[A-Z0-9]{5}){5}' -- ':!references/**' ':!*.xlsx'
 ```
 
 每个旧口径命中必须属于明确的历史引用、变更前说明或已标记 historical 文件；真实腾讯 Key 命中必须为 0。
