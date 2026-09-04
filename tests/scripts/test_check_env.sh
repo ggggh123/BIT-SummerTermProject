@@ -5,7 +5,7 @@
 set -u
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-check_env="$repo_root/scripts/check_env.sh"
+check_env=${CHECK_ENV:-"$repo_root/scripts/check_env.sh"}
 tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/check-env-test.XXXXXX")
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 
@@ -25,18 +25,41 @@ fail() {
   printf 'FAIL %s: %s\n' "$1" "$2"
 }
 
-trace_has() {
-  trace_file=$1
-  trace_text=$2
-  grep -F -- "$trace_text" "$trace_file" >/dev/null 2>&1
+trace_command_checks() {
+  sed -n 's/^+ command -v //p' "$1" | tr '\n' ' ' | sed 's/ $//'
 }
 
-trace_lacks_optional_ml() {
-  ! grep -E 'numpy|pandas|sklearn|joblib' "$1" >/dev/null 2>&1
+trace_qt_checks() {
+  sed -n 's/^+ pkg-config --atleast-version=6\.2 //p' "$1" | tr '\n' ' ' | sed 's/ $//'
 }
 
-trace_lacks_optional_web() {
-  ! grep -E '(^|[^[:alnum:]_])(node|npm)([^[:alnum:]_]|$)' "$1" >/dev/null 2>&1
+trace_python_imports() {
+  sed -n 's/^+ python3 -c //p' "$1" | tr '\n' '|' | sed 's/|$//'
+}
+
+check_profile_trace() {
+  profile_name=$1
+  trace_file=$2
+  expected_commands=$3
+  expected_imports=$4
+  shift 4
+
+  if sh -x "$check_env" "$@" >/dev/null 2>"$trace_file"; then
+    actual_commands=$(trace_command_checks "$trace_file")
+    actual_qt_modules=$(trace_qt_checks "$trace_file")
+    actual_imports=$(trace_python_imports "$trace_file")
+    if [ "$actual_commands" = "$expected_commands" ] && \
+       [ "$actual_qt_modules" = "$expected_qt_modules" ] && \
+       [ "$actual_imports" = "$expected_imports" ]; then
+      pass "$profile_name trace checks exact commands, Qt modules, and Python imports"
+    else
+      fail "$profile_name trace checks exact commands, Qt modules, and Python imports" \
+        "commands [$actual_commands]; Qt [$actual_qt_modules]; imports [$actual_imports]"
+    fi
+  else
+    fail "$profile_name trace checks exact commands, Qt modules, and Python imports" \
+      'traced profile check returned non-zero'
+  fi
 }
 
 if sh -n "$check_env"; then
@@ -97,39 +120,22 @@ else
   fail 'optional profile order does not matter' 'reversed combined check returned non-zero'
 fi
 
-default_trace="$tmp_dir/default.trace"
-if sh -x "$check_env" >/dev/null 2>"$default_trace"; then
-  expected_core_commands='git cmake make g++ qmake6 qtpaths6 python3 pkg-config'
-  actual_core_commands=$(sed -n 's/^+ command -v //p' "$default_trace" | tr '\n' ' ' | sed 's/ $//')
-  if [ "$actual_core_commands" = "$expected_core_commands" ] && \
-     trace_lacks_optional_web "$default_trace" && trace_lacks_optional_ml "$default_trace"; then
-    pass 'default trace checks exactly core commands and no optional dependencies'
-  else
-    fail 'default trace checks exactly core commands and no optional dependencies' \
-      "saw command checks [$actual_core_commands] or optional trace activity"
-  fi
-else
-  fail 'default trace checks exactly core commands and no optional dependencies' 'traced core check returned non-zero'
-fi
+expected_core_commands='git cmake make g++ qmake6 qtpaths6 python3 pkg-config'
+expected_web_commands="$expected_core_commands node npm"
+expected_qt_modules='Qt6Core Qt6Network Qt6Widgets Qt6WebEngineWidgets Qt6Charts Qt6Test'
+expected_core_imports='import pytest'
+expected_ml_imports='import pytest|import numpy, pandas, sklearn, joblib'
 
-web_trace="$tmp_dir/web.trace"
-if sh -x "$check_env" --with-web >/dev/null 2>"$web_trace" && \
-   trace_has "$web_trace" '+ command -v node' && \
-   trace_has "$web_trace" '+ command -v npm' && \
-   trace_lacks_optional_ml "$web_trace"; then
-  pass 'web trace executes node and npm checks without ML imports'
-else
-  fail 'web trace executes node and npm checks without ML imports' 'missing Web checks or ML checks leaked into Web profile'
-fi
-
-ml_trace="$tmp_dir/ml.trace"
-if sh -x "$check_env" --with-ml >/dev/null 2>"$ml_trace" && \
-   trace_has "$ml_trace" 'import numpy, pandas, sklearn, joblib' && \
-   trace_lacks_optional_web "$ml_trace"; then
-  pass 'ml trace imports all ML dependencies without node or npm checks'
-else
-  fail 'ml trace imports all ML dependencies without node or npm checks' 'missing ML import or Web checks leaked into ML profile'
-fi
+check_profile_trace 'default' "$tmp_dir/default.trace" \
+  "$expected_core_commands" "$expected_core_imports"
+check_profile_trace 'web' "$tmp_dir/web.trace" \
+  "$expected_web_commands" "$expected_core_imports" --with-web
+check_profile_trace 'ml' "$tmp_dir/ml.trace" \
+  "$expected_core_commands" "$expected_ml_imports" --with-ml
+check_profile_trace 'web and ml' "$tmp_dir/web-ml.trace" \
+  "$expected_web_commands" "$expected_ml_imports" --with-web --with-ml
+check_profile_trace 'ml and web' "$tmp_dir/ml-web.trace" \
+  "$expected_web_commands" "$expected_ml_imports" --with-ml --with-web
 
 printf '%s tests: %s passed, %s failed\n' "$total" "$passed" "$failed"
 [ "$failed" -eq 0 ]
