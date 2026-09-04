@@ -134,12 +134,15 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir /tmp/ev-core-scope-build-ezVFkh --out
 ## 已知未修复事项与验收限制
 
 - **服务端 P0（阻断 core GO）**：仅有 5/27 action 的实现证据；根 CMake 尚未纳入服务端 target，缺少专属测试；预约→充电→遥测→停止→结算状态机、串行写库以及余额/订单/统计一致性尚未在真实服务端闭合。
-- **模拟器两个 P1/开放风险**：模拟器状态/遥测/故障事件尚未与真实服务端完成端到端接入证明；双实例/双路径的现场行为也不能由数据库或当前 CTest 推导。这些风险仍须随核心集成跟踪，不能以本页 13/13 CTest 关闭。
+- **模拟器两项具体 P1（代码风险）**：
+  1. `SimulatorClient::sendStatus()` 当前无条件发送 `state=running`，不会反映 Pause 或停止状态；状态上报因而可能与模拟器实际运行状态不一致。
+  2. `TelemetryEngine::requestFault()` 与 `TelemetryEngine::requestRecovery()` 都使用未推进的 `currentTime_` 写入 `recordedAt`。连续 fault/recovery，或它们与同一时刻事件交错时，时间戳可能不严格递增，不满足共享 device-event cursor 的严格递增约束。
+- **模拟器额外集成限制**：状态/遥测/故障事件尚未与真实服务端完成端到端接入证明；双实例/双路径的现场行为也不能由数据库或当前 CTest 推导。上述额外限制不能替代前述两项具体 P1，也不能因本页 13/13 CTest 而关闭。
 - **用户端会话 guard/race**：计划中已登记会话 guard 风险；本 PR 未修改用户端业务代码，不能将页面合同测试、单进程 QtTest 或现有会话测试扩展解释为真实服务端会话竞态已经消除。
 - **Web/ML**：Web 尚无真实 snapshot writer/服务端快照联调；ML 尚未真实发布到服务端。二者是 optional 成果，未纳入 default core gate，不阻塞 core 范围重置，但也不得宣称已完成真实联调。
 - **核心真实 E2E**：用户端、真实服务端、黄金库和模拟器尚未在同一候选提交上完成完整链路及连续两次彩排；因此当前 core 结论仍为 **NO-GO**，本记录不能替代后续验收清单的双彩排证据。
 
-## 提交前检查
+## `992a17e` 提交前与提交后检查
 
 证据前提交上已执行：
 
@@ -149,4 +152,14 @@ git status --short
 git rev-parse HEAD
 ```
 
-结果：`git diff --check` 无输出、工作树干净、提交精确为 `fc55668b1ed92d9872dad3f0044626de61574f5e`。本文件是上述证据后新增的唯一受跟踪文件；提交前需再次执行这些命令并确认暂存范围仅为本文件。
+在提交 `992a17e41741ec6a08dfe28c7a6d545d8fd39577` 前，已完成上述 `git diff --check`、`git status --short` 与精确暂存范围检查：`git diff --check` 无输出，工作树在写入本文件前干净，且暂存范围仅为本文件。该提交的证据前代码提交精确为 `fc55668b1ed92d9872dad3f0044626de61574f5e`。
+
+提交 `992a17e` 后，已完成下列复核：
+
+```sh
+git show --check HEAD
+git diff --check origin/dev...HEAD
+git diff --quiet origin/dev...HEAD -- references apps shared simulator/src database/schema.sql 'database/*.py'
+```
+
+结果：前两项均无输出；受限路径检查返回 0；`992a17e` 的提交文件范围仅为本验证文档。本次仅补充风险证据和提交时序的文档修正会形成一个新的提交；它不属于先前构建、测试或 `992a17e` 提交后检查的对象，必须由后续全分支审查重新复核，不能据此虚构其 SHA 已被先前测试。
