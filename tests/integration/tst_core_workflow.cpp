@@ -20,7 +20,6 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
-#include <QTimer>
 #include <QtTest>
 
 #include <algorithm>
@@ -138,6 +137,25 @@ private:
     QHash<QString, ResponseEnvelope> responses_;
     QString error_;
     bool connected_ = false;
+};
+
+class SimulatorClientGuard final
+{
+public:
+    explicit SimulatorClientGuard(SimulatorClient *client)
+        : client_(client)
+    {
+    }
+
+    ~SimulatorClientGuard()
+    {
+        if (client_) {
+            client_->stop();
+        }
+    }
+
+private:
+    SimulatorClient *client_;
 };
 
 class UserSession final
@@ -471,14 +489,14 @@ void CoreWorkflowTest::newUserCompletesRealQtWorkflow()
     QCOMPARE(simulatorConfig.intervalMs, 3000);
     simulatorConfig.host = QStringLiteral("127.0.0.1");
     simulatorConfig.port = port_;
-    simulatorConfig.intervalMs = 60'000;
+    simulatorConfig.intervalMs = 1000;
     simulatorConfig.token = kSimulatorToken;
     SimulatorClient firstClient(simulatorConfig, &firstEngine);
+    SimulatorClientGuard firstClientGuard(&firstClient);
     firstClient.start();
     QVERIFY(waitUntil([&firstEngine, this] {
         return statusFor(firstEngine, positiveChargerId_) == QStringLiteral("idle");
     }));
-    firstClient.stop();
 
     ev::user::Order order;
     QVERIFY2(user.reserve(positiveChargerId_, &order), qPrintable(user.error()));
@@ -486,14 +504,19 @@ void CoreWorkflowTest::newUserCompletesRealQtWorkflow()
     QCOMPARE(order.status, QStringLiteral("reserved"));
     QVERIFY2(user.start(orderId, &order), qPrintable(user.error()));
     QCOMPARE(order.status, QStringLiteral("charging"));
+    QVERIFY2(waitUntil([&firstEngine, this] {
+        return statusFor(firstEngine, positiveChargerId_) == QStringLiteral("charging");
+    }, 6000), "first connected SimulatorClient did not periodically sync charging");
 
     TelemetryEngine engine(20260901, sharedStart, 60'000);
     SimulatorClient client(simulatorConfig, &engine);
+    SimulatorClientGuard clientGuard(&client);
     SimulatorWindow window(&client, &engine);
     client.start();
     QVERIFY2(waitUntil([&engine, this] {
         return statusFor(engine, positiveChargerId_) == QStringLiteral("charging");
     }), "second real SimulatorClient received a stale status snapshot");
+    firstClient.stop();
 
     window.toggleRun();
     QCOMPARE(window.runButtonText(), QStringLiteral("Pause"));
@@ -595,9 +618,10 @@ void CoreWorkflowTest::faultRecoveryRequiresAdminRestartAndSettlement()
     SimulatorConfig config;
     config.host = QStringLiteral("127.0.0.1");
     config.port = port_;
-    config.intervalMs = 60'000;
+    config.intervalMs = 1000;
     config.token = kSimulatorToken;
     SimulatorClient client(config, &engine);
+    SimulatorClientGuard clientGuard(&client);
     SimulatorWindow window(&client, &engine);
     client.start();
     QVERIFY(waitUntil([&engine, chargerId] {
@@ -672,14 +696,9 @@ void CoreWorkflowTest::faultRecoveryRequiresAdminRestartAndSettlement()
                  .toObject().value(QStringLiteral("status")).toString(),
              QStringLiteral("restarting"));
 
-    QTimer refresh;
-    refresh.setInterval(100);
-    QObject::connect(&refresh, &QTimer::timeout, &window, &SimulatorWindow::refreshStatus);
-    refresh.start();
     QVERIFY2(waitUntil([&engine, chargerId] {
         return statusFor(engine, chargerId) == QStringLiteral("idle");
     }, 6000), "simulator did not synchronize idle after admin restart");
-    refresh.stop();
 
     UserSession contender(port_);
     QVERIFY2(contender.open(), qPrintable(contender.error()));
