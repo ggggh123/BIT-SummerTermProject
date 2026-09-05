@@ -2,7 +2,7 @@
 
 充电桩管理与演示平台小学期项目。
 
-> **2026-09-06 本地集成候选：** `integration/core-20260906` 已补交并评审原始三个业务 P0，以及模拟器/数据工具和管理端运行修复；同版本全新构建、CTest 24/24 与真实 Qt UserApi 四组业务诊断通过。详见[修复后复验记录](docs/test/core-fixes-2026-09-06.md)；[修前诊断基线](docs/test/core-integration-baseline-2026-09-06.md)保留历史证据。专属 DB worker、在线 reset、实际三端/地图彩排等仍未全部关闭，不是项目 GO，也未合入 dev/main。
+> **2026-09-06 本地集成候选：** `integration/core-20260906` 已补交并评审原始三个业务 P0，以及模拟器/数据工具和管理端运行修复；加入实际 Qt 三端正常/故障测试后，清理重建、CTest **25/25**、数据库 15/15 与地图离线 15/15 通过。详见[修复后复验记录](docs/test/core-fixes-2026-09-06.md)；[修前诊断基线](docs/test/core-integration-baseline-2026-09-06.md)保留历史证据。专属 DB worker、在线 reset、人工三端/地图彩排等仍未全部关闭，不是项目 GO，也未合入 dev/main。
 
 ## 当前交付口径（2026-09-04 生效）
 
