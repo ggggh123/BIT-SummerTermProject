@@ -4,6 +4,7 @@
 
 #include <QDateTime>
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
@@ -14,6 +15,23 @@ namespace {
 QString nowIso()
 {
     return BusinessTime::now();
+}
+
+// 合同固定 +08:00、四位年份。整数秒可以按字符串排序；小数只去掉
+// 末尾零，不转 double/QDateTime/julianday，避免丢失任意长度的小数精度。
+QString timestampKey(const QString &value)
+{
+    static const QRegularExpression pattern(QStringLiteral(
+        "\\A([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.([0-9]+))?\\+08:00\\z"));
+    const auto match = pattern.match(value);
+    if (!match.hasMatch()
+        || !QDate(match.captured(1).toInt(), match.captured(2).toInt(), match.captured(3).toInt()).isValid()
+        || !QTime(match.captured(4).toInt(), match.captured(5).toInt(), match.captured(6).toInt()).isValid()) {
+        return {};
+    }
+    QString fraction = match.captured(7);
+    while (fraction.endsWith(QLatin1Char('0'))) fraction.chop(1);
+    return value.left(19) + QLatin1Char('.') + fraction;
 }
 
 QJsonValue nullableText(const QString &value)
@@ -91,7 +109,7 @@ Result TelemetryService::telemetryPush(const QJsonObject &payload, QJsonObject *
         return Result::failure(QStringLiteral("INVALID_REQUEST"), QStringLiteral("telemetry payload is invalid"));
     }
     const QString lastEvent = lastDeviceEventAt(chargerId);
-    if (!lastEvent.isEmpty() && QDateTime::fromString(recordedAt, Qt::ISODate) <= QDateTime::fromString(lastEvent, Qt::ISODate)) {
+    if (!lastEvent.isEmpty() && timestampKey(recordedAt) <= timestampKey(lastEvent)) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("device event timestamp is stale"));
     }
 
@@ -151,7 +169,7 @@ Result TelemetryService::faultSet(const QJsonObject &payload, QJsonObject *respo
     }
     const bool fault = payload.value(QStringLiteral("fault")).toBool();
     const QString lastEvent = lastDeviceEventAt(chargerId);
-    if (!lastEvent.isEmpty() && QDateTime::fromString(recordedAt, Qt::ISODate) <= QDateTime::fromString(lastEvent, Qt::ISODate)) {
+    if (!lastEvent.isEmpty() && timestampKey(recordedAt) <= timestampKey(lastEvent)) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("device event timestamp is stale"));
     }
 
@@ -310,13 +328,24 @@ int TelemetryService::activeOrderForCharger(int chargerId) const
 
 bool TelemetryService::validTimestamp(const QString &value) const
 {
-    return QDateTime::fromString(value, Qt::ISODate).isValid() && value.endsWith(QStringLiteral("+08:00"));
+    return !timestampKey(value).isEmpty();
 }
 
 QString TelemetryService::lastDeviceEventAt(int chargerId) const
 {
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral("SELECT recorded_at FROM telemetry WHERE charger_id=? ORDER BY julianday(recorded_at) DESC LIMIT 1"));
+    query.prepare(QStringLiteral("SELECT recorded_at FROM telemetry WHERE charger_id=?"));
     query.addBindValue(chargerId);
-    return query.exec() && query.next() ? query.value(0).toString() : QString();
+    if (!query.exec()) return {};
+    QString latest;
+    QString latestKey;
+    while (query.next()) {
+        const QString value = query.value(0).toString();
+        const QString key = timestampKey(value);
+        if (key > latestKey) {
+            latest = value;
+            latestKey = key;
+        }
+    }
+    return latest;
 }

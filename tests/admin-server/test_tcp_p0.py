@@ -195,6 +195,40 @@ class TcpP0(unittest.TestCase):
         self.assertEqual(first, self.call("simulator.fault_set", fault_payload, "sim-token", "fault", raw=True))
         self.assertEqual(self.sql("SELECT energy_kwh,amount_fen,ended_at FROM orders"), [(0.75, 113, fault_payload["recordedAt"])])
 
+    def test_cursor_preserves_arbitrary_fraction_across_telemetry_fault_and_restart(self):
+        self.order()
+        self.assertTrue(self.sample("fraction-1", "2026-09-06T10:00:00.0001+08:00", 0.1)["ok"])
+        first = self.sample("fraction-2", "2026-09-06T10:00:00.0002+08:00", 0.1)
+        self.assertTrue(first["ok"], first)
+        self.assertEqual(self.sample("fraction-between", "2026-09-06T10:00:00.00015+08:00")["code"], "ORDER_STATE_CONFLICT")
+        self.assertEqual(self.sample("fraction-equal", "2026-09-06T10:00:00.0002000+08:00")["code"], "ORDER_STATE_CONFLICT")
+        fault = {"chargerId": 1, "recordedAt": "2026-09-06T10:00:00.0002000000000000000000000000001+08:00", "fault": True}
+        fault_ack = self.call("simulator.fault_set", fault, "sim-token", "fraction-fault", raw=True)
+        self.assertTrue(json.loads(fault_ack)["ok"], json.loads(fault_ack))
+        self.assertEqual(first, self.sample("fraction-2", "2026-09-06T10:00:00.0002+08:00", 0.1))
+        self.assertEqual(fault_ack, self.call("simulator.fault_set", fault, "sim-token", "fraction-fault", raw=True))
+        self.stop_server()
+        self.start_server()
+        equal_fault = {**fault, "fault": False, "recordedAt": "2026-09-06T10:00:00.00020000000000000000000000000010+08:00"}
+        self.assertEqual(self.call("simulator.fault_set", equal_fault, "sim-token", "equal-fault")["code"], "ORDER_STATE_CONFLICT")
+        later = "2026-09-06T10:00:00.0002000000000000000000000000002+08:00"
+        self.assertTrue(self.call("simulator.fault_set", {**fault, "fault": False, "recordedAt": later}, "sim-token", "fraction-recover")["ok"])
+        telemetry = {"chargerId": 1, "recordedAt": later, "powerKw": 0, "energyIncrementKwh": 0, "status": "fault"}
+        self.assertEqual(self.call("telemetry.push", telemetry, "sim-token", "equal-recover")["code"], "ORDER_STATE_CONFLICT")
+        telemetry["recordedAt"] = "2026-09-06T10:00:00.0002000000000000000000000000003+08:00"
+        self.assertTrue(self.call("telemetry.push", telemetry, "sim-token", "later-recover")["ok"])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM telemetry"), [(5,)])
+        self.assertEqual(self.sql("SELECT energy_kwh, amount_fen FROM orders"), [(0.2, 30)])
+
+    def test_cursor_selects_exact_maximum_with_mixed_whole_and_fraction_strings(self):
+        self.order()
+        for timestamp in ("2026-09-06T10:00:00.0002+08:00", "2026-09-06T10:00:00+08:00", "2026-09-06T10:00:00.0001+08:00"):
+            self.sql("INSERT INTO telemetry(charger_id,recorded_at,power_kw,energy_increment_kwh,event_type) VALUES(1,?,0,0,'telemetry')", (timestamp,))
+        self.assertEqual(self.sample("max-equal", "2026-09-06T10:00:00.000200+08:00")["code"], "ORDER_STATE_CONFLICT")
+        self.assertTrue(self.sample("max-next", "2026-09-06T10:00:00.0003+08:00", 0)["ok"])
+        self.assertTrue(self.sample("next-second", "2026-09-06T10:00:01+08:00", 0)["ok"])
+        self.assertEqual(self.sample("whole-equal", "2026-09-06T10:00:01.0000000000000000000+08:00")["code"], "ORDER_STATE_CONFLICT")
+
     def test_forecast_publish_keeps_two_phase_and_stable_final_ack(self):
         cutoff = dt.datetime.fromisoformat("2026-09-06T00:00:00+08:00")
         payload = {"runId": "p0-run", "modelVersion": "test", "dataCutoff": cutoff.isoformat(),
