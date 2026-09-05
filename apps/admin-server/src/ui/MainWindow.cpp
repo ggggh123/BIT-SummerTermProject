@@ -55,6 +55,8 @@ void fillTable(QTableWidget *table, const QList<QStringList> &rows)
     if (table->currentRow() >= 0 && table->item(table->currentRow(), 0)) {
         selectedKey = table->item(table->currentRow(), 0)->text();
     }
+    table->clearSelection();
+    table->setCurrentItem(nullptr);
     table->setRowCount(rows.size());
     for (int row = 0; row < rows.size(); ++row) {
         for (int column = 0; column < table->columnCount() && column < rows[row].size(); ++column) {

@@ -3,19 +3,25 @@
 #include "services/RequestLogService.h"
 #include "ui/MainWindow.h"
 
+#include <QAbstractButton>
 #include <QComboBox>
+#include <QApplication>
 #include <QDateTime>
 #include <QFile>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QSpinBox>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTcpServer>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 #include <QTimeZone>
 #include <QUuid>
 
@@ -49,6 +55,17 @@ int rowForFirstColumn(QTableWidget *table, const QString &value)
 QString moneyText(qint64 fen)
 {
     return QStringLiteral("¥%1").arg(QString::number(fen / 100.0, 'f', 2));
+}
+
+QPushButton *buttonWithText(QWidget *root, const QString &text)
+{
+    const QList<QPushButton *> buttons = root->findChildren<QPushButton *>();
+    for (QPushButton *button : buttons) {
+        if (button->text() == text) {
+            return button;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace
@@ -166,6 +183,86 @@ private slots:
         auto *healthTable = window.findChild<QTableWidget *>(QStringLiteral("healthTable"));
         QVERIFY(healthTable);
         QCOMPARE(healthTable->item(2, 2)->text(), expectedVersion);
+
+        database.close();
+        database = QSqlDatabase();
+        QSqlDatabase::removeDatabase(connectionName);
+    }
+
+    void removedStableKeyCannotRetargetUserAction()
+    {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+        const QString databasePath = tempDir.filePath(QStringLiteral("runtime.db"));
+        QVERIFY(QFile::copy(QStringLiteral(EV_TEST_GOLDEN_DB), databasePath));
+
+        AppContext::Options options;
+        options.databasePath = databasePath;
+        options.host = QStringLiteral("127.0.0.1");
+        options.port = availablePort();
+        options.snapshotPath = tempDir.filePath(QStringLiteral("snapshot.json"));
+        AppContext context;
+        const Result initialized = context.initialize(options);
+        QVERIFY2(initialized.ok, qPrintable(initialized.message));
+
+        const QString connectionName = QStringLiteral("admin-window-retarget-%1").arg(
+            QUuid::createUuid().toString(QUuid::WithoutBraces));
+        QSqlDatabase database = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        database.setDatabaseName(databasePath);
+        QVERIFY(database.open());
+
+        MainWindow window(&context);
+        window.show();
+        auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("adminTabs"));
+        auto *offsetSpin = window.findChild<QSpinBox *>(QStringLiteral("userOffsetSpin"));
+        auto *userTable = window.findChild<QTableWidget *>(QStringLiteral("userManagementTable"));
+        auto *freezeButton = buttonWithText(&window, QStringLiteral("冻结"));
+        QVERIFY(tabs);
+        QVERIFY(offsetSpin);
+        QVERIFY(userTable);
+        QVERIFY(freezeButton);
+
+        tabs->setCurrentIndex(4);
+        QCOMPARE(userTable->rowCount(), 20);
+        const QString removedUserId = userTable->item(0, 0)->text();
+        const QString remainingUserId = userTable->item(1, 0)->text();
+        QVERIFY(removedUserId != remainingUserId);
+
+        QSqlQuery query(database);
+        query.prepare(QStringLiteral("UPDATE users SET status='active' WHERE id IN (?,?)"));
+        query.addBindValue(removedUserId.toInt());
+        query.addBindValue(remainingUserId.toInt());
+        QVERIFY(query.exec());
+
+        userTable->selectRow(0);
+        QCOMPARE(selectedFirstColumn(userTable), removedUserId);
+        offsetSpin->setValue(1);
+        tabs->setCurrentIndex(0);
+        tabs->setCurrentIndex(4);
+        QCOMPARE(userTable->rowCount(), 20);
+        QCOMPARE(userTable->item(0, 0)->text(), remainingUserId);
+
+        const bool selectionWasCleared = userTable->selectedRanges().isEmpty()
+            && userTable->currentItem() == nullptr
+            && userTable->currentRow() == -1;
+        QTimer::singleShot(0, []() {
+            if (auto *messageBox = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+                if (QAbstractButton *yesButton = messageBox->button(QMessageBox::Yes)) {
+                    yesButton->click();
+                } else {
+                    messageBox->accept();
+                }
+            }
+        });
+        freezeButton->click();
+
+        query.prepare(QStringLiteral("SELECT status FROM users WHERE id=?"));
+        query.addBindValue(remainingUserId.toInt());
+        QVERIFY(query.exec());
+        QVERIFY(query.next());
+        const QString remainingStatus = query.value(0).toString();
+        QCOMPARE(remainingStatus, QStringLiteral("active"));
+        QVERIFY2(selectionWasCleared, "旧稳定 key 消失后仍保留了指向新行的选择/当前索引");
 
         database.close();
         database = QSqlDatabase();
