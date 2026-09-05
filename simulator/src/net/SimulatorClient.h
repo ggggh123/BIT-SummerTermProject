@@ -35,6 +35,8 @@ public:
 signals:
     void connected();
     void disconnected();
+    void sessionReady();
+    void authenticationFailed(const QString &code);
     void chargersReceived(const QList<ChargerSnapshot> &chargers);
     void logMessage(const QString &message);
 };
@@ -56,7 +58,7 @@ public:
     void sendFault(const FaultIntent &intent) override;
     void setRunning(bool running) override;
 
-    int queuedSamples() const { return pendingSamples_.size(); }
+    int queuedSamples() const { return pendingEvents_.size(); }
 
     static int reconnectDelayMs(int attempt);
     static QString requestIdForSample(const TelemetrySample &sample);
@@ -67,11 +69,24 @@ private slots:
     void onErrorOccurred();
     void onDisconnected();
     void onReconnectTimeout();
+    void onStatusRefreshTimeout();
 
 private:
+    struct PendingEvent
+    {
+        QString action;
+        QJsonObject payload;
+        QString requestId;
+        bool sent = false;
+    };
+
     void connectToServer();
+    void requestStatusRefresh();
     void sendStatus();
     void flushPending();
+    void enqueueEvent(const QString &action, const QJsonObject &payload,
+                      const QString &requestId);
+    void acknowledgeEvent(const QString &requestId);
     void sendRequest(const QString &action, const QJsonObject &payload,
                      const QString &requestId);
     void handleResponse(const QByteArray &json);
@@ -80,13 +95,17 @@ private:
     TelemetryEngine *engine_;
     QTcpSocket socket_;
     QTimer reconnectTimer_;
+    QTimer statusRefreshTimer_;
     ev::protocol::FrameDecoder decoder_;
     int reconnectAttempt_ = 0;
     int eventCount_ = 0;
     bool stopping_ = false;
     bool running_ = false;
+    bool sessionReady_ = false;
     QString pendingStatusRequestId_;
-    QQueue<TelemetrySample> pendingSamples_;
+    bool statusRefreshQueued_ = false;
+    quint64 statusRequestSequence_ = 0;
+    QQueue<PendingEvent> pendingEvents_;
 };
 
 } // namespace ev::simulator
