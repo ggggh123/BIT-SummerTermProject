@@ -1,0 +1,20 @@
+{
+  "name": "core.db",
+  "schema_version": 1,
+  "seed": 20260901,
+  "cutoff": "2026-09-01T09:00:00+08:00",
+  "row_counts": {
+    "admins": 1,
+    "users": 30,
+    "stations": 6,
+    "chargers": 48,
+    "orders": 431,
+    "telemetry": 0,
+    "station_hourly_history": 12960,
+    "forecast_runs": 0,
+    "forecasts": 0,
+    "events": 0,
+    "request_log": 0
+  },
+  "sha256": "5dd13bef7990c8166949d836a6fd8eadcc0b1ef8b11dc1b91272c33bead3a0f7"
+}

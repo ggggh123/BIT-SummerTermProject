@@ -14,7 +14,7 @@
 
 core profile 的黄金库只要求业务 schema、确定性 seed、站点/充电桩/订单历史和模拟器所需数据。它不要求在线 ML、Web snapshot 或 active forecast；预测表和 v1 合同能力仍保留，缺少 active forecast 是合法状态。
 
-目前仓库**尚未封存单独的 `runtime/golden/core.db`**。需要构建 core 候选时，可用既有离线构建器生成它；这不是本 PR 新增的运维脚本，也不代表已经完成 core 集成或发布：
+`runtime/golden/core.db` 已于 2026-09-05 封存（seed `20260901`，cutoff `2026-09-01T09:00:00+08:00`）：`forecast_runs`/`forecasts` 为 0，`PRAGMA integrity_check` 为 ok，SHA-256 记录在 `runtime/golden/core.db.sha256`（`5dd13bef7990c8166949d836a6fd8eadcc0b1ef8b11dc1b91272c33bead3a0f7`），清单为 `runtime/golden/core.manifest.json`（因构建器固定写 `manifest.json`，为避免覆盖 demo.db 的已封存清单而单独命名）。需要重建时：
 
 ```bash
 python3 database/build_golden.py \
@@ -22,7 +22,7 @@ python3 database/build_golden.py \
   --cutoff 2026-09-01T09:00:00+08:00 --name core.db
 ```
 
-构建后应按核心验收清单校验 hash、SQLite 完整性与核心闭环；不得由用户端、模拟器或人工直接修改运行期数据库。
+core reset 消费 `core.db` 前必须先核对 `core.db.sha256`；不得由用户端、模拟器或人工直接修改运行期数据库。
 
 ## Optional：预测增强黄金库
 

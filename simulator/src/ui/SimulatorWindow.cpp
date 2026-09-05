@@ -82,6 +82,9 @@ SimulatorWindow::SimulatorWindow(ISimulatorClient *client, TelemetryEngine *engi
     connect(client_, &ISimulatorClient::chargersReceived,
             this, &SimulatorWindow::onChargersReceived);
 
+    // R13: the panel starts paused; keep the client's reported state truthful.
+    client_->setRunning(false);
+
     updateChargerTable();
 }
 
@@ -113,6 +116,7 @@ QStringList SimulatorWindow::logLines() const
 void SimulatorWindow::toggleRun()
 {
     running_ = !running_;
+    client_->setRunning(running_);  // R13: keep the reported state truthful
     if (running_) {
         runButton_->setText(QStringLiteral("Pause"));
         tickTimer_->start();
@@ -181,6 +185,7 @@ void SimulatorWindow::prepareReset()
         running_ = false;
         tickTimer_->stop();
         runButton_->setText(QStringLiteral("Run"));
+        client_->setRunning(false);  // R13: report the paused state
     }
     onLog(QStringLiteral("请在管理端确认重置"));
 }

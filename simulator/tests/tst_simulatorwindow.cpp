@@ -27,6 +27,10 @@ public:
         emit logMessage(QStringLiteral("09:00:03  charger %1  simulator.fault_set  OK")
                             .arg(intent.chargerId));
     }
+
+    void setRunning(bool running) override { lastRunning = running; }
+
+    bool lastRunning = false;
 };
 
 class SimulatorWindowTest : public QObject
@@ -57,9 +61,11 @@ void SimulatorWindowTest::runPauseTickAndLog()
 
     QCOMPARE(window.runButtonText(), QStringLiteral("Run"));
     QCOMPARE(window.tickCount(), 0);
+    QVERIFY(!client.lastRunning);  // R13: panel starts paused
 
     window.toggleRun();
     QCOMPARE(window.runButtonText(), QStringLiteral("Pause"));
+    QVERIFY(client.lastRunning);   // R13: run state propagated to the client
 
     window.doTick();
     window.doTick();
@@ -69,6 +75,7 @@ void SimulatorWindowTest::runPauseTickAndLog()
 
     window.toggleRun();
     QCOMPARE(window.runButtonText(), QStringLiteral("Run"));
+    QVERIFY(!client.lastRunning);  // R13: pause propagated to the client
 }
 
 void SimulatorWindowTest::faultDisabledWithoutSelection()
