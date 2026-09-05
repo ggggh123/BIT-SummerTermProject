@@ -1199,11 +1199,14 @@ void TencentMapClientTest::nearbyChargerButtonsLocalizeEveryWireStatus()
         const auto *button = page.findChild<QPushButton *>(
             QStringLiteral("chargerButton_%1").arg(30 + index));
         QVERIFY(button != nullptr);
-        QVERIFY2(button->text().contains(expectedLabels.at(index).second),
-                 qPrintable(button->text()));
+        const auto *status = page.findChild<QLabel *>(
+            QStringLiteral("chargerStatus_%1").arg(30 + index));
+        QVERIFY(status != nullptr);
+        QVERIFY2(status->text().contains(expectedLabels.at(index).second),
+                 qPrintable(status->text()));
         for (const auto &wireAndLabel : expectedLabels) {
-            QVERIFY2(!button->text().contains(wireAndLabel.first),
-                     qPrintable(button->text()));
+            QVERIFY2(!status->text().contains(wireAndLabel.first),
+                     qPrintable(status->text()));
         }
     }
 }
@@ -1224,7 +1227,9 @@ void TencentMapClientTest::nearbySelectionCarriesOriginStationAndChargerWithoutM
     auto *chargerButton = page.findChild<QPushButton *>(QStringLiteral("chargerButton_1001"));
     auto *navigateButton = page.findChild<QPushButton *>(QStringLiteral("navigateButton"));
     QVERIFY(chargerButton != nullptr);
-    QVERIFY(chargerButton->text().contains(QStringLiteral("充电桩 ID：1001")));
+    auto *chargerId = page.findChild<QLabel *>(QStringLiteral("chargerId_1001"));
+    QVERIFY(chargerId != nullptr);
+    QCOMPARE(chargerId->text(), QStringLiteral("1001"));
     QVERIFY(navigateButton != nullptr);
     chargerButton->click();
     QCOMPARE(selected.size(), 1);

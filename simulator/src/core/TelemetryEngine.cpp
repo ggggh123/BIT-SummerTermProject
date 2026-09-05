@@ -7,6 +7,7 @@ TelemetryEngine::TelemetryEngine(quint32 seed, const QDateTime &initialTime,
     : seed_(seed),
       rng_(QRandomGenerator(seed)),
       currentTime_(initialTime),
+      lastEventAt_(initialTime),
       intervalMs_(intervalMs)
 {}
 
@@ -27,9 +28,18 @@ QDateTime TelemetryEngine::currentTime() const
     return currentTime_;
 }
 
+QDateTime TelemetryEngine::nextEventTime(const QDateTime &base)
+{
+    QDateTime t = base;
+    if (t <= lastEventAt_)
+        t = lastEventAt_.addMSecs(1);
+    lastEventAt_ = t;
+    return t;
+}
+
 QList<TelemetrySample> TelemetryEngine::tick()
 {
-    currentTime_ = currentTime_.addMSecs(intervalMs_);
+    currentTime_ = nextEventTime(currentTime_.addMSecs(intervalMs_));
     QList<TelemetrySample> samples;
     samples.reserve(chargers_.size());
 
@@ -77,7 +87,7 @@ bool TelemetryEngine::requestFault(int chargerId)
     FaultIntent intent;
     intent.chargerId = chargerId;
     intent.fault = true;
-    intent.recordedAt = currentTime_;
+    intent.recordedAt = nextEventTime(currentTime_);
     pendingIntents_.append(intent);
     return true;
 }
@@ -93,7 +103,7 @@ bool TelemetryEngine::requestRecovery(int chargerId)
     FaultIntent intent;
     intent.chargerId = chargerId;
     intent.fault = false;
-    intent.recordedAt = currentTime_;
+    intent.recordedAt = nextEventTime(currentTime_);
     pendingIntents_.append(intent);
     return true;
 }

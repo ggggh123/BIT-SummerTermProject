@@ -13,6 +13,7 @@ private slots:
     void determinismAndTimeAdvance();
     void zeroEnergyForNonCharging();
     void faultAndRecoveryIntents();
+    void intentTimestampsStrictlyIncreasing();
 };
 
 static QDateTime t0()
@@ -94,6 +95,38 @@ void TelemetryEngineTest::faultAndRecoveryIntents()
 
     QVERIFY(!e.requestFault(9999));
     QVERIFY(!e.requestRecovery(9999));
+}
+
+// R14 regression: recordedAt must increase strictly across fault/recovery
+// intents and interleaved telemetry, even without any tick in between.
+void TelemetryEngineTest::intentTimestampsStrictlyIncreasing()
+{
+    ChargerSnapshot c;
+    c.chargerId = 1001;
+    c.status = QStringLiteral("idle");
+    c.powerKw = 60.0;
+
+    TelemetryEngine e(20260901, t0(), 3000);
+    e.replaceChargers({c});
+
+    QVERIFY(e.requestFault(1001));
+    QList<FaultIntent> first = e.takePendingIntents();
+    QCOMPARE(first.size(), 1);
+    QVERIFY(first[0].recordedAt > t0());
+
+    QVERIFY(e.requestRecovery(1001));  // status stays fault until admin reset
+    QList<FaultIntent> second = e.takePendingIntents();
+    QCOMPARE(second.size(), 1);
+    QVERIFY(second[0].recordedAt > first[0].recordedAt);
+
+    const QList<TelemetrySample> samples = e.tick();
+    QVERIFY(!samples.isEmpty());
+    QVERIFY(samples.first().recordedAt > second[0].recordedAt);
+
+    QVERIFY(e.requestRecovery(1001));
+    QList<FaultIntent> third = e.takePendingIntents();
+    QCOMPARE(third.size(), 1);
+    QVERIFY(third[0].recordedAt > samples.first().recordedAt);
 }
 
 QTEST_APPLESS_MAIN(TelemetryEngineTest)

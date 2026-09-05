@@ -95,6 +95,7 @@ private slots:
     void requestIdIsStableForSample();
     void sendsStatusAndTelemetryToFakeServer();
     void queuesTelemetryWhileDisconnected();
+    void statusReportsActualRunState();
 };
 
 void SimulatorClientTest::reconnectDelaySequence()
@@ -181,6 +182,41 @@ void SimulatorClientTest::queuesTelemetryWhileDisconnected()
     client.sendTelemetry(samples);
 
     QCOMPARE(client.queuedSamples(), 200);  // bounded queue, oldest dropped
+}
+
+// R13 regression: simulator.status must report the real run state instead of
+// a hardcoded "running".
+void SimulatorClientTest::statusReportsActualRunState()
+{
+    FakeServer server;
+    QVERIFY(server.listen());
+
+    TelemetryEngine engine(20260901,
+        QDateTime::fromString(QStringLiteral("2026-09-01T09:00:00+08:00"), Qt::ISODate),
+        3000);
+
+    SimulatorConfig config;
+    config.host = QStringLiteral("127.0.0.1");
+    config.port = server.port();
+
+    SimulatorClient client(config, &engine);
+    QSignalSpy connectedSpy(&client, &SimulatorClient::connected);
+    client.start();
+    QVERIFY(connectedSpy.wait(3000));
+
+    QTRY_VERIFY_WITH_TIMEOUT(server.requests().size() >= 1, 3000);
+    QCOMPARE(server.requests().at(0).action, QStringLiteral("simulator.status"));
+    // Telemetry is not flowing yet: the truthful initial state is "paused".
+    QCOMPARE(server.requests().at(0).payload.value(QStringLiteral("state")).toString(),
+             QStringLiteral("paused"));
+
+    client.setRunning(true);
+    QTRY_VERIFY_WITH_TIMEOUT(server.requests().size() >= 2, 3000);
+    QCOMPARE(server.requests().last().action, QStringLiteral("simulator.status"));
+    QCOMPARE(server.requests().last().payload.value(QStringLiteral("state")).toString(),
+             QStringLiteral("running"));
+
+    client.stop();
 }
 
 QTEST_GUILESS_MAIN(SimulatorClientTest)

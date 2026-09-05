@@ -5,9 +5,12 @@
 
 #include <QComboBox>
 #include <QFrame>
+#include <QIcon>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QStackedWidget>
+#include <QStyle>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -15,6 +18,79 @@
 #include <utility>
 
 namespace {
+
+// Both subviews own a vertical scroll area. Hidden detail content must not impose
+// its minimum size on the list or on MainWindow's outer content viewport.
+class NearbyViews final : public QStackedWidget
+{
+public:
+    using QStackedWidget::QStackedWidget;
+    QSize minimumSizeHint() const override { return {0, 0}; }
+    QSize sizeHint() const override { return {390, 600}; }
+};
+
+QLabel *wrappedLabel(const QString &text, QWidget *parent, const char *role = "secondary")
+{
+    auto *label = new QLabel(text, parent);
+    label->setTextFormat(Qt::PlainText);
+    label->setWordWrap(true);
+    label->setMinimumWidth(0);
+    label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    label->setProperty("role", QString::fromLatin1(role));
+    return label;
+}
+
+void setLabelRole(QLabel *label, const char *role)
+{
+    const QString nextRole = QString::fromLatin1(role);
+    if (label->property("role").toString() == nextRole) {
+        return;
+    }
+    label->setProperty("role", nextRole);
+    label->style()->unpolish(label);
+    label->style()->polish(label);
+    label->update();
+}
+
+QWidget *priceLabel(qint64 priceFenPerKwh, QWidget *parent, const QString &name)
+{
+    auto *group = new QWidget(parent);
+    group->setObjectName(name);
+    group->setProperty("role", QStringLiteral("priceGroup"));
+    auto *layout = new QHBoxLayout(group);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+    auto *amount = wrappedLabel(QStringLiteral("¥%1").arg(priceFenPerKwh / 100.0, 0, 'f', 2), group, "price");
+    amount->setObjectName(name + QStringLiteral("Amount"));
+    amount->setWordWrap(false);
+    amount->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+    auto *unit = wrappedLabel(QStringLiteral("/ 度"), group, "priceUnit");
+    unit->setObjectName(name + QStringLiteral("Unit"));
+    unit->setWordWrap(false);
+    unit->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+    layout->addWidget(amount, 0, Qt::AlignVCenter);
+    layout->addWidget(unit, 0, Qt::AlignVCenter);
+    layout->addStretch();
+    return group;
+}
+
+QScrollArea *scrollingView(QWidget *content, QWidget *parent, const char *name)
+{
+    auto *scroll = new QScrollArea(parent);
+    scroll->setObjectName(QString::fromLatin1(name));
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setMinimumSize(0, 0);
+    scroll->setWidget(content);
+    return scroll;
+}
+
+QString distanceText(const std::optional<double> &distance)
+{
+    return distance.has_value() ? QStringLiteral("%1 km").arg(*distance, 0, 'f', 2)
+                               : QStringLiteral("距离未提供");
+}
 
 void clearLayout(QLayout *layout)
 {
@@ -133,28 +209,97 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
     forecastSource_->setWordWrap(true);
     detailStatus_->setObjectName(QStringLiteral("detailStatus"));
     detailStatus_->setWordWrap(true);
+    statusLabel_->setProperty("role", QStringLiteral("secondary"));
+    forecastSource_->setProperty("role", QStringLiteral("secondary"));
+    detailStatus_->setProperty("role", QStringLiteral("secondary"));
+    connectionBanner_->setProperty("role", QStringLiteral("danger"));
+    connectionBanner_->setWordWrap(true);
+    forecastSource_->hide();
+    searchButton_->setProperty("role", QStringLiteral("primary"));
+    addressBox_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    addressBox_->setMinimumContentsLength(1);
+    addressBox_->setMinimumWidth(0);
 
-    auto *stationContainer = new QWidget(this);
+    nearbyViews_ = new NearbyViews(this);
+    nearbyViews_->setObjectName(QStringLiteral("nearbyViews"));
+    stationListView_ = new QWidget(nearbyViews_);
+    stationListView_->setObjectName(QStringLiteral("stationListView"));
+    stationDetailView_ = new QWidget(nearbyViews_);
+    stationDetailView_->setObjectName(QStringLiteral("stationDetailView"));
+    nearbyViews_->addWidget(stationListView_);
+    nearbyViews_->addWidget(stationDetailView_);
+
+    auto *listContent = new QWidget(stationListView_);
+    auto *listContentLayout = new QVBoxLayout(listContent);
+    listContentLayout->setContentsMargins(20, 20, 20, 20);
+    listContentLayout->setSpacing(6);
+    listContentLayout->addWidget(wrappedLabel(QStringLiteral("附近充电站"), listContent, "pageTitle"));
+    auto *addressLayout = new QVBoxLayout;
+    addressLayout->setSpacing(4);
+    addressLayout->addWidget(wrappedLabel(QStringLiteral("起点地址"), listContent, "body"));
+    addressLayout->addWidget(addressBox_);
+    listContentLayout->addLayout(addressLayout);
+    listContentLayout->addWidget(searchButton_);
+    listContentLayout->addWidget(connectionBanner_);
+    listContentLayout->addWidget(retryButton_);
+    listContentLayout->addWidget(statusLabel_);
+    listContentLayout->addWidget(forecastSource_);
+    auto *stationContainer = new QWidget(listContent);
     stationLayout_ = new QVBoxLayout(stationContainer);
     stationLayout_->setContentsMargins(0, 0, 0, 0);
-    auto *stationScroll = new QScrollArea(this);
-    stationScroll->setWidgetResizable(true);
-    stationScroll->setWidget(stationContainer);
-    auto *detailContainer = new QWidget(this);
+    stationLayout_->setSpacing(12);
+    listContentLayout->addWidget(stationContainer);
+    listContentLayout->addStretch();
+    auto *listLayout = new QVBoxLayout(stationListView_);
+    listLayout->setContentsMargins(0, 0, 0, 0);
+    listLayout->addWidget(scrollingView(listContent, stationListView_, "stationListScroll"));
+
+    auto *detailViewLayout = new QVBoxLayout(stationDetailView_);
+    detailViewLayout->setContentsMargins(0, 0, 0, 0);
+    detailViewLayout->setSpacing(0);
+    auto *header = new QHBoxLayout;
+    header->setContentsMargins(12, 8, 12, 8);
+    auto *back = new QPushButton(stationDetailView_);
+    back->setObjectName(QStringLiteral("stationDetailBackButton"));
+    back->setAccessibleName(QStringLiteral("返回附近充电站"));
+    back->setIcon(QIcon(QStringLiteral(":/ui/back.svg")));
+    back->setIconSize({24, 24});
+    back->setProperty("role", QStringLiteral("back"));
+    back->setFixedSize(44, 44);
+    header->addWidget(back);
+    auto *heading = wrappedLabel(QStringLiteral("站点详情"), stationDetailView_, "sectionTitle");
+    heading->setAlignment(Qt::AlignCenter);
+    header->addWidget(heading, 1);
+    header->addSpacing(44);
+    detailViewLayout->addLayout(header);
+    auto *detailContent = new QWidget(stationDetailView_);
+    auto *detailContentLayout = new QVBoxLayout(detailContent);
+    detailContentLayout->setContentsMargins(20, 8, 20, 20);
+    detailContentLayout->setSpacing(12);
+    detailContentLayout->addWidget(detailStatus_);
+    auto *detailContainer = new QWidget(detailContent);
     detailLayout_ = new QVBoxLayout(detailContainer);
     detailLayout_->setContentsMargins(0, 0, 0, 0);
+    detailLayout_->setSpacing(16);
+    detailContentLayout->addWidget(detailContainer);
+    detailContentLayout->addStretch();
+    detailViewLayout->addWidget(scrollingView(detailContent, stationDetailView_, "stationDetailScroll"), 1);
 
     auto *layout = new QVBoxLayout(this);
-    layout->addWidget(new QLabel(QStringLiteral("起点地址"), this));
-    layout->addWidget(addressBox_);
-    layout->addWidget(searchButton_);
-    layout->addWidget(connectionBanner_);
-    layout->addWidget(retryButton_);
-    layout->addWidget(statusLabel_);
-    layout->addWidget(forecastSource_);
-    layout->addWidget(stationScroll, 1);
-    layout->addWidget(detailStatus_);
-    layout->addWidget(detailContainer);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(nearbyViews_);
+
+    connect(back, &QPushButton::clicked, this, [this] {
+        // Cancel only the user-initiated detail read. An authoritative post-charge
+        // refresh keeps its generations and can update cached detail without navigating.
+        if (!pendingDetailRequestId_.isEmpty()) {
+            const QString requestId = std::exchange(pendingDetailRequestId_, {});
+            pendingDetailOrigin_.reset();
+            userApi_->cancelSafeRead(requestId);
+            setDetailControlsEnabled(!foregroundSearchPending_);
+        }
+        nearbyViews_->setCurrentWidget(stationListView_);
+    });
 
     connect(searchButton_, &QPushButton::clicked, this, &NearbyPage::searchCurrentAddress);
     connect(retryButton_, &QPushButton::clicked, this, [this] {
@@ -202,6 +347,13 @@ NearbyPage::NearbyPage(UserApi *userApi, TencentMapClient *mapClient, QWidget *p
         });
     }
     if (userApi_ != nullptr) {
+        connect(userApi_, &UserApi::loginSucceeded, this, [this] {
+            setDetailControlsEnabled(true);
+            if (stations_.isEmpty()) {
+                statusLabel_->setText(QStringLiteral("请选择起点地址，查找附近充电站"));
+                detailStatus_->setText(QStringLiteral("请选择充电站查看充电桩"));
+            }
+        });
         connect(userApi_, &UserApi::nearbyStationsLoaded, this,
                 [this](const QString &requestId, ev::user::StationListResult result) {
             if (requestId != pendingStationsRequestId_) {
@@ -370,12 +522,14 @@ void NearbyPage::setConnectionAvailable(bool available)
 {
     connected_ = available;
     if (!available) {
+        connectionBanner_->show();
+        retryButton_->show();
         pendingGeocodeId_.clear();
         foregroundSearchPending_ = false;
         connectionBanner_->setText(stations_.isEmpty()
             ? QStringLiteral("服务器连接不可用")
             : QStringLiteral("服务器连接不可用 · 离线缓存"));
-        connectionBanner_->setStyleSheet(QStringLiteral("color: red; font-weight: bold;"));
+        connectionBanner_->setStyleSheet(QStringLiteral("color: #BE4B42;"));
         reconnectRefreshPending_ = origin_.has_value();
         const auto superseded = supersededSafeReadIds_.values();
         for (const QString &requestId : superseded) {
@@ -396,6 +550,11 @@ void NearbyPage::setConnectionAvailable(bool available)
         pendingForecastRefreshAttemptId_.reset();
         pendingDetailOrigin_.reset();
         setDetailPending(false);
+        if (nearbyViews_->currentWidget() == stationDetailView_) {
+            detailStatus_->setText(QStringLiteral("服务器连接不可用 · 以下为离线缓存"));
+            setLabelRole(detailStatus_, "danger");
+            detailStatus_->show();
+        }
         statusLabel_->setText(stations_.isEmpty()
             ? QStringLiteral("离线，暂无可用站点缓存")
             : QStringLiteral("离线缓存 · %1 个附近充电站").arg(stations_.size()));
@@ -405,6 +564,12 @@ void NearbyPage::setConnectionAvailable(bool available)
     }
     connectionBanner_->setText(QStringLiteral("服务器已连接"));
     connectionBanner_->setStyleSheet(QString());
+    connectionBanner_->hide();
+    retryButton_->hide();
+    if (detailStatus_->text() == QStringLiteral("服务器连接不可用 · 以下为离线缓存")) {
+        detailStatus_->setText(QStringLiteral("连接已恢复 · 站点信息为缓存"));
+        setLabelRole(detailStatus_, "secondary");
+    }
     retryButton_->setEnabled(true);
     setSearchPending(foregroundSearchPending_ || !pendingGeocodeId_.isEmpty()
                      || !pendingStationsRequestId_.isEmpty());
@@ -560,6 +725,7 @@ void NearbyPage::applyStations(ev::user::StationListResult result,
 {
     if (invalidateCurrentSelection) {
         invalidateSelection();
+        nearbyViews_->setCurrentWidget(stationListView_);
     }
     origin_ = result.origin;
     stations_ = std::move(result.stations);
@@ -587,6 +753,7 @@ void NearbyPage::displayForecast(ev::user::ForecastLatestResult result)
                 .arg(run.activatedAt, run.generatedAt, run.dataCutoff,
                      run.stale ? QStringLiteral(" · 预测已过期") : QString()));
     }
+    forecastSource_->setVisible(forecast_.forecastRun.has_value());
     rebuildStationCards();
 }
 
@@ -632,6 +799,7 @@ void NearbyPage::resetForSessionExpiry()
     clearLayout(detailLayout_);
     setSearchPending(false);
     setDetailControlsEnabled(false);
+    nearbyViews_->setCurrentWidget(stationListView_);
     statusLabel_->setText(QStringLiteral("请重新登录后查询附近充电站"));
     detailStatus_->setText(QStringLiteral("请重新登录后查看充电桩"));
 }
@@ -641,43 +809,131 @@ void NearbyPage::applyStationDetail(ev::user::StationDetailResult result,
 {
     if (invalidateCurrentSelection) {
         invalidateSelection();
+        nearbyViews_->setCurrentWidget(stationDetailView_);
     }
     if (!displayedDetailOrigin_.has_value()) {
         displayedDetailOrigin_ = origin_;
     }
     const std::optional<ev::user::GeoPoint> selectionOrigin = displayedDetailOrigin_;
     clearLayout(detailLayout_);
+    setLabelRole(detailStatus_, "secondary");
     detailStatus_->setText(result.chargers.isEmpty()
         ? QStringLiteral("该站暂无充电桩")
         : QStringLiteral("已加载 %1 个充电桩").arg(result.chargers.size()));
-    auto *title = new QLabel(QStringLiteral("%1 · 充电桩").arg(result.station.name), this);
+    detailStatus_->setVisible(result.chargers.isEmpty());
+    auto *summary = new QFrame(this);
+    summary->setProperty("role", QStringLiteral("card"));
+    auto *summaryLayout = new QVBoxLayout(summary);
+    summaryLayout->setContentsMargins(16, 16, 16, 16);
+    summaryLayout->setSpacing(8);
+    auto *title = wrappedLabel(result.station.name, summary, "pageTitle");
     title->setObjectName(QStringLiteral("detailTitle"));
-    detailLayout_->addWidget(title);
+    summaryLayout->addWidget(title);
+    auto *address = wrappedLabel(result.station.address, summary);
+    address->setObjectName(QStringLiteral("detailAddress"));
+    summaryLayout->addWidget(address);
+    auto *price = priceLabel(result.station.priceFenPerKwh, summary, QStringLiteral("detailPrice"));
+    auto *priceAndFacts = new QHBoxLayout;
+    priceAndFacts->addWidget(price, 1);
+    auto *facts = new QVBoxLayout;
+    facts->setSpacing(2);
+    auto *counts = wrappedLabel(QStringLiteral("共 %1 桩 / 空闲 %2")
+        .arg(result.station.chargerCount).arg(result.station.idleCount), summary);
+    counts->setObjectName(QStringLiteral("detailCounts"));
+    counts->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    facts->addWidget(counts);
+    std::optional<double> distance = result.station.distanceKm;
+    if (!distance.has_value() && selectionOrigin.has_value() && origin_.has_value()
+        && selectionOrigin->latitude == origin_->latitude
+        && selectionOrigin->longitude == origin_->longitude) {
+        const auto station = std::find_if(stations_.cbegin(), stations_.cend(), [&result](const auto &s) {
+            return s.stationId == result.station.stationId;
+        });
+        if (station != stations_.cend()) distance = station->distanceKm;
+    }
+    auto *distanceLabel = wrappedLabel(distanceText(distance), summary);
+    distanceLabel->setObjectName(QStringLiteral("detailDistance"));
+    distanceLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    facts->addWidget(distanceLabel);
+    priceAndFacts->addLayout(facts, 1);
+    summaryLayout->addLayout(priceAndFacts);
+    auto *navigate = new QPushButton(QStringLiteral("导航到这里"), summary);
+    navigate->setObjectName(QStringLiteral("navigateButton"));
+    navigate->setProperty("role", QStringLiteral("outline"));
+    navigate->setIcon(QIcon(QStringLiteral(":/ui/location.svg")));
+    navigate->setIconSize({22, 22});
+    connect(navigate, &QPushButton::clicked, this, [this, selectionOrigin, station = result.station] {
+        if (selectionOrigin.has_value()) emit navigationRequested(*selectionOrigin, station);
+    });
+    summaryLayout->addWidget(navigate);
+    detailLayout_->addWidget(summary);
+    detailLayout_->addWidget(wrappedLabel(QStringLiteral("选择充电桩"), this, "sectionTitle"));
+    auto *chargerGroup = new QFrame(this);
+    chargerGroup->setProperty("role", QStringLiteral("card"));
+    auto *chargerRows = new QVBoxLayout(chargerGroup);
+    chargerRows->setContentsMargins(0, 0, 0, 0);
+    chargerRows->setSpacing(0);
+    detailLayout_->addWidget(chargerGroup);
     for (const auto &charger : result.chargers) {
-        auto *button = new QPushButton(
-            QStringLiteral("充电桩 ID：%1 · %2 · %3 · %4 kW · %5")
-                .arg(charger.chargerId)
-                .arg(charger.code,
-                     charger.type == QStringLiteral("fast") ? QStringLiteral("快充") : QStringLiteral("慢充"))
-                .arg(charger.powerKw, 0, 'f', 1)
-                .arg(chargerStatusText(charger.status)), this);
+        auto *card = new QFrame(chargerGroup);
+        card->setProperty("role", QStringLiteral("chargerRow"));
+        card->setProperty("last", charger.chargerId == result.chargers.last().chargerId);
+        auto *row = new QHBoxLayout(card);
+        row->setContentsMargins(16, 16, 16, 16);
+        row->setSpacing(8);
+        auto *icon = new QLabel(card);
+        icon->setPixmap(QIcon(QStringLiteral(":/ui/charger.svg")).pixmap({28, 28}));
+        icon->setFixedSize(28, 32);
+        row->addWidget(icon, 0, Qt::AlignVCenter);
+        auto *text = new QVBoxLayout;
+        text->setSpacing(3);
+        auto *id = wrappedLabel(QString::number(charger.chargerId), card, "sectionTitle");
+        id->setObjectName(QStringLiteral("chargerId_%1").arg(charger.chargerId));
+        id->setAccessibleName(QStringLiteral("充电桩 ID：%1").arg(charger.chargerId));
+        auto *idAndCode = new QHBoxLayout;
+        idAndCode->setSpacing(8);
+        id->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+        idAndCode->addWidget(id);
+        text->addLayout(idAndCode);
+        auto *code = wrappedLabel(charger.code, card);
+        code->setAccessibleName(QStringLiteral("充电桩编号 %1").arg(charger.code));
+        code->setObjectName(QStringLiteral("chargerCode_%1").arg(charger.chargerId));
+        idAndCode->addWidget(code, 1);
+        auto *metadata = wrappedLabel(QStringLiteral("%1 · 额定功率 %2 kW")
+            .arg(charger.type == QStringLiteral("fast") ? QStringLiteral("快充") : QStringLiteral("慢充"))
+            .arg(charger.powerKw, 0, 'g', 8), card);
+        metadata->setObjectName(QStringLiteral("chargerMetadata_%1").arg(charger.chargerId));
+        text->addWidget(metadata);
+        auto *status = wrappedLabel(chargerStatusText(charger.status), card,
+            charger.status == QStringLiteral("idle") ? "available" : "secondary");
+        status->setObjectName(QStringLiteral("chargerStatus_%1").arg(charger.chargerId));
+        if (charger.status == QStringLiteral("fault")) status->setProperty("role", QStringLiteral("danger"));
+        status->setAlignment(Qt::AlignCenter);
+        row->addLayout(text, 1);
+        auto *actions = new QVBoxLayout;
+        actions->setSpacing(2);
+        actions->addWidget(status);
+        const bool available = charger.status == QStringLiteral("idle");
+        auto *button = new QPushButton(available ? QStringLiteral("选择") : QStringLiteral("不可选"), card);
         button->setObjectName(QStringLiteral("chargerButton_%1").arg(charger.chargerId));
+        button->setProperty("role", QStringLiteral("outline"));
+        button->setProperty("chargerAvailable", available);
+        button->setFixedWidth(76);
+        button->setAccessibleName(QStringLiteral("%1充电桩 %2，%3")
+            .arg(available ? QStringLiteral("选择") : QStringLiteral("不可选择"))
+            .arg(charger.chargerId).arg(chargerStatusText(charger.status)));
         connect(button, &QPushButton::clicked, this, [this, selectionOrigin, station = result.station, charger] {
-            if (selectionOrigin.has_value()) {
+            if (selectionOrigin.has_value() && charger.status == QStringLiteral("idle")) {
                 ++selectionGeneration_;
                 emit chargerSelected({*selectionOrigin, station, charger, selectionGeneration_});
             }
         });
-        detailLayout_->addWidget(button);
+        actions->addWidget(button);
+        row->addLayout(actions);
+        chargerRows->addWidget(card);
     }
-    auto *navigate = new QPushButton(QStringLiteral("导航到该站"), this);
-    navigate->setObjectName(QStringLiteral("navigateButton"));
-    connect(navigate, &QPushButton::clicked, this, [this, selectionOrigin, station = result.station] {
-        if (selectionOrigin.has_value()) {
-            emit navigationRequested(*selectionOrigin, station);
-        }
-    });
-    detailLayout_->addWidget(navigate);
+    detailLayout_->addWidget(wrappedLabel(QStringLiteral("选择空闲桩后进入预约确认。"), this));
+    setDetailControlsEnabled(detailControlsEnabled_);
 }
 
 void NearbyPage::searchCurrentAddress()
@@ -801,6 +1057,7 @@ void NearbyPage::requestStationDetail(const ev::user::Station &station)
     pendingDetailSearchGeneration_ = searchGeneration_;
     pendingDetailSelectionGeneration_ = selectionGeneration_;
     pendingDetailOrigin_ = origin_;
+    nearbyViews_->setCurrentWidget(stationDetailView_);
     setDetailPending(true);
     pendingDetailRequestId_ = userApi_->loadStationDetail(station.stationId);
     if (pendingDetailRequestId_.isEmpty()) {
@@ -869,22 +1126,42 @@ void NearbyPage::rebuildStationCards()
     });
     for (const auto &station : displayStations) {
         auto *card = new QFrame(this);
-        card->setFrameShape(QFrame::StyledPanel);
+        card->setProperty("role", QStringLiteral("card"));
         auto *layout = new QVBoxLayout(card);
-        auto *name = new QLabel(station.name, card);
+        layout->setContentsMargins(16, 16, 16, 16);
+        layout->setSpacing(2);
+        auto *name = wrappedLabel(station.name, card, "sectionTitle");
         name->setObjectName(QStringLiteral("stationName_%1").arg(station.stationId));
         layout->addWidget(name);
-        layout->addWidget(new QLabel(
-            QStringLiteral("%1 元/度 · 共 %2 桩 / 空闲 %3 · %4 km")
-                .arg(station.priceFenPerKwh / 100.0, 0, 'f', 2)
-                .arg(station.chargerCount)
-                .arg(station.idleCount)
-                .arg(station.distanceKm.value_or(0.0), 0, 'f', 2), card));
-        auto *prediction = new QLabel(forecastTextForStation(station), card);
+        auto *priceRow = new QHBoxLayout;
+        priceRow->setSpacing(4);
+        auto *price = priceLabel(station.priceFenPerKwh, card,
+            QStringLiteral("stationPrice_%1").arg(station.stationId));
+        priceRow->addWidget(price, 1);
+        auto *navigate = new QPushButton(distanceText(station.distanceKm), card);
+        navigate->setObjectName(QStringLiteral("stationNavigateButton_%1").arg(station.stationId));
+        navigate->setProperty("role", QStringLiteral("textAction"));
+        navigate->setIcon(QIcon(QStringLiteral(":/ui/location.svg")));
+        navigate->setIconSize({18, 18});
+        navigate->setAccessibleName(QStringLiteral("导航到%1，%2").arg(station.name, distanceText(station.distanceKm)));
+        connect(navigate, &QPushButton::clicked, this, [this, origin = origin_, station] {
+            if (origin.has_value()) emit navigationRequested(*origin, station);
+        });
+        priceRow->addWidget(navigate);
+        layout->addLayout(priceRow);
+        auto *counts = wrappedLabel(QStringLiteral("共 %1 桩 / 空闲 %2")
+            .arg(station.chargerCount).arg(station.idleCount), card);
+        counts->setObjectName(QStringLiteral("stationCounts_%1").arg(station.stationId));
+        layout->addWidget(counts);
+        auto *prediction = wrappedLabel(forecastTextForStation(station), card);
         prediction->setObjectName(QStringLiteral("forecastLabel_%1").arg(station.stationId));
+        prediction->setVisible(compatibleHorizonOneRecord(station) != nullptr);
         layout->addWidget(prediction);
         auto *open = new QPushButton(QStringLiteral("查看充电桩"), card);
         open->setObjectName(QStringLiteral("stationButton_%1").arg(station.stationId));
+        open->setProperty("role", QStringLiteral("cardAction"));
+        open->setIcon(QIcon(QStringLiteral(":/ui/charger.svg")));
+        open->setIconSize({24, 24});
         connect(open, &QPushButton::clicked, this, [this, station] {
             requestStationDetail(station);
         });
@@ -892,6 +1169,7 @@ void NearbyPage::rebuildStationCards()
         stationLayout_->addWidget(card);
     }
     stationLayout_->addStretch();
+    setDetailControlsEnabled(detailControlsEnabled_);
 }
 
 void NearbyPage::clearForecastCache()
@@ -899,6 +1177,7 @@ void NearbyPage::clearForecastCache()
     forecast_ = {};
     forecastStationFacts_.clear();
     forecastSource_->setText(QStringLiteral("暂无预测来源"));
+    forecastSource_->hide();
 }
 
 const ev::user::ForecastRecord *NearbyPage::compatibleHorizonOneRecord(
@@ -938,17 +1217,22 @@ void NearbyPage::setDetailPending(bool pending)
 {
     setDetailControlsEnabled(!pending);
     if (pending) {
+        setLabelRole(detailStatus_, "secondary");
         detailStatus_->setText(QStringLiteral("正在加载充电桩…"));
+        detailStatus_->show();
     }
 }
 
 void NearbyPage::setDetailControlsEnabled(bool enabled)
 {
+    detailControlsEnabled_ = enabled;
     const auto buttons = findChildren<QPushButton *>();
     for (QPushButton *button : buttons) {
         const QString name = button->objectName();
-        if (name.startsWith(QStringLiteral("stationButton_"))
-            || name.startsWith(QStringLiteral("chargerButton_"))
+        if (name.startsWith(QStringLiteral("chargerButton_"))) {
+            button->setEnabled(enabled && button->property("chargerAvailable").toBool());
+        } else if (name.startsWith(QStringLiteral("stationButton_"))
+            || name.startsWith(QStringLiteral("stationNavigateButton_"))
             || name == QStringLiteral("navigateButton")) {
             button->setEnabled(enabled);
         }
@@ -1030,6 +1314,7 @@ void NearbyPage::handleApiFailure(const ev::user::ApiError &error)
         pendingDetailRequestId_.clear();
         setDetailPending(false);
         detailStatus_->setText(errorText(error));
+        detailStatus_->show();
     }
 }
 
@@ -1105,6 +1390,7 @@ void NearbyPage::clearDisplayedDetailForMissingStation()
     clearLayout(detailLayout_);
     displayedDetailOrigin_.reset();
     detailStatus_->setText(QStringLiteral("原充电站已不在附近列表中"));
+    detailStatus_->show();
 }
 
 QString NearbyPage::errorText(const ev::user::ApiError &error)

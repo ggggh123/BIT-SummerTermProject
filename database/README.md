@@ -14,15 +14,18 @@
 
 core profile 的黄金库只要求业务 schema、确定性 seed、站点/充电桩/订单历史和模拟器所需数据。它不要求在线 ML、Web snapshot 或 active forecast；预测表和 v1 合同能力仍保留，缺少 active forecast 是合法状态。
 
-目前仓库**尚未封存单独的 `runtime/golden/core.db`**。需要构建 core 候选时，可用既有离线构建器生成它；这不是本 PR 新增的运维脚本，也不代表已经完成 core 集成或发布：
+本诊断候选已引入 `feat/data@10034fd` 封存的 `runtime/golden/core.db`，清单为 `core.manifest.json`，校验文件为 `core.db.sha256`。SHA-256 为 `5dd13bef7990c8166949d836a6fd8eadcc0b1ef8b11dc1b91272c33bead3a0f7`，6站48桩、30用户、431个已完成订单，不含 active forecast。该封存文件仍为旧三字段 request_log，服务端在运行副本启动时迁移；不得直接用封存原件运行服务。
+
+需要重建时，先输出到新目录。现有构建器固定写 `manifest.json`，不能直接向旧黄金目录重建，以免覆盖 demo 的清单。下面生成的是新的候选文件，不表示完成集成或发布：
 
 ```bash
+core_candidate_dir=$(mktemp -d /tmp/ev-core-golden-candidate-XXXXXX)
 python3 database/build_golden.py \
-  --output-dir runtime/golden --seed 20260901 \
+  --output-dir "$core_candidate_dir" --seed 20260901 \
   --cutoff 2026-09-01T09:00:00+08:00 --name core.db
 ```
 
-构建后应按核心验收清单校验 hash、SQLite 完整性与核心闭环；不得由用户端、模拟器或人工直接修改运行期数据库。
+构建后应按核心验收清单校验 hash、SQLite 完整性与核心闭环，再由 #4 明确发布候选库、`core.manifest.json` 和 `core.db.sha256`，保留历史 demo 工件。当前 schema 已包含服务端日志扩展，不能要求新建库的二进制哈希仍等于旧封存库。不得由用户端、模拟器或人工直接修改运行期数据库。
 
 ## Optional：预测增强黄金库
 

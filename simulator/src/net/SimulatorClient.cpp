@@ -65,10 +65,20 @@ void SimulatorClient::onConnected()
     flushPending();
 }
 
+void SimulatorClient::setRunning(bool running)
+{
+    running_ = running;
+    // Push the state change immediately so the server does not keep a stale
+    // "running" heartbeat after the panel pauses (R13).
+    if (socket_.state() == QAbstractSocket::ConnectedState)
+        sendStatus();
+}
+
 void SimulatorClient::sendStatus()
 {
     QJsonObject payload;
-    payload[QStringLiteral("state")] = QStringLiteral("running");
+    payload[QStringLiteral("state")] =
+        running_ ? QStringLiteral("running") : QStringLiteral("paused");
     payload[QStringLiteral("simulatedAt")] = isoPlus08(engine_->currentTime());
     payload[QStringLiteral("eventCount")] = eventCount_;
 

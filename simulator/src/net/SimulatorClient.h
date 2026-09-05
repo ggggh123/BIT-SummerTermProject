@@ -28,6 +28,10 @@ public:
     virtual void sendTelemetry(const QList<TelemetrySample> &samples) = 0;
     virtual void sendFault(const FaultIntent &intent) = 0;
 
+    // R13: the panel reports its real run state so simulator.status stays
+    // truthful. The default no-op keeps fake clients in tests source-compatible.
+    virtual void setRunning(bool running) { Q_UNUSED(running); }
+
 signals:
     void connected();
     void disconnected();
@@ -50,6 +54,7 @@ public:
     void refresh() override;
     void sendTelemetry(const QList<TelemetrySample> &samples) override;
     void sendFault(const FaultIntent &intent) override;
+    void setRunning(bool running) override;
 
     int queuedSamples() const { return pendingSamples_.size(); }
 
@@ -79,6 +84,7 @@ private:
     int reconnectAttempt_ = 0;
     int eventCount_ = 0;
     bool stopping_ = false;
+    bool running_ = false;
     QString pendingStatusRequestId_;
     QQueue<TelemetrySample> pendingSamples_;
 };
