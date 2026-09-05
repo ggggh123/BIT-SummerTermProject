@@ -19,6 +19,9 @@ public:
 private:
     QWidget *createDashboardPage();
     QWidget *createPileStatusPage();
+    QWidget *createChargerManagementPage();
+    QWidget *createStationManagementPage();
+    QWidget *createUserManagementPage();
     QWidget *createRequestLogPage();
     QWidget *createHealthPage();
     QWidget *createPlaceholderTablePage(const QStringList &headers, const QList<QStringList> &rows);

@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QTimer>
 #include <QVariant>
 #include <cmath>
 
@@ -177,9 +178,29 @@ Result AdminService::chargerRestart(const QJsonObject &payload, QJsonObject *res
     if (!database.commit()) {
         return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
     }
+    QTimer::singleShot(1500, [this, chargerId]() {
+        finishRestart(chargerId);
+    });
     if (responseData) {
         responseData->insert(QStringLiteral("charger"), chargerObject(chargerId));
     }
+    return Result::success();
+}
+
+Result AdminService::finishRestart(int chargerId) const
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("UPDATE chargers SET status='idle', updated_at=? WHERE id=? AND status='restarting'"));
+    query.addBindValue(nowIso());
+    query.addBindValue(chargerId);
+    if (!query.exec()) {
+        return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+    }
+    if (query.numRowsAffected() == 0) {
+        return Result::success();
+    }
+    bumpSnapshotVersion(m_database);
+    insertEvent(m_database, QStringLiteral("admin.charger_restart.done"), QStringLiteral("charger"), chargerId, QStringLiteral("charger idle"));
     return Result::success();
 }
 

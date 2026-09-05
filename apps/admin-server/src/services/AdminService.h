@@ -13,6 +13,7 @@ public:
 
     Result stationCreate(const QJsonObject &payload, QJsonObject *responseData) const;
     Result chargerRestart(const QJsonObject &payload, QJsonObject *responseData) const;
+    Result finishRestart(int chargerId) const;
     Result userList(const QJsonObject &payload, QJsonObject *responseData) const;
     Result userSetStatus(const QJsonObject &payload, QJsonObject *responseData) const;
 

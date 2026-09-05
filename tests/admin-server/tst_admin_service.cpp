@@ -105,6 +105,15 @@ private slots:
         QVERIFY(query.exec(QStringLiteral("SELECT COUNT(*) FROM events WHERE event_type='admin.charger_restart'")));
         QVERIFY(query.next());
         QCOMPARE(query.value(0).toInt(), 1);
+
+        QTest::qWait(1700);
+        QVERIFY(query.exec(QStringLiteral("SELECT status FROM chargers WHERE id=1")));
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toString(), QStringLiteral("idle"));
+
+        QVERIFY(query.exec(QStringLiteral("SELECT COUNT(*) FROM events WHERE event_type LIKE 'admin.charger_restart%'")));
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toInt(), 2);
     }
 
     void userListAndSetStatusFollowContract()

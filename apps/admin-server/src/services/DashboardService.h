@@ -11,9 +11,9 @@ public:
     explicit DashboardService(QSqlDatabase database);
 
     QJsonObject summary(int rangeDays = 7) const;
-    QList<QStringList> chargerRows() const;
+    QList<QStringList> chargerRows(int stationId = 0, const QString &status = QString()) const;
     QList<QStringList> stationRows() const;
-    QList<QStringList> userRows() const;
+    QList<QStringList> userRows(const QString &mobileLike = QString(), int limit = 20, int offset = 0) const;
 
 private:
     int countChargersByStatus(const QString &status) const;

@@ -46,15 +46,28 @@ QJsonObject DashboardService::summary(int rangeDays) const
     };
 }
 
-QList<QStringList> DashboardService::chargerRows() const
+QList<QStringList> DashboardService::chargerRows(int stationId, const QString &status) const
 {
     QList<QStringList> rows;
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral(
-        "SELECT c.code, s.name, c.type, c.power_kw, c.status "
+    QString sql = QStringLiteral(
+        "SELECT c.id, c.code, s.name, c.type, c.power_kw, c.status, c.charge_count, c.total_duration_sec "
         "FROM chargers c "
-        "JOIN stations s ON s.id = c.station_id "
-        "ORDER BY CAST(c.code AS INTEGER)"));
+        "JOIN stations s ON s.id = c.station_id WHERE 1=1 ");
+    if (stationId > 0) {
+        sql += QStringLiteral("AND c.station_id = ? ");
+    }
+    if (!status.trimmed().isEmpty()) {
+        sql += QStringLiteral("AND c.status = ? ");
+    }
+    sql += QStringLiteral("ORDER BY CAST(c.code AS INTEGER)");
+    query.prepare(sql);
+    if (stationId > 0) {
+        query.addBindValue(stationId);
+    }
+    if (!status.trimmed().isEmpty()) {
+        query.addBindValue(status.trimmed());
+    }
     if (!query.exec()) {
         return rows;
     }
@@ -64,8 +77,11 @@ QList<QStringList> DashboardService::chargerRows() const
             query.value(0).toString(),
             query.value(1).toString(),
             query.value(2).toString(),
-            QString::number(query.value(3).toDouble(), 'f', 0) + QStringLiteral("kW"),
-            query.value(4).toString()
+            query.value(3).toString(),
+            QString::number(query.value(4).toDouble(), 'f', 0),
+            query.value(5).toString(),
+            query.value(6).toString(),
+            query.value(7).toString()
         });
     }
     return rows;
@@ -76,7 +92,7 @@ QList<QStringList> DashboardService::stationRows() const
     QList<QStringList> rows;
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral(
-        "SELECT s.id, s.name, s.address, "
+        "SELECT s.id, s.name, s.address, s.latitude, s.longitude, s.forecast_enabled, "
         "COUNT(c.id) AS total_count, "
         "SUM(CASE WHEN c.status <> 'fault' THEN 1 ELSE 0 END) AS online_count "
         "FROM stations s "
@@ -88,27 +104,34 @@ QList<QStringList> DashboardService::stationRows() const
     }
 
     while (query.next()) {
-        const int total = query.value(3).toInt();
-        const int online = query.value(4).toInt();
+        const int total = query.value(6).toInt();
+        const int online = query.value(7).toInt();
         const int percent = total == 0 ? 0 : qRound((online * 100.0) / total);
         rows.append(QStringList{
             query.value(0).toString(),
             query.value(1).toString(),
             query.value(2).toString(),
+            QString::number(query.value(3).toDouble(), 'f', 6),
+            QString::number(query.value(4).toDouble(), 'f', 6),
+            query.value(6).toString(),
             QString::number(percent) + QStringLiteral("%")
+            , query.value(5).toInt() == 1 ? QStringLiteral("true") : QStringLiteral("false")
         });
     }
     return rows;
 }
 
-QList<QStringList> DashboardService::userRows() const
+QList<QStringList> DashboardService::userRows(const QString &mobileLike, int limit, int offset) const
 {
     QList<QStringList> rows;
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral(
-        "SELECT id, mobile, nickname, balance_fen, status "
-        "FROM users "
-        "ORDER BY id"));
+        "SELECT id, mobile, nickname, balance_fen, registered_at, status "
+        "FROM users WHERE mobile LIKE ? "
+        "ORDER BY id LIMIT ? OFFSET ?"));
+    query.addBindValue(QStringLiteral("%") + mobileLike + QStringLiteral("%"));
+    query.addBindValue(limit);
+    query.addBindValue(offset);
     if (!query.exec()) {
         return rows;
     }
@@ -119,7 +142,8 @@ QList<QStringList> DashboardService::userRows() const
             query.value(1).toString(),
             query.value(2).toString(),
             QString::number(query.value(3).toLongLong() / 100.0, 'f', 2),
-            query.value(4).toString()
+            query.value(4).toString(),
+            query.value(5).toString()
         });
     }
     return rows;
