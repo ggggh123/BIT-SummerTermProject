@@ -1,5 +1,7 @@
 # Foundation v1 冻结接口合同
 
+> **2026-09-04 运行 profile 说明：** 本合同的 v1 action、字段、状态、错误码和语义保持冻结，不因交付范围重置而删除、改名或缩窄。默认 **core profile** 只要求 Qt 用户端、Qt 管理/服务端、SQLite/设备模拟器形成闭环；它不要求在线 ML 生产者或 Web 消费者。`forecast.publish` 是显式启用的 optional producer extension；`forecast.latest`、`ForecastRun`/`ForecastRecord` 与第 8 节 dashboard snapshot contract 是必须保留的兼容能力。没有 active forecast 是合法 core 状态，`forecast.latest` 必须按既有合同返回 `forecastRun: null` 与 `records: []`；Web snapshot 不进入 core release gate。启用 Web 或 ML optional profile 时，本合同全文仍完整适用，不能以 optional 身份放宽任何既有合同规则。
+
 ## 1. 范围与规范词
 
 本文是 Foundation v1 的自包含线协议与业务接口合同。用户端、Qt 管理/服务端、设备模拟器、Web 大屏和 ML 发布端必须共同遵守本文；不得在子系统内维护第二套 action、status、permission 或字段语义。
