@@ -408,6 +408,7 @@ private slots:
     void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
     void navigationPageDestructionIgnoresPendingWebCallbacks();
     void mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess();
+    void sessionExpiryClearsNavigationCacheBeforeRelogin_data();
     void sessionExpiryClearsNavigationCacheBeforeRelogin();
     void resourceAndPageContractsRemainFixedAndDisplayPredictionStates();
     void nearbyChargerButtonsLocalizeEveryWireStatus();
@@ -1014,8 +1015,16 @@ void TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPrese
     QVERIFY(!webStatus.contains(pending.name));
 }
 
+void TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin_data()
+{
+    QTest::addColumn<bool>("expireFirst");
+    QTest::newRow("auth-required-then-relogin") << true;
+    QTest::newRow("relogin-without-auth-error") << false;
+}
+
 void TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin()
 {
+    QFETCH(bool, expireFirst);
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
     UserAppConfig config;
@@ -1084,14 +1093,18 @@ void TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin()
                 .toBool());
     QVERIFY(completed);
 
-    const auto expiryContext = api->loadOrderHistory(20, 0, 99, 101);
-    QVERIFY(!expiryContext.requestId.isEmpty());
-    const auto expiryRequest = takeRequest(peer.data());
-    QCOMPARE(expiryRequest.action, QStringLiteral("order.list"));
-    reply(peer.data(), expiryRequest.requestId, false, QStringLiteral("AUTH_REQUIRED"),
-          QStringLiteral("expired"), QJsonObject{});
-    QTRY_COMPARE_WITH_TIMEOUT(pages->currentWidget()->objectName(),
-                              QStringLiteral("loginPage"), 1'000);
+    if (expireFirst) {
+        const auto expiryContext = api->loadOrderHistory(20, 0, 99, 101);
+        QVERIFY(!expiryContext.requestId.isEmpty());
+        const auto expiryRequest = takeRequest(peer.data());
+        QCOMPARE(expiryRequest.action, QStringLiteral("order.list"));
+        reply(peer.data(), expiryRequest.requestId, false, QStringLiteral("AUTH_REQUIRED"),
+              QStringLiteral("expired"), QJsonObject{});
+        QTRY_COMPARE_WITH_TIMEOUT(pages->currentWidget()->objectName(),
+                                  QStringLiteral("loginPage"), 1'000);
+    } else {
+        completeMainLogin(window, peer.data(), 77);
+    }
     QTRY_COMPARE_WITH_TIMEOUT(
         runJavaScriptAndWait(
             view->page(), QStringLiteral("window.__hardeningRoute.resetCount"), &completed)
@@ -1107,7 +1120,9 @@ void TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin()
                  .toBool());
     QVERIFY(completed);
 
-    completeMainLogin(window, peer.data(), 77);
+    if (expireFirst) {
+        completeMainLogin(window, peer.data(), 77);
+    }
     QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
     QVERIFY(!navigation->lastSuccessfulRoute().has_value());
     QVERIFY(!navigation->routeTracker_.retryRoute().has_value());

@@ -67,3 +67,8 @@ add_executable(tst_user_recommendation tests/tst_recommendation.cpp resources/re
 target_link_libraries(tst_user_recommendation PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_recommendation COMMAND tst_user_recommendation)
 set_tests_properties(user_recommendation PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Explicit opt-in: real Tencent calls must never run in the default build/CTest gate.
+add_executable(user_map_online_smoke EXCLUDE_FROM_ALL
+    tests/tst_online_map_smoke.cpp resources/resources.qrc)
+target_link_libraries(user_map_online_smoke PRIVATE ev_user_client_core Qt6::Test)

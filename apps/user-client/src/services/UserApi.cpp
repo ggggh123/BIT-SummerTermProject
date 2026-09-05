@@ -656,33 +656,7 @@ QString UserApi::loadSystemHealth()
 
 void UserApi::loginByPhone(const QString &mobile)
 {
-    const auto oldRequestIds = pendingOperations_.keys();
-    for (const QString &requestId : oldRequestIds) {
-        const auto it = pendingOperations_.constFind(requestId);
-        if (it != pendingOperations_.cend()
-            && (it->operation == Operation::Health
-                || it->operation == Operation::ChargeCurrent
-                || it->operation == Operation::NearbyStations
-                || it->operation == Operation::StationDetail
-                || it->operation == Operation::ChargerList
-                || it->operation == Operation::LatestForecast
-                || it->operation == Operation::HistoryList)) {
-            client_->cancelRequest(requestId);
-            pendingOperations_.remove(requestId);
-        }
-    }
-    ++sessionGeneration_;
-    userRevision_ = 0;
-    ++chargeReadEpoch_;
-    user_.reset();
-    stationSnapshots_.clear();
-    token_.clear();
-    profileRequestId_.clear();
-    if (profileOutcomeUncertain_) {
-        profileOutcomeUncertain_ = false;
-    }
-    emit profileReadPendingChanged(false);
-    emit profileMutationPendingChanged(false);
+    resetSession();
     emit loginPendingChanged(true);
     if (!kMobilePattern.match(mobile).hasMatch()) {
         emit loginPendingChanged(false);
@@ -1105,13 +1079,11 @@ void UserApi::markProfileUncertain()
     emit profileReconciliationRequired();
 }
 
-void UserApi::expireAuthenticatedSession()
+void UserApi::resetSession()
 {
-    if (!user_.has_value() || token_.isEmpty()) {
-        return;
-    }
     const auto requestIds = pendingOperations_.keys();
     for (const QString &requestId : requestIds) {
+        // Cancels local delivery/replay only; never undoes a server-side mutation.
         client_->cancelRequest(requestId);
     }
     pendingOperations_.clear();
@@ -1123,9 +1095,18 @@ void UserApi::expireAuthenticatedSession()
     token_.clear();
     profileRequestId_.clear();
     profileOutcomeUncertain_ = false;
-    emit loginPendingChanged(false);
     emit profileReadPendingChanged(false);
     emit profileMutationPendingChanged(false);
+    emit sessionReset(sessionGeneration_);
+}
+
+void UserApi::expireAuthenticatedSession()
+{
+    if (!user_.has_value() || token_.isEmpty()) {
+        return;
+    }
+    resetSession();
+    emit loginPendingChanged(false);
     emit sessionExpired(sessionGeneration_);
 }
 
