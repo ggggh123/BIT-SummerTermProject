@@ -2,7 +2,7 @@
 
 充电桩管理与演示平台小学期项目。
 
-> **2026-09-06 本地诊断候选：** `integration/core-20260906` 按明确核心目录组合服务端、模拟器/黄金库与用户端 UI，用于复现问题和联调准备，不是已经合入 dev/main 的发布版本。构建/测试结果见[集成基线记录](docs/test/core-integration-baseline-2026-09-06.md)，队友修复入口见[核心缺陷交接单](docs/management/core-integration-handoff-2026-09-06.md)。已知业务 P0 仍开放。
+> **2026-09-06 本地集成候选：** `integration/core-20260906` 已补交并评审原始三个业务 P0，以及模拟器/数据工具和管理端运行修复；同版本全新构建、CTest 24/24 与真实 Qt UserApi 四组业务诊断通过。详见[修复后复验记录](docs/test/core-fixes-2026-09-06.md)；[修前诊断基线](docs/test/core-integration-baseline-2026-09-06.md)保留历史证据。专属 DB worker、在线 reset、实际三端/地图彩排等仍未全部关闭，不是项目 GO，也未合入 dev/main。
 
 ## 当前交付口径（2026-09-04 生效）
 
@@ -11,7 +11,7 @@
 ## 三条核心交付线
 
 1. **Qt 用户端（#3 PRL）**：11 位手机号登录/自动注册、查站查桩、腾讯地图 Web API 地址解析与 QWebEngineView 驾车/步行导航，以及预约到结算的用户流程。
-2. **Qt 管理/服务端（#2 TL）**：长度前缀 JSON/TCP、业务状态机、唯一运行时 SQLite 写入、管理统计、故障重启与用户管理；服务端 P0 是当前 NO-GO。
+2. **Qt 管理/服务端（#2 TL）**：长度前缀 JSON/TCP、业务状态机、唯一运行时 SQLite 写入、管理统计、故障重启与用户管理；原始 P0 已在本地候选修复，剩余合同和发布门槛见修复记录。
 3. **SQLite 与 Qt 模拟器（#4 SCML）**：版本化 Schema、受校验黄金库、模拟器状态/遥测/故障和数据一致性。
 
 ## Web 与 ML：保留的可选参考成果
@@ -23,6 +23,7 @@
 - [当前核心交付架构](docs/design/core-system-architecture.html)
 - [范围基线 v2](docs/management/scope-baseline.md) 与 [2026-09-04 范围变更记录](docs/management/scope-change-2026-09-04.md)
 - [仓库进展审计（2026-09-04）](docs/review/repository-progress-audit-2026-09-04.md)
+- [核心阻塞修复与同版本复验（2026-09-06）](docs/test/core-fixes-2026-09-06.md) 与 [团队交接状态](docs/management/core-integration-handoff-2026-09-06.md)
 - [接口合同](docs/design/interface-contract.md) 与 [当前实施计划索引](docs/superpowers/plans/README.md)
 - [核心验收清单](docs/release/core-acceptance-checklist.md)
 - [2026-09-01 历史五系统架构图](docs/design/five-system-architecture.html)（历史基线，不是当前唯一架构）
