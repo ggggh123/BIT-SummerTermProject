@@ -1,6 +1,7 @@
 #include "ui/MainWindow.h"
 
 #include <QHeaderView>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
 #include <QTabWidget>
@@ -32,9 +33,11 @@ MainWindow::MainWindow(AppContext *context, QWidget *parent)
                  QStringLiteral("用户管理"));
     tabs->addTab(createPlaceholderTablePage(
                      {QStringLiteral("项目"), QStringLiteral("值")},
-                     {{QStringLiteral("监听地址"), QStringLiteral("127.0.0.1:4545")},
+                     {{QStringLiteral("监听地址"), QStringLiteral("%1:%2").arg(m_context->host()).arg(m_context->port())},
                       {QStringLiteral("数据库"), m_context->databasePath()}}),
                  QStringLiteral("接口服务"));
+    tabs->addTab(createRequestLogPage(), QStringLiteral("请求日志"));
+    tabs->addTab(createHealthPage(), QStringLiteral("系统健康"));
 
     setCentralWidget(tabs);
 }
@@ -61,6 +64,47 @@ QWidget *MainWindow::createPileStatusPage()
          {QStringLiteral("在用"), QString::number(summary.value(QStringLiteral("pileUsing")).toInt())},
          {QStringLiteral("故障"), QString::number(summary.value(QStringLiteral("pileFault")).toInt())},
          {QStringLiteral("总数"), QString::number(summary.value(QStringLiteral("pileTotal")).toInt())}});
+}
+
+QWidget *MainWindow::createRequestLogPage()
+{
+    QJsonObject data;
+    const Result result = m_context->requestLogService()->list(QString(), 50, 0, &data);
+    QList<QStringList> rows;
+    if (result.ok) {
+        const QJsonArray items = data.value(QStringLiteral("items")).toArray();
+        for (const QJsonValue &itemValue : items) {
+            const QJsonObject item = itemValue.toObject();
+            rows.append({
+                item.value(QStringLiteral("requestId")).toString(),
+                item.value(QStringLiteral("action")).toString(),
+                item.value(QStringLiteral("code")).toString(),
+                item.value(QStringLiteral("createdAt")).toString()
+            });
+        }
+    } else {
+        rows.append({QStringLiteral("-"), QStringLiteral("-"), result.code, result.message});
+    }
+
+    return createPlaceholderTablePage(
+        {QStringLiteral("请求ID"), QStringLiteral("动作"), QStringLiteral("响应码"), QStringLiteral("时间")},
+        rows);
+}
+
+QWidget *MainWindow::createHealthPage()
+{
+    const QJsonObject health = m_context->forecastService()->healthState();
+    const QString forecastState = health.value(QStringLiteral("forecastRunId")).isNull()
+        ? QStringLiteral("无活动预测批次")
+        : QStringLiteral("活动批次：") + health.value(QStringLiteral("forecastRunId")).toString();
+
+    return createPlaceholderTablePage(
+        {QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")},
+        {{QStringLiteral("服务监听"), QStringLiteral("正常"), QStringLiteral("%1:%2").arg(m_context->host()).arg(m_context->port())},
+         {QStringLiteral("数据库 schema"), QStringLiteral("正常"), QString::number(health.value(QStringLiteral("schemaVersion")).toInt())},
+         {QStringLiteral("快照版本"), QStringLiteral("正常"), QString::number(health.value(QStringLiteral("snapshotVersion")).toInt())},
+         {QStringLiteral("预测批次"), health.value(QStringLiteral("status")).toString() == QStringLiteral("ready") ? QStringLiteral("正常") : QStringLiteral("降级"), forecastState},
+         {QStringLiteral("模拟器心跳"), QStringLiteral("未接入"), QStringLiteral("当前服务端尚无 simulator.status 持久化来源")}});
 }
 
 QWidget *MainWindow::createPlaceholderTablePage(const QStringList &headers, const QList<QStringList> &rows)

@@ -49,6 +49,7 @@ inline bool allows(QStringView actorType, QStringView action)
             || actionText == ev::actions::AdminChargerRestart
             || actionText == ev::actions::AdminUserList
             || actionText == ev::actions::AdminUserSetStatus
+            || actionText == ev::actions::AdminRequestLogList
             || actionText == ev::actions::StationList
             || actionText == ev::actions::StationDetail
             || actionText == ev::actions::ChargerList

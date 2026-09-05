@@ -14,16 +14,22 @@ bool requiresAdminToken(const QString &action)
         || action == ev::actions::AdminStationCreate
         || action == ev::actions::AdminChargerRestart
         || action == ev::actions::AdminUserList
-        || action == ev::actions::AdminUserSetStatus;
+        || action == ev::actions::AdminUserSetStatus
+        || action == ev::actions::AdminRequestLogList;
 }
 
 } // namespace
 
-ApiServer::ApiServer(AuthService *authService, DashboardService *dashboardService, ForecastService *forecastService, QObject *parent)
+ApiServer::ApiServer(AuthService *authService,
+                     DashboardService *dashboardService,
+                     ForecastService *forecastService,
+                     RequestLogService *requestLogService,
+                     QObject *parent)
     : QTcpServer(parent)
     , m_authService(authService)
     , m_dashboardService(dashboardService)
     , m_forecastService(forecastService)
+    , m_requestLogService(requestLogService)
 {
 }
 
@@ -68,7 +74,9 @@ void ApiServer::readSocket(QTcpSocket *socket)
     for (const QByteArray &frame : frames) {
         ev::protocol::ResponseEnvelope response;
         try {
-            response = handleRequest(ev::protocol::parseRequest(frame));
+            const ev::protocol::RequestEnvelope request = ev::protocol::parseRequest(frame);
+            response = handleRequest(request);
+            m_requestLogService->record(request.requestId, request.action, response);
         } catch (const ev::protocol::EnvelopeError &error) {
             response = fail(QString(), error.code(), error.message());
         }
@@ -102,6 +110,19 @@ ev::protocol::ResponseEnvelope ApiServer::handleRequest(const ev::protocol::Requ
 
     if (request.action == ev::actions::AdminDashboard) {
         return ok(request.requestId, QStringLiteral("success"), m_dashboardService->summary());
+    }
+
+    if (request.action == ev::actions::AdminRequestLogList) {
+        QJsonObject data;
+        const Result result = m_requestLogService->list(
+            request.payload.value(QStringLiteral("requestId")).toString(),
+            request.payload.value(QStringLiteral("limit")).toInt(20),
+            request.payload.value(QStringLiteral("offset")).toInt(0),
+            &data);
+        if (!result.ok) {
+            return fail(request.requestId, result.code, result.message);
+        }
+        return ok(request.requestId, QStringLiteral("success"), data);
     }
 
     if (request.action == ev::actions::ForecastPublish) {

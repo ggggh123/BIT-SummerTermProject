@@ -23,7 +23,16 @@ Result AppContext::initialize(const Options &options)
     m_authService = std::make_unique<AuthService>(m_databaseManager.database());
     m_dashboardService = std::make_unique<DashboardService>(m_databaseManager.database());
     m_forecastService = std::make_unique<ForecastService>(m_databaseManager.database(), snapshotPath);
-    m_apiServer = std::make_unique<ApiServer>(m_authService.get(), m_dashboardService.get(), m_forecastService.get());
+    m_requestLogService = std::make_unique<RequestLogService>(m_databaseManager.database());
+    result = m_requestLogService->ensureSchema();
+    if (!result.ok) {
+        return result;
+    }
+    m_apiServer = std::make_unique<ApiServer>(
+        m_authService.get(),
+        m_dashboardService.get(),
+        m_forecastService.get(),
+        m_requestLogService.get());
 
     const QString host = options.host.trimmed().isEmpty() ? QStringLiteral("127.0.0.1") : options.host.trimmed();
     const QHostAddress address(host);
@@ -48,6 +57,16 @@ AuthService *AppContext::authService() const
 DashboardService *AppContext::dashboardService() const
 {
     return m_dashboardService.get();
+}
+
+ForecastService *AppContext::forecastService() const
+{
+    return m_forecastService.get();
+}
+
+RequestLogService *AppContext::requestLogService() const
+{
+    return m_requestLogService.get();
 }
 
 ApiServer *AppContext::apiServer() const

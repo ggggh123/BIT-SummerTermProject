@@ -32,6 +32,7 @@ QStringList expectedActions()
         QStringLiteral("admin.charger_restart"),
         QStringLiteral("admin.user_list"),
         QStringLiteral("admin.user_set_status"),
+        QStringLiteral("admin.request_log_list"),
         QStringLiteral("telemetry.push"),
         QStringLiteral("simulator.fault_set"),
         QStringLiteral("simulator.status"),
@@ -62,7 +63,7 @@ void ContractsTest::actionsAreStable()
     const QStringList actual = ev::actions::all();
 
     QCOMPARE(actual, expected);
-    QCOMPARE(actual.size(), 27);
+    QCOMPARE(actual.size(), 28);
 
     QSet<QString> unique;
     for (const QString &action : actual) {
@@ -70,7 +71,7 @@ void ContractsTest::actionsAreStable()
         QVERIFY2(!unique.contains(action), qPrintable(QStringLiteral("duplicate action: %1").arg(action)));
         unique.insert(action);
     }
-    QCOMPARE(unique.size(), 27);
+    QCOMPARE(unique.size(), 28);
 }
 
 void ContractsTest::statusesValidate()
@@ -162,6 +163,7 @@ void ContractsTest::permissionsAreStable()
           QStringLiteral("admin.charger_restart"),
           QStringLiteral("admin.user_list"),
           QStringLiteral("admin.user_set_status"),
+          QStringLiteral("admin.request_log_list"),
           QStringLiteral("forecast.latest"),
           QStringLiteral("system.health"),
           QStringLiteral("demo.reset")}},

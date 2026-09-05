@@ -19,6 +19,8 @@ public:
 private:
     QWidget *createDashboardPage();
     QWidget *createPileStatusPage();
+    QWidget *createRequestLogPage();
+    QWidget *createHealthPage();
     QWidget *createPlaceholderTablePage(const QStringList &headers, const QList<QStringList> &rows);
     QLabel *metricLabel(const QString &title, const QString &value);
 

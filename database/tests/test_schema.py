@@ -23,6 +23,10 @@ def test_schema_has_required_tables_and_constraints(tmp_path):
     }
     assert scalar(db, "PRAGMA foreign_key_check") is None
     assert scalar(db, "SELECT version FROM schema_version") == 1
+    conn = connect(db)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(request_log)").fetchall()}
+    conn.close()
+    assert {"request_id", "action", "code", "response_json", "created_at"} <= columns
 
 
 def _seed_base(db):
