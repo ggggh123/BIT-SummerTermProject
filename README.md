@@ -2,7 +2,7 @@
 
 充电桩管理与演示平台小学期项目。
 
-> **2026-09-06 本地集成候选：** `integration/core-20260906` 已补交并评审原始三个业务 P0，以及模拟器/数据工具和管理端运行修复；加入实际 Qt 三端正常/故障测试后，清理重建、CTest **25/25**、数据库 15/15 与地图离线 15/15 通过。详见[修复后复验记录](docs/test/core-fixes-2026-09-06.md)；[修前诊断基线](docs/test/core-integration-baseline-2026-09-06.md)保留历史证据。专属 DB worker、在线 reset、人工三端/地图彩排等仍未全部关闭，不是项目 GO，也未合入 dev/main。
+> **2026-09-06 本地集成候选：** `integration/core-20260906` 已补交并评审原始三个业务 P0，以及模拟器/数据工具和管理端运行修复；加入实际 Qt 三端正常/故障测试后，清理重建、CTest **25/25**、数据库 15/15 与地图离线 15/15 通过。详见[修复后复验记录](docs/test/core-fixes-2026-09-06.md)及[最终综合审查归档](docs/review/core-fixes-review-2026-09-06.md)；[修前诊断基线](docs/test/core-integration-baseline-2026-09-06.md)保留历史证据。各域的局部审查/测试通过不等于最终综合审查放行；该审查已中断，不能称 review clean。专属 DB worker、在线 reset、人工三端/地图彩排等仍未全部关闭，不是项目 GO，也未合入 dev/main，不能把“下一步只差共享发布”视为事实。
 
 ## 当前交付口径（2026-09-04 生效）
 
@@ -23,7 +23,7 @@
 - [当前核心交付架构](docs/design/core-system-architecture.html)
 - [范围基线 v2](docs/management/scope-baseline.md) 与 [2026-09-04 范围变更记录](docs/management/scope-change-2026-09-04.md)
 - [仓库进展审计（2026-09-04）](docs/review/repository-progress-audit-2026-09-04.md)
-- [核心阻塞修复与同版本复验（2026-09-06）](docs/test/core-fixes-2026-09-06.md) 与 [团队交接状态](docs/management/core-integration-handoff-2026-09-06.md)
+- [核心阻塞修复与同版本复验（2026-09-06）](docs/test/core-fixes-2026-09-06.md)、[最终综合审查归档（2026-09-06）](docs/review/core-fixes-review-2026-09-06.md) 与 [团队交接状态](docs/management/core-integration-handoff-2026-09-06.md)
 - [接口合同](docs/design/interface-contract.md) 与 [当前实施计划索引](docs/superpowers/plans/README.md)
 - [核心验收清单](docs/release/core-acceptance-checklist.md)
 - [2026-09-01 历史五系统架构图](docs/design/five-system-architecture.html)（历史基线，不是当前唯一架构）

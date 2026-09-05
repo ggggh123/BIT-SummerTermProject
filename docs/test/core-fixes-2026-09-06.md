@@ -45,7 +45,9 @@
 
 源码工作区：`/mnt/hgfs/Desktop/SummerTermProject/worktrees/core-integration`。
 
-**最新组合复验：** 加入经审查的实际三端测试后，在代码/测试 HEAD **`9faad1feed137d0610e88c88d0de0d0d2dc09a9a`** 上再次 `cmake --build ... --clean-first -j4`，180/180 成功；全量 **CTest 25/25，39.04 秒**（2026-09-06 05:01 +08:00），地图离线 **15/15，237.44 ms**，数据库 **15/15，1.15 秒**。`core_workflow` 自身 4.04 秒，原始输出保存在 [`evidence/core-fixes-2026-09-06/ctest-with-core-workflow.log`](evidence/core-fixes-2026-09-06/ctest-with-core-workflow.log)。本段之后的文档提交不改变该已测生产/测试源码树。
+**最新组合复验：** 加入经审查的实际三端测试后，在代码/测试 HEAD **`9faad1feed137d0610e88c88d0de0d0d2dc09a9a`** 上再次 `cmake --build ... --clean-first -j4`，180/180 成功；全量 **CTest 25/25，39.04 秒**（2026-09-06 **04:58 +08:00**），地图离线 **15/15，237.44 ms**，数据库 **15/15，1.15 秒**。`core_workflow` 自身 4.04 秒，原始输出保存在 [`evidence/core-fixes-2026-09-06/ctest-with-core-workflow.log`](evidence/core-fixes-2026-09-06/ctest-with-core-workflow.log)。本段时间依据原始日志的 `Start testing`/`End testing` 记录；此前出现的 05:01 是模拟 `faultAt` 业务事件时间，不是测试执行时间。本段之后的文档提交不改变该已测生产/测试源码树。
+
+本轮最终综合审查在完成前中断，未形成全分支 review clean 或合并放行结论。未完成范围、未验证的活动 `SimulatorClient` 早退析构候选，以及“test stop guard 仅缓解测试退出、不是生产析构修复”的边界，见[最终综合审查归档](../review/core-fixes-review-2026-09-06.md)。模拟 `faultAt` 仍是业务事件，不改写原始日志或业务值。
 
 下表和第一份日志另保留生产组合 `2318d14` 的 24 项初次验证，不能把两轮计数相加当作 49 个独立测试。
 
