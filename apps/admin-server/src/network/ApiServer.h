@@ -6,6 +6,7 @@
 #include "services/DashboardService.h"
 #include "services/ForecastService.h"
 #include "services/RequestLogService.h"
+#include "services/UserService.h"
 
 #include <QHash>
 #include <QJsonValue>
@@ -22,6 +23,7 @@ public:
               DashboardService *dashboardService,
               ForecastService *forecastService,
               RequestLogService *requestLogService,
+              UserService *userService,
               QObject *parent = nullptr);
 
 protected:
@@ -37,5 +39,6 @@ private:
     DashboardService *m_dashboardService = nullptr;
     ForecastService *m_forecastService = nullptr;
     RequestLogService *m_requestLogService = nullptr;
+    UserService *m_userService = nullptr;
     QHash<QTcpSocket *, ev::protocol::FrameDecoder> m_decoders;
 };

@@ -6,6 +6,7 @@
 #include "services/DashboardService.h"
 #include "services/ForecastService.h"
 #include "services/RequestLogService.h"
+#include "services/UserService.h"
 
 #include <memory>
 
@@ -27,6 +28,7 @@ public:
     DashboardService *dashboardService() const;
     ForecastService *forecastService() const;
     RequestLogService *requestLogService() const;
+    UserService *userService() const;
     ApiServer *apiServer() const;
     QString databasePath() const;
     QString host() const;
@@ -38,6 +40,7 @@ private:
     std::unique_ptr<DashboardService> m_dashboardService;
     std::unique_ptr<ForecastService> m_forecastService;
     std::unique_ptr<RequestLogService> m_requestLogService;
+    std::unique_ptr<UserService> m_userService;
     std::unique_ptr<ApiServer> m_apiServer;
     QString m_host = QStringLiteral("127.0.0.1");
     quint16 m_port = 9100;

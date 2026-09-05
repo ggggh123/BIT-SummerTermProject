@@ -18,18 +18,42 @@ bool requiresAdminToken(const QString &action)
         || action == ev::actions::AdminRequestLogList;
 }
 
+bool allowsUserOrAdminToken(const QString &action)
+{
+    return action == ev::actions::StationList
+        || action == ev::actions::StationDetail
+        || action == ev::actions::ChargerList
+        || action == ev::actions::ForecastLatest;
+}
+
+bool requiresUserToken(const QString &action)
+{
+    return action == ev::actions::UserGet
+        || action == ev::actions::UserUpdate
+        || action == ev::actions::WalletRecharge
+        || action == ev::actions::ChargeReserve
+        || action == ev::actions::ChargeStart
+        || action == ev::actions::ChargeStop
+        || action == ev::actions::ChargeSettle
+        || action == ev::actions::OrderCurrent
+        || action == ev::actions::OrderList
+        || action == ev::actions::OrderCancel;
+}
+
 } // namespace
 
 ApiServer::ApiServer(AuthService *authService,
                      DashboardService *dashboardService,
                      ForecastService *forecastService,
                      RequestLogService *requestLogService,
+                     UserService *userService,
                      QObject *parent)
     : QTcpServer(parent)
     , m_authService(authService)
     , m_dashboardService(dashboardService)
     , m_forecastService(forecastService)
     , m_requestLogService(requestLogService)
+    , m_userService(userService)
 {
 }
 
@@ -91,6 +115,15 @@ ev::protocol::ResponseEnvelope ApiServer::handleRequest(const ev::protocol::Requ
         return ok(request.requestId, QStringLiteral("ready"), m_forecastService->healthState());
     }
 
+    if (request.action == ev::actions::AuthUserLogin) {
+        const LoginResult result = m_authService->loginUser(
+            request.payload.value(QStringLiteral("mobile")).toString());
+        if (!result.ok) {
+            return fail(request.requestId, result.code, result.message);
+        }
+        return ok(request.requestId, result.message, result.data);
+    }
+
     if (request.action == ev::actions::AdminLogin) {
         const LoginResult result = m_authService->login(
             request.payload.value(QStringLiteral("username")).toString(),
@@ -107,9 +140,60 @@ ev::protocol::ResponseEnvelope ApiServer::handleRequest(const ev::protocol::Requ
     if (requiresAdminToken(request.action) && !m_authService->isTokenValid(request.token)) {
         return fail(request.requestId, QStringLiteral("UNAUTHORIZED"), QStringLiteral("admin token is missing or invalid"));
     }
+    if (requiresUserToken(request.action) && !m_authService->isUserTokenValid(request.token)) {
+        return fail(request.requestId, QStringLiteral("AUTH_REQUIRED"), QStringLiteral("user token is missing or invalid"));
+    }
+    if (allowsUserOrAdminToken(request.action)
+        && !m_authService->isUserTokenValid(request.token)
+        && !m_authService->isTokenValid(request.token)) {
+        return fail(request.requestId, QStringLiteral("AUTH_REQUIRED"), QStringLiteral("token is missing or invalid"));
+    }
 
     if (request.action == ev::actions::AdminDashboard) {
         return ok(request.requestId, QStringLiteral("success"), m_dashboardService->summary());
+    }
+
+    const int userId = m_authService->userIdForToken(request.token);
+    QJsonObject userData;
+    Result userResult;
+    if (request.action == ev::actions::UserGet) {
+        userResult = m_userService->getUser(userId, &userData);
+    } else if (request.action == ev::actions::UserUpdate) {
+        userResult = m_userService->updateUser(userId, request.payload, &userData);
+    } else if (request.action == ev::actions::WalletRecharge) {
+        userResult = m_userService->recharge(userId, request.payload, &userData);
+    } else if (request.action == ev::actions::StationList) {
+        userResult = m_userService->stationList(request.payload, &userData);
+    } else if (request.action == ev::actions::StationDetail) {
+        userResult = m_userService->stationDetail(request.payload, &userData);
+    } else if (request.action == ev::actions::ChargerList) {
+        userResult = m_userService->chargerList(request.payload, &userData);
+    } else if (request.action == ev::actions::OrderCurrent) {
+        userResult = m_userService->currentOrder(userId, &userData);
+    } else if (request.action == ev::actions::OrderList) {
+        userResult = m_userService->orderList(userId, request.payload, &userData);
+    } else if (request.action == ev::actions::ChargeReserve) {
+        userResult = m_userService->reserve(userId, request.payload, &userData);
+    } else if (request.action == ev::actions::ChargeStart) {
+        userResult = m_userService->start(userId, request.payload, &userData);
+    } else if (request.action == ev::actions::ChargeStop) {
+        userResult = m_userService->stop(userId, request.payload, &userData);
+    } else if (request.action == ev::actions::ChargeSettle) {
+        userResult = m_userService->settle(userId, request.payload, &userData);
+    } else if (request.action == ev::actions::OrderCancel) {
+        userResult = m_userService->cancel(userId, request.payload, &userData);
+    }
+    if (request.action == ev::actions::UserGet || request.action == ev::actions::UserUpdate
+        || request.action == ev::actions::WalletRecharge || request.action == ev::actions::StationList
+        || request.action == ev::actions::StationDetail || request.action == ev::actions::ChargerList
+        || request.action == ev::actions::OrderCurrent || request.action == ev::actions::OrderList
+        || request.action == ev::actions::ChargeReserve || request.action == ev::actions::ChargeStart
+        || request.action == ev::actions::ChargeStop || request.action == ev::actions::ChargeSettle
+        || request.action == ev::actions::OrderCancel) {
+        if (!userResult.ok) {
+            return fail(request.requestId, userResult.code, userResult.message);
+        }
+        return ok(request.requestId, QStringLiteral("success"), userData);
     }
 
     if (request.action == ev::actions::AdminRequestLogList) {

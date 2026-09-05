@@ -20,6 +20,8 @@ add_executable(ev_admin_server
     src/services/ForecastService.h
     src/services/RequestLogService.cpp
     src/services/RequestLogService.h
+    src/services/UserService.cpp
+    src/services/UserService.h
     src/ui/LoginDialog.cpp
     src/ui/LoginDialog.h
     src/ui/MainWindow.cpp
