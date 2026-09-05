@@ -52,11 +52,13 @@ python3 database/create_runtime_copy.py \
   --output "$runtime_db"
 ```
 
-工具先校验 64 位小写 SHA-256、`PRAGMA integrity_check` 和外键，再用排他创建复制文件并
-复算副本哈希。目标文件或其 `-wal/-shm/-journal` 任一已存在时立即拒绝，不会覆盖可能仍在
-使用的数据库；坏哈希或复制失败不会留下部分目标。之后只把 `$runtime_db` 交给唯一服务端
-启动，模拟器仍不直接打开 SQLite。服务端启动迁移后运行副本允许变化，不再要求其哈希与
-封存黄金库相等。
+工具在读取 checksum、计算 hash 或打开 SQLite 之前，先确认源黄金库旁没有
+`-wal/-shm/-journal`；任一 sidecar 存在都表示输入尚未停稳/封存，立即拒绝。工具不会替源库
+checkpoint、删除 sidecar 或修改活连接数据，必须先由所有者停服并完成封存。随后才校验
+64 位小写 SHA-256、`PRAGMA integrity_check` 和外键，再用排他创建复制文件并复算副本哈希。
+目标文件或其 `-wal/-shm/-journal` 任一已存在时也立即拒绝，不会覆盖可能仍在使用的数据库；
+坏哈希或复制失败不会留下部分目标。之后只把 `$runtime_db` 交给唯一服务端启动，模拟器仍不
+直接打开 SQLite。服务端启动迁移后运行副本允许变化，不再要求其哈希与封存黄金库相等。
 
 冻结合同中的 `demo.reset` 已定义，但当前服务端尚未实现。本工具不会伪装成该在线 action，
 也不能在三端运行时替换数据库；后续若实现在线 reset，仍须遵守合同中的 DB worker、receipt

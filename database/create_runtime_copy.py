@@ -52,6 +52,15 @@ def create_runtime_copy(golden_db, checksum_file, output):
                                      for path in target_sidecars):
         raise FileExistsError("refusing to overwrite an existing or open runtime database")
 
+    source_sidecars = [Path(str(source) + suffix)
+                       for suffix in ("-wal", "-shm", "-journal")]
+    active_sidecars = [path for path in source_sidecars if os.path.lexists(path)]
+    if active_sidecars:
+        raise RuntimeError(
+            "source database has active SQLite sidecar(s); stop the service "
+            "and seal a checkpointed golden database first: "
+            + ", ".join(str(path) for path in active_sidecars))
+
     expected = _expected_hash(checksum_file)
     actual = _sha256(source)
     if actual != expected:

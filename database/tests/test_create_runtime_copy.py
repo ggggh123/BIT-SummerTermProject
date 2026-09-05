@@ -53,3 +53,43 @@ def test_create_runtime_copy_refuses_open_existing_database(tmp_path):
 
     assert conn.execute("SELECT value FROM marker").fetchone()[0] == "keep-me"
     conn.close()
+
+
+def test_create_runtime_copy_rejects_source_wal_without_touching_source(tmp_path):
+    source = tmp_path / "active-source.db"
+    conn = sqlite3.connect(str(source))
+    try:
+        assert conn.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal"
+        conn.execute("PRAGMA wal_autocheckpoint=0")
+        conn.execute("CREATE TABLE sample(value TEXT NOT NULL)")
+        conn.execute("INSERT INTO sample(value) VALUES ('sealed-row')")
+        conn.commit()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+        checksum = tmp_path / "source.db.sha256"
+        checksum.write_text(
+            hashlib.sha256(source.read_bytes()).hexdigest() + "\n",
+            encoding="utf-8")
+
+        conn.execute("INSERT INTO sample(value) VALUES ('committed-in-wal')")
+        conn.commit()
+        wal = tmp_path / "active-source.db-wal"
+        shm = tmp_path / "active-source.db-shm"
+        assert wal.is_file()
+        assert conn.execute("SELECT count(*) FROM sample").fetchone()[0] == 2
+        source_before = source.read_bytes()
+        wal_before = wal.read_bytes()
+        shm_before = shm.read_bytes() if shm.exists() else None
+        target = tmp_path / "runtime" / "round-001.db"
+
+        with pytest.raises(RuntimeError, match="source.*sidecar"):
+            create_runtime_copy(source, checksum, target)
+
+        assert not target.exists()
+        assert source.read_bytes() == source_before
+        assert wal.read_bytes() == wal_before
+        if shm_before is not None:
+            assert shm.read_bytes() == shm_before
+        assert conn.execute("SELECT count(*) FROM sample").fetchone()[0] == 2
+    finally:
+        conn.close()

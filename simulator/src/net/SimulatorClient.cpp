@@ -2,6 +2,7 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QUuid>
 
 #include "contracts/Actions.h"
 #include "protocol/JsonEnvelope.h"
@@ -21,7 +22,8 @@ SimulatorClient::SimulatorClient(const SimulatorConfig &config,
                                  TelemetryEngine *engine, QObject *parent)
     : ISimulatorClient(parent),
       config_(config),
-      engine_(engine)
+      engine_(engine),
+      instanceId_(QUuid::createUuid().toString(QUuid::WithoutBraces))
 {
     connect(&socket_, &QTcpSocket::connected, this, &SimulatorClient::onConnected);
     connect(&socket_, &QTcpSocket::readyRead, this, &SimulatorClient::onReadyRead);
@@ -99,7 +101,8 @@ void SimulatorClient::sendStatus()
     payload[QStringLiteral("simulatedAt")] = isoPlus08(engine_->currentTime());
     payload[QStringLiteral("eventCount")] = eventCount_;
 
-    pendingStatusRequestId_ = QStringLiteral("sim-status-%1-%2")
+    pendingStatusRequestId_ = QStringLiteral("sim-status-%1-%2-%3")
+                                  .arg(instanceId_)
                                   .arg(engine_->currentTime().toMSecsSinceEpoch())
                                   .arg(++statusRequestSequence_);
     sendRequest(ev::actions::SimulatorStatus, payload, pendingStatusRequestId_);
@@ -252,10 +255,13 @@ void SimulatorClient::handleResponse(const QByteArray &json)
                 }
                 engine_->replaceChargers(chargers);
                 emit chargersReceived(chargers);
+                sessionReady_ = true;
+                emit sessionReady();
+                flushPending();
+            } else {
+                emit logMessage(QStringLiteral(
+                    "invalid simulator.status response: chargers snapshot missing"));
             }
-            sessionReady_ = true;
-            emit sessionReady();
-            flushPending();
         }
         if (statusRefreshQueued_ && !authenticationRejected) {
             statusRefreshQueued_ = false;

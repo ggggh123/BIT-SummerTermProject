@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "app/SimulatorConfig.h"
 #include "core/TelemetryEngine.h"
 
 using namespace ev::simulator;
@@ -14,6 +15,9 @@ private slots:
     void zeroEnergyForNonCharging();
     void faultAndRecoveryIntents();
     void intentTimestampsStrictlyIncreasing();
+    void defaultStartTimeAnchorsToCurrentPlus08();
+    void explicitStartTimeRemainsDeterministic();
+    void realtimeClockPreventsFaultBeforeLaterOrder();
 };
 
 static QDateTime t0()
@@ -127,6 +131,53 @@ void TelemetryEngineTest::intentTimestampsStrictlyIncreasing()
     QList<FaultIntent> third = e.takePendingIntents();
     QCOMPARE(third.size(), 1);
     QVERIFY(third[0].recordedAt > samples.first().recordedAt);
+}
+
+void TelemetryEngineTest::defaultStartTimeAnchorsToCurrentPlus08()
+{
+    SimulatorConfig config;
+    const QDateTime nowUtc = QDateTime::fromString(
+        QStringLiteral("2026-09-06T01:00:00.123Z"), Qt::ISODateWithMs);
+
+    const QDateTime resolved = resolvedStartTime(config, nowUtc);
+
+    QCOMPARE(resolved.toString(Qt::ISODateWithMs),
+             QStringLiteral("2026-09-06T09:00:00.123+08:00"));
+}
+
+void TelemetryEngineTest::explicitStartTimeRemainsDeterministic()
+{
+    SimulatorConfig config;
+    config.startTime = QStringLiteral("2026-09-01T09:00:00.000+08:00");
+    const QDateTime later = QDateTime::fromString(
+        QStringLiteral("2026-09-06T09:00:00.000+08:00"), Qt::ISODateWithMs);
+
+    QCOMPARE(resolvedStartTime(config, later).toString(Qt::ISODateWithMs),
+             config.startTime);
+}
+
+void TelemetryEngineTest::realtimeClockPreventsFaultBeforeLaterOrder()
+{
+    QDateTime wallClock = QDateTime::fromString(
+        QStringLiteral("2026-09-06T09:00:00.000+08:00"), Qt::ISODateWithMs);
+    TelemetryEngine engine(20260901, wallClock, 3000,
+                           [&wallClock]() { return wallClock; });
+    ChargerSnapshot charger;
+    charger.chargerId = 1001;
+    charger.status = QStringLiteral("charging");
+    charger.powerKw = 60.0;
+    engine.replaceChargers({charger});
+
+    const QDateTime orderStartedAt = QDateTime::fromString(
+        QStringLiteral("2026-09-06T09:04:59.900+08:00"), Qt::ISODateWithMs);
+    wallClock = QDateTime::fromString(
+        QStringLiteral("2026-09-06T09:05:00.000+08:00"), Qt::ISODateWithMs);
+    QVERIFY(engine.requestFault(1001));
+    const QList<FaultIntent> intents = engine.takePendingIntents();
+
+    QCOMPARE(intents.size(), 1);
+    QVERIFY(intents.first().recordedAt >= wallClock);
+    QVERIFY(intents.first().recordedAt > orderStartedAt);
 }
 
 QTEST_APPLESS_MAIN(TelemetryEngineTest)

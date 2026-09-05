@@ -30,6 +30,7 @@ public:
     void setAutoReplyStatus(bool enabled) { autoReplyStatus_ = enabled; }
     void setChargerStatus(const QString &status) { chargerStatus_ = status; }
     void setStatusCode(const QString &code) { statusCode_ = code; }
+    void setIncludeChargers(bool enabled) { includeChargers_ = enabled; }
     void setNextEventCode(const QString &code) { nextEventCode_ = code; }
     int statusRequestCount() const
     {
@@ -104,7 +105,8 @@ private:
 
         QJsonObject data;
         data[QStringLiteral("acceptedAt")] = QStringLiteral("2026-09-01T09:00:00+08:00");
-        data[QStringLiteral("chargers")] = chargers;
+        if (includeChargers_)
+            data[QStringLiteral("chargers")] = chargers;
         resp.data = data;
 
         conn_->write(encodeFrame(toJson(resp)));
@@ -131,6 +133,7 @@ private:
     QString chargerStatus_ = QStringLiteral("idle");
     QString statusCode_ = QStringLiteral("OK");
     QString nextEventCode_ = QStringLiteral("OK");
+    bool includeChargers_ = true;
 };
 
 class SimulatorClientTest : public QObject
@@ -150,6 +153,8 @@ private slots:
     void conflictTriggersImmediateAuthoritativeRefresh();
     void emptyTokenReportsAuthenticationFailureWithoutReadySession();
     void doesNotFlushEventsBeforeAuthenticatedSnapshot();
+    void statusRequestIdsDifferAcrossClientInstances();
+    void malformedStatusSnapshotDoesNotReadyOrFlushEvents();
 };
 
 void SimulatorClientTest::reconnectDelaySequence()
@@ -578,6 +583,77 @@ void SimulatorClientTest::doesNotFlushEventsBeforeAuthenticatedSnapshot()
     server.replyPendingStatus();
     QTRY_COMPARE_WITH_TIMEOUT(server.requests().size(), 2, 1000);
     QCOMPARE(server.requests().last().action, QStringLiteral("telemetry.push"));
+
+    client.stop();
+}
+
+void SimulatorClientTest::statusRequestIdsDifferAcrossClientInstances()
+{
+    FakeServer firstServer;
+    FakeServer secondServer;
+    QVERIFY(firstServer.listen());
+    QVERIFY(secondServer.listen());
+
+    const QDateTime initialTime = QDateTime::fromString(
+        QStringLiteral("2026-09-01T09:00:00+08:00"), Qt::ISODate);
+    TelemetryEngine firstEngine(20260901, initialTime, 3000);
+    TelemetryEngine secondEngine(20260901, initialTime, 3000);
+    SimulatorConfig firstConfig;
+    firstConfig.host = QStringLiteral("127.0.0.1");
+    firstConfig.port = firstServer.port();
+    firstConfig.token = QStringLiteral("sim-token");
+    SimulatorConfig secondConfig = firstConfig;
+    secondConfig.port = secondServer.port();
+
+    SimulatorClient firstClient(firstConfig, &firstEngine);
+    SimulatorClient secondClient(secondConfig, &secondEngine);
+    firstClient.start();
+    secondClient.start();
+    QTRY_COMPARE_WITH_TIMEOUT(firstServer.statusRequestCount(), 1, 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(secondServer.statusRequestCount(), 1, 3000);
+
+    const QString firstId = firstServer.requests().first().requestId;
+    const QString secondId = secondServer.requests().first().requestId;
+    QVERIFY2(firstId != secondId,
+             qPrintable(QStringLiteral("duplicate status requestId: %1").arg(firstId)));
+
+    firstClient.stop();
+    secondClient.stop();
+}
+
+void SimulatorClientTest::malformedStatusSnapshotDoesNotReadyOrFlushEvents()
+{
+    FakeServer server;
+    server.setAutoReplyStatus(false);
+    server.setIncludeChargers(false);
+    QVERIFY(server.listen());
+
+    TelemetryEngine engine(20260901,
+        QDateTime::fromString(QStringLiteral("2026-09-01T09:00:00+08:00"), Qt::ISODate),
+        10000);
+    SimulatorConfig config;
+    config.host = QStringLiteral("127.0.0.1");
+    config.port = server.port();
+    config.token = QStringLiteral("sim-token");
+    config.intervalMs = 10000;
+
+    SimulatorClient client(config, &engine);
+    QSignalSpy readySpy(&client, &SimulatorClient::sessionReady);
+    client.start();
+    QTRY_COMPARE_WITH_TIMEOUT(server.statusRequestCount(), 1, 3000);
+
+    TelemetrySample telemetry;
+    telemetry.chargerId = 1001;
+    telemetry.recordedAt = QDateTime::fromString(
+        QStringLiteral("2026-09-01T09:00:00.001+08:00"), Qt::ISODateWithMs);
+    telemetry.status = QStringLiteral("idle");
+    client.sendTelemetry({telemetry});
+
+    server.replyPendingStatus();
+    QTest::qWait(200);
+    QCOMPARE(readySpy.count(), 0);
+    QCOMPARE(server.requests().size(), 1);
+    QCOMPARE(client.queuedSamples(), 1);
 
     client.stop();
 }

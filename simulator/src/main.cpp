@@ -13,11 +13,18 @@ int main(int argc, char *argv[])
 
     const ev::simulator::SimulatorConfig config =
         ev::simulator::configFromCommandLine(app);
+    const bool useRealtimeClock = config.startTime.trimmed().isEmpty();
+    const QDateTime initialTime = ev::simulator::resolvedStartTime(
+        config, QDateTime::currentDateTimeUtc());
+    ev::simulator::TelemetryEngine::Clock wallClock;
+    if (useRealtimeClock) {
+        wallClock = []() {
+            return QDateTime::currentDateTimeUtc().toOffsetFromUtc(8 * 3600);
+        };
+    }
 
     auto *engine = new ev::simulator::TelemetryEngine(
-        config.seed,
-        QDateTime::fromString(config.startTime, Qt::ISODate),
-        config.intervalMs);
+        config.seed, initialTime, config.intervalMs, wallClock);
 
     auto *client = new ev::simulator::SimulatorClient(config, engine);
     auto *window = new ev::simulator::SimulatorWindow(client, engine);

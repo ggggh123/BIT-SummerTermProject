@@ -93,6 +93,7 @@ private:
 
     SimulatorConfig config_;
     TelemetryEngine *engine_;
+    QString instanceId_;
     QTcpSocket socket_;
     QTimer reconnectTimer_;
     QTimer statusRefreshTimer_;
