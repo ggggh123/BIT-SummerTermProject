@@ -1,0 +1,13 @@
+********* Start testing of OnlineMapSmoke *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : OnlineMapSmoke::initTestCase()
+QINFO  : OnlineMapSmoke::productionWindowOnlineNavigation() 真实腾讯地址解析坐标： 39.9581 116.313
+QINFO  : OnlineMapSmoke::productionWindowOnlineNavigation() 真实腾讯驾车路线成功
+QINFO  : OnlineMapSmoke::productionWindowOnlineNavigation() 真实腾讯步行路线成功
+QCRITICAL: OnlineMapSmoke::productionWindowOnlineNavigation() js: 获取结果失败：网络请求失败。
+QINFO  : OnlineMapSmoke::productionWindowOnlineNavigation() 网络层阻断验证：失败提示、重试按钮和上次成功步行路线均保留
+QINFO  : OnlineMapSmoke::productionWindowOnlineNavigation() 解除阻断后真实驾车重试成功；业务链路仅为测试响应，不代表真实后端联调
+PASS   : OnlineMapSmoke::productionWindowOnlineNavigation()
+PASS   : OnlineMapSmoke::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 11091ms
+********* Finished testing of OnlineMapSmoke *********

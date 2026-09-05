@@ -98,7 +98,7 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
             loginPage_->setError(error.message);
         }
     });
-    connect(userApi_, &UserApi::sessionExpired, this, [this](quint64 sessionGeneration) {
+    connect(userApi_, &UserApi::sessionReset, this, [this](quint64 sessionGeneration) {
         guardContext_.reset();
         reconnectCurrentContext_.reset();
         reconnectCurrentOwnerOrderId_ = 0;
@@ -122,6 +122,9 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         pages_->setEnabled(true);
         showPage(loginPage_, NavigationTransition::SessionReset);
         loginPage_->setPending(false);
+        loginPage_->setError({});
+    });
+    connect(userApi_, &UserApi::sessionExpired, this, [this](quint64) {
         loginPage_->setError(QStringLiteral("登录已失效，请重新登录"));
     });
     connect(userApi_, &UserApi::loginSucceeded, this, [this](const ev::user::User &) {

@@ -266,6 +266,20 @@
         nextRouteLayer.setMap(map);
         nextEndpointMarkers.setMap(map);
         if (!attemptIsActive(operationId)) throw supersededRoute();
+        // Fit the whole route, not just its endpoints; leave room for the status panel.
+        let south = Math.min(cleanRequest.from.lat, cleanRequest.to.lat);
+        let north = Math.max(cleanRequest.from.lat, cleanRequest.to.lat);
+        let west = Math.min(cleanRequest.from.lng, cleanRequest.to.lng);
+        let east = Math.max(cleanRequest.from.lng, cleanRequest.to.lng);
+        for (const point of route.polyline) {
+          south = Math.min(south, point.lat);
+          north = Math.max(north, point.lat);
+          west = Math.min(west, point.lng);
+          east = Math.max(east, point.lng);
+        }
+        map.fitBounds(new window.TMap.LatLngBounds(
+          new window.TMap.LatLng(south, west), new window.TMap.LatLng(north, east),
+        ), { padding: { top: 48, bottom: 100, left: 48, right: 48 }, maxZoom: 17, ease: { duration: 0 } });
         const previousBundle = currentRouteBundle;
         currentRouteBundle = { route: nextRouteLayer, markers: nextEndpointMarkers };
         if (previousBundle) {

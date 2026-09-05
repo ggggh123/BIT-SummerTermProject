@@ -75,7 +75,7 @@ function deferred() {
 function fakeTMap({ routeResult } = {}) {
   const calls = {
     maps: [], driving: [], walking: [], searches: [], polylineStyles: [], polylines: [],
-    markerStyles: [], markers: [], detachedLayers: [], attachedLayers: [],
+    markerStyles: [], markers: [], detachedLayers: [], attachedLayers: [], fittedBounds: [],
   };
   let nextRouteResult = routeResult ?? { result: { routes: [{ polyline: [{ lat: 39.9, lng: 116.4 }, { lat: 39.91, lng: 116.41 }] }] } };
   const queuedRouteResults = [];
@@ -88,6 +88,10 @@ function fakeTMap({ routeResult } = {}) {
   }
   class Map {
     constructor(container, options) { calls.maps.push({ container, options }); }
+    fitBounds(bounds, options) { calls.fittedBounds.push({ bounds, options }); }
+  }
+  class LatLngBounds {
+    constructor(southwest, northeast) { this.southwest = southwest; this.northeast = northeast; }
   }
   class Driving {
     constructor(options) { calls.driving.push(options); }
@@ -127,7 +131,7 @@ function fakeTMap({ routeResult } = {}) {
     }
   }
   return {
-    api: { LatLng, Map, PolylineStyle, MultiPolyline, MarkerStyle, MultiMarker, service: { Driving, Walking } },
+    api: { LatLng, LatLngBounds, Map, PolylineStyle, MultiPolyline, MarkerStyle, MultiMarker, service: { Driving, Walking } },
     calls,
     setRouteResult(value) { nextRouteResult = value; },
     queueRouteResult(value) { queuedRouteResults.push(value); },
@@ -296,6 +300,26 @@ test('route runtime keeps the key secret while constructing Tencent driving and 
   assert.ok(fake.calls.detachedLayers.some(({ kind, layer, map }) => kind === 'marker' && layer === fake.calls.markers[0] && map === null));
   const exposed = `${JSON.stringify(page.context.lastRouteStatus)} ${page.elements['route-status'].textContent} ${page.elements['route-empty'].textContent} ${page.logs.join(' ')}`;
   assert.doesNotMatch(exposed, new RegExp(runtimeKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('successful route fits every route point and endpoints without reframing on failure', async () => {
+  const page = loadPage();
+  const fake = await configureWithFakeMap(page);
+  fake.setRouteResult({ result: { routes: [{ polyline: [
+    { lat: 39.95, lng: 116.30 }, { lat: 40.02, lng: 116.28 }, { lat: 39.96, lng: 116.33 },
+  ] }] } });
+  const request = {
+    from: { lat: 39.94, lng: 116.31 }, to: { lat: 39.97, lng: 116.34 },
+    mode: 'walking', stationName: '完整路线',
+  };
+  await page.context.renderRoute(request, 'fit-route');
+  assert.equal(fake.calls.fittedBounds.length, 1);
+  const { bounds } = fake.calls.fittedBounds[0];
+  assert.deepEqual({ ...bounds.southwest }, { lat: 39.94, lng: 116.28 });
+  assert.deepEqual({ ...bounds.northeast }, { lat: 40.02, lng: 116.34 });
+  fake.setRouteResult({ result: { routes: [] } });
+  await assert.rejects(page.context.renderRoute(request, 'failed-route'), /路线规划失败/);
+  assert.equal(fake.calls.fittedBounds.length, 1, 'failed request must retain the previous camera');
 });
 
 test('newer route attempt owns overlays status and cache when deferred completions invert', async () => {
