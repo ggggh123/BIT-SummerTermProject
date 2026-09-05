@@ -1,5 +1,9 @@
 find_package(Qt6 6.2 REQUIRED COMPONENTS Core Widgets Network Sql)
 
+if(NOT DEFINED EV_PROJECT_SOURCE_DIR)
+    set(EV_PROJECT_SOURCE_DIR "${CMAKE_SOURCE_DIR}")
+endif()
+
 add_executable(ev_admin_server
     src/main.cpp
     src/app/AppContext.cpp
@@ -12,6 +16,8 @@ add_executable(ev_admin_server
     src/db/DatabaseManager.h
     src/network/ApiServer.cpp
     src/network/ApiServer.h
+    src/services/AdminService.cpp
+    src/services/AdminService.h
     src/services/AuthService.cpp
     src/services/AuthService.h
     src/services/DashboardService.cpp
@@ -20,6 +26,8 @@ add_executable(ev_admin_server
     src/services/ForecastService.h
     src/services/RequestLogService.cpp
     src/services/RequestLogService.h
+    src/services/TelemetryService.cpp
+    src/services/TelemetryService.h
     src/services/UserService.cpp
     src/services/UserService.h
     src/ui/LoginDialog.cpp
@@ -29,7 +37,7 @@ add_executable(ev_admin_server
 )
 
 target_include_directories(ev_admin_server PRIVATE src)
-target_compile_definitions(ev_admin_server PRIVATE EV_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(ev_admin_server PRIVATE EV_PROJECT_SOURCE_DIR="${EV_PROJECT_SOURCE_DIR}")
 target_link_libraries(ev_admin_server PRIVATE
     Qt6::Core
     Qt6::Widgets

@@ -43,7 +43,8 @@ LoginResult AuthService::login(const QString &username, const QString &password)
 
     const QString token = issueToken(username.trimmed());
     m_adminTokens.insert(token);
-    return {true, QStringLiteral("OK"), QStringLiteral("login success"), token};
+    return {true, QStringLiteral("OK"), QStringLiteral("login success"), token,
+            QJsonObject{{QStringLiteral("token"), token}, {QStringLiteral("admin"), adminObject(username.trimmed())}}};
 }
 
 LoginResult AuthService::loginUser(const QString &mobile) const
@@ -92,6 +93,22 @@ bool AuthService::isUserTokenValid(const QString &token) const
     return !token.trimmed().isEmpty() && m_userTokens.contains(token.trimmed());
 }
 
+bool AuthService::isSimulatorTokenValid(const QString &token) const
+{
+    const QString normalized = token.trimmed();
+    return normalized == QStringLiteral("sim-token")
+        || normalized == QStringLiteral("simulator-token")
+        || normalized == QStringLiteral("demo-simulator-token");
+}
+
+bool AuthService::isMlTokenValid(const QString &token) const
+{
+    const QString normalized = token.trimmed();
+    return normalized == QStringLiteral("ml-token")
+        || normalized == QStringLiteral("forecast-token")
+        || normalized == QStringLiteral("demo-ml-token");
+}
+
 int AuthService::userIdForToken(const QString &token) const
 {
     return m_userTokens.value(token.trimmed(), 0);
@@ -105,6 +122,21 @@ QString AuthService::issueToken(const QString &username) const
              QUuid::createUuid().toString(QUuid::WithoutBraces));
     return QString::fromLatin1(
         QCryptographicHash::hash(raw.toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+
+QJsonObject AuthService::adminObject(const QString &username) const
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("SELECT id, username, created_at FROM admins WHERE username = ?"));
+    query.addBindValue(username);
+    if (!query.exec() || !query.next()) {
+        return {};
+    }
+    return {
+        {QStringLiteral("adminId"), query.value(0).toInt()},
+        {QStringLiteral("username"), query.value(1).toString()},
+        {QStringLiteral("createdAt"), query.value(2).toString()}
+    };
 }
 
 QJsonObject AuthService::userObject(int userId) const

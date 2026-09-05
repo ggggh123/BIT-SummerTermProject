@@ -2,10 +2,12 @@
 
 #include "db/DatabaseManager.h"
 #include "network/ApiServer.h"
+#include "services/AdminService.h"
 #include "services/AuthService.h"
 #include "services/DashboardService.h"
 #include "services/ForecastService.h"
 #include "services/RequestLogService.h"
+#include "services/TelemetryService.h"
 #include "services/UserService.h"
 
 #include <memory>
@@ -25,9 +27,11 @@ public:
     Result initialize(const Options &options);
 
     AuthService *authService() const;
+    AdminService *adminService() const;
     DashboardService *dashboardService() const;
     ForecastService *forecastService() const;
     RequestLogService *requestLogService() const;
+    TelemetryService *telemetryService() const;
     UserService *userService() const;
     ApiServer *apiServer() const;
     QString databasePath() const;
@@ -37,9 +41,11 @@ public:
 private:
     DatabaseManager m_databaseManager;
     std::unique_ptr<AuthService> m_authService;
+    std::unique_ptr<AdminService> m_adminService;
     std::unique_ptr<DashboardService> m_dashboardService;
     std::unique_ptr<ForecastService> m_forecastService;
     std::unique_ptr<RequestLogService> m_requestLogService;
+    std::unique_ptr<TelemetryService> m_telemetryService;
     std::unique_ptr<UserService> m_userService;
     std::unique_ptr<ApiServer> m_apiServer;
     QString m_host = QStringLiteral("127.0.0.1");

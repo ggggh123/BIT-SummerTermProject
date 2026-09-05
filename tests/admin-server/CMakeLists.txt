@@ -34,3 +34,35 @@ add_executable(tst_user_flow
 target_include_directories(tst_user_flow PRIVATE ../../apps/admin-server/src)
 target_link_libraries(tst_user_flow PRIVATE Qt6::Test Qt6::Sql)
 add_test(NAME user_flow COMMAND tst_user_flow)
+
+add_executable(tst_admin_service
+    tst_admin_service.cpp
+    ../../apps/admin-server/src/services/AdminService.cpp
+    ../../apps/admin-server/src/services/AdminService.h
+    ../../apps/admin-server/src/core/Result.h
+)
+
+target_include_directories(tst_admin_service PRIVATE ../../apps/admin-server/src)
+target_link_libraries(tst_admin_service PRIVATE Qt6::Test Qt6::Sql)
+add_test(NAME admin_service COMMAND tst_admin_service)
+
+add_executable(tst_dashboard_service
+    tst_dashboard_service.cpp
+    ../../apps/admin-server/src/services/DashboardService.cpp
+    ../../apps/admin-server/src/services/DashboardService.h
+)
+
+target_include_directories(tst_dashboard_service PRIVATE ../../apps/admin-server/src)
+target_link_libraries(tst_dashboard_service PRIVATE Qt6::Test Qt6::Sql)
+add_test(NAME dashboard_service COMMAND tst_dashboard_service)
+
+add_executable(tst_telemetry_service
+    tst_telemetry_service.cpp
+    ../../apps/admin-server/src/services/TelemetryService.cpp
+    ../../apps/admin-server/src/services/TelemetryService.h
+    ../../apps/admin-server/src/core/Result.h
+)
+
+target_include_directories(tst_telemetry_service PRIVATE ../../apps/admin-server/src)
+target_link_libraries(tst_telemetry_service PRIVATE Qt6::Test Qt6::Sql)
+add_test(NAME telemetry_service COMMAND tst_telemetry_service)

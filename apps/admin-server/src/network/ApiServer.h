@@ -2,10 +2,12 @@
 
 #include "protocol/Envelope.h"
 #include "protocol/FrameCodec.h"
+#include "services/AdminService.h"
 #include "services/AuthService.h"
 #include "services/DashboardService.h"
 #include "services/ForecastService.h"
 #include "services/RequestLogService.h"
+#include "services/TelemetryService.h"
 #include "services/UserService.h"
 
 #include <QHash>
@@ -20,9 +22,11 @@ class ApiServer : public QTcpServer
 
 public:
     ApiServer(AuthService *authService,
+              AdminService *adminService,
               DashboardService *dashboardService,
               ForecastService *forecastService,
               RequestLogService *requestLogService,
+              TelemetryService *telemetryService,
               UserService *userService,
               QObject *parent = nullptr);
 
@@ -36,9 +40,11 @@ private:
     ev::protocol::ResponseEnvelope fail(const QString &requestId, const QString &code, const QString &message) const;
 
     AuthService *m_authService = nullptr;
+    AdminService *m_adminService = nullptr;
     DashboardService *m_dashboardService = nullptr;
     ForecastService *m_forecastService = nullptr;
     RequestLogService *m_requestLogService = nullptr;
+    TelemetryService *m_telemetryService = nullptr;
     UserService *m_userService = nullptr;
     QHash<QTcpSocket *, ev::protocol::FrameDecoder> m_decoders;
 };

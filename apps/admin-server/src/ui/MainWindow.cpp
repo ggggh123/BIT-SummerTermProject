@@ -45,12 +45,13 @@ MainWindow::MainWindow(AppContext *context, QWidget *parent)
 QWidget *MainWindow::createDashboardPage()
 {
     const QJsonObject summary = m_context->dashboardService()->summary();
+    const QJsonObject revenue = summary.value(QStringLiteral("revenue")).toObject();
     auto *page = new QWidget;
     auto *layout = new QVBoxLayout(page);
 
-    layout->addWidget(metricLabel(QStringLiteral("今日营收"), QString::number(summary.value(QStringLiteral("todayRevenue")).toDouble(), 'f', 2)));
-    layout->addWidget(metricLabel(QStringLiteral("本月营收"), QString::number(summary.value(QStringLiteral("monthRevenue")).toDouble(), 'f', 2)));
-    layout->addWidget(metricLabel(QStringLiteral("总营收"), QString::number(summary.value(QStringLiteral("totalRevenue")).toDouble(), 'f', 2)));
+    layout->addWidget(metricLabel(QStringLiteral("今日营收"), QString::number(revenue.value(QStringLiteral("todayRevenueFen")).toDouble() / 100.0, 'f', 2)));
+    layout->addWidget(metricLabel(QStringLiteral("本月营收"), QString::number(revenue.value(QStringLiteral("monthRevenueFen")).toDouble() / 100.0, 'f', 2)));
+    layout->addWidget(metricLabel(QStringLiteral("总营收"), QString::number(revenue.value(QStringLiteral("totalRevenueFen")).toDouble() / 100.0, 'f', 2)));
     layout->addStretch();
     return page;
 }
@@ -58,12 +59,15 @@ QWidget *MainWindow::createDashboardPage()
 QWidget *MainWindow::createPileStatusPage()
 {
     const QJsonObject summary = m_context->dashboardService()->summary();
+    const QJsonObject status = summary.value(QStringLiteral("statusCounts")).toObject();
     return createPlaceholderTablePage(
         {QStringLiteral("状态"), QStringLiteral("数量")},
-        {{QStringLiteral("闲置"), QString::number(summary.value(QStringLiteral("pileIdle")).toInt())},
-         {QStringLiteral("在用"), QString::number(summary.value(QStringLiteral("pileUsing")).toInt())},
-         {QStringLiteral("故障"), QString::number(summary.value(QStringLiteral("pileFault")).toInt())},
-         {QStringLiteral("总数"), QString::number(summary.value(QStringLiteral("pileTotal")).toInt())}});
+        {{QStringLiteral("闲置"), QString::number(status.value(QStringLiteral("idle")).toInt())},
+         {QStringLiteral("预约"), QString::number(status.value(QStringLiteral("reserved")).toInt())},
+         {QStringLiteral("充电"), QString::number(status.value(QStringLiteral("charging")).toInt())},
+         {QStringLiteral("故障"), QString::number(status.value(QStringLiteral("fault")).toInt())},
+         {QStringLiteral("重启中"), QString::number(status.value(QStringLiteral("restarting")).toInt())},
+         {QStringLiteral("总数"), QString::number(status.value(QStringLiteral("total")).toInt())}});
 }
 
 QWidget *MainWindow::createRequestLogPage()

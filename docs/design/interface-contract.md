@@ -1,5 +1,7 @@
 # Foundation v1 冻结接口合同
 
+> **2026-09-04 运行 profile 说明：** 本合同的 v1 action、字段、状态、错误码和语义保持冻结，不因交付范围重置而删除、改名或缩窄。默认 **core profile** 只要求 Qt 用户端、Qt 管理/服务端、SQLite/设备模拟器形成闭环；它不要求在线 ML 生产者或 Web 消费者。`forecast.publish` 是显式启用的 optional producer extension；`forecast.latest`、`ForecastRun`/`ForecastRecord` 与第 8 节 dashboard snapshot contract 是必须保留的兼容能力。没有 active forecast 是合法 core 状态，`forecast.latest` 必须按既有合同返回 `forecastRun: null` 与 `records: []`；Web snapshot 不进入 core release gate。启用 Web 或 ML optional profile 时，本合同全文仍完整适用，不能以 optional 身份放宽任何既有合同规则。
+
 ## 1. 范围与规范词
 
 本文是 Foundation v1 的自包含线协议与业务接口合同。用户端、Qt 管理/服务端、设备模拟器、Web 大屏和 ML 发布端必须共同遵守本文；不得在子系统内维护第二套 action、status、permission 或字段语义。
@@ -31,7 +33,7 @@
 | --- | --- | --- | --- |
 | `version` | integer | 是 | 必须恰为 `1`；其他数值返回 `UNSUPPORTED_VERSION`，缺失或非 number 返回 `INVALID_REQUEST` |
 | `requestId` | string | 是 | trim 后非空；变更请求以它作为幂等键 |
-| `action` | string | 是 | trim 后非空，必须是第 6 节的 28 个字符串之一 |
+| `action` | string | 是 | trim 后非空，必须是第 6 节的 27 个字符串之一 |
 | `token` | string | 否 | 省略或空字符串表示匿名；不得记录到日志、响应或业务对象 |
 | `payload` | object | 是 | 对应 action 声明的字段必须满足精确类型；未声明字段按下述规则忽略 |
 
@@ -141,7 +143,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 
 一般 infrastructure 失败在相关 action 均可适用；第 7 节逐 action 的“主要失败”按该 action 内的判定顺序书写。未知 action 对所有身份返回 `INVALID_REQUEST`，权限函数则必须返回 deny。
 
-## 6. 28 个 action 与权限矩阵
+## 6. 27 个 action 与权限矩阵
 
 `system.health` 对匿名、已知身份和未知非空身份都允许。除它之外只有下表的 allow 单元允许；空 actor 表示 anonymous。
 
@@ -167,7 +169,6 @@ charger 与 active order 必须作为一个耦合状态处理：
 | `admin.charger_restart` | deny | deny | allow | deny | deny | deny |
 | `admin.user_list` | deny | deny | allow | deny | deny | deny |
 | `admin.user_set_status` | deny | deny | allow | deny | deny | deny |
-| `admin.request_log_list` | deny | deny | allow | deny | deny | deny |
 | `telemetry.push` | deny | deny | deny | allow | deny | deny |
 | `simulator.fault_set` | deny | deny | deny | allow | deny | deny |
 | `simulator.status` | deny | deny | deny | allow | deny | deny |
@@ -480,16 +481,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - Qt owner：`AdminService`。
 - 主要失败：`INVALID_REQUEST`（userId 非正 safe integer或 status 结构/枚举无效），然后 `ENTITY_NOT_FOUND`（正 ID 用户不存在），然后 `DB_BUSY`。
 
-#### 22. `admin.request_log_list`
-
-- actor：admin。
-- payload：`requestId` — string，可选；省略或空字符串表示不过滤，非空时精确匹配 requestId。`limit` — integer，可选，`1..100` 默认 `20`；`offset` — integer，可选，非负默认 `0`。
-- success data：`{items:array<RequestLogItem>,total:integer,limit:integer,offset:integer}`。`RequestLogItem` 字段为 `requestId`、`action`、`code`、`createdAt`，按 `createdAt` 倒序分页。
-- 状态/转换：只读查询 `request_log`。服务端对每个已解析请求写入 requestId、action、响应 code、去除 token 后的 response_json 与 createdAt；token 不得落库。
-- Qt owner：`RequestLogService`。
-- 主要失败：`INVALID_REQUEST`（分页参数无效），然后 `DB_BUSY`。
-
-#### 23. `telemetry.push`
+#### 22. `telemetry.push`
 
 - actor：simulator。
 - payload：`chargerId` — integer，必填，正 safe integer；`recordedAt` — Timestamp，必填；`powerKw`、`energyIncrementKwh` — number，必填，非负有限数；`status` — string，必填，charger 冻结状态且必须与权威状态一致。字段名必须是 `recordedAt`，不接受旧拼写 `observedAt` 作为权威时间。新的首次请求的 `recordedAt` 必须严格晚于该 charger 跨 telemetry/fault 的共享 persisted cursor。
@@ -498,7 +490,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - Qt owner：`TelemetryService`。
 - 主要失败：`INVALID_REQUEST`（字段缺失/类型错误、chargerId 非正、Timestamp 格式错误、数值非有限或为负），然后 `CHARGER_NOT_AVAILABLE`（正 ID charger 不存在），然后 `ORDER_STATE_CONFLICT`（recordedAt 不递增或 status 与权威状态不一致）。
 
-#### 24. `simulator.fault_set`
+#### 23. `simulator.fault_set`
 
 - actor：simulator。
 - payload：`chargerId` — integer，必填，正 safe integer；`fault` — boolean，必填；`recordedAt` — Timestamp，必填。
@@ -507,7 +499,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - Qt owner：`TelemetryService`。
 - 主要失败：`INVALID_REQUEST`（字段缺失/类型错误、chargerId 非正或 Timestamp 格式错误），然后 `CHARGER_NOT_AVAILABLE`（正 ID charger 不存在），然后 `ORDER_STATE_CONFLICT`（recordedAt 不递增、布尔意图与状态不匹配或耦合 order 不满足原子转换条件）。
 
-#### 25. `simulator.status`
+#### 24. `simulator.status`
 
 - actor：simulator。
 - payload：`state` — string，必填，`running|paused`；`simulatedAt` — Timestamp，必填；`eventCount` — integer，必填，非负 safe integer。
@@ -516,7 +508,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - Qt owner：`SimulatorService`。
 - 主要失败：`INVALID_REQUEST`（state、时间或计数无效）。
 
-#### 26. `forecast.publish`
+#### 25. `forecast.publish`
 
 - actor：ml。
 - payload：`runId`、`modelVersion` — string，必填，trim 后非空；`generatedAt`、`dataCutoff` — Timestamp，必填且 `dataCutoff<=generatedAt`；`records` — `array<ForecastRecord>`，必填，必须满足第 7.1 节全部边界、六站 × 24 horizon、唯一性与 144 条规则。payload 不接受 metrics。
@@ -525,7 +517,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - Qt owner：`ForecastService`。
 - 主要失败：`INVALID_REQUEST`（字段缺失/JSON 类型/基础结构错误），然后 `FORECAST_INVALID`（有效类型下的元数据关系、144 条完整性、物理边界、唯一性或 runId/hash 语义失败），然后 `DB_BUSY`。SnapshotWriter 文件失败不是 action 失败，而是 `snapshotReady=false`。
 
-#### 27. `forecast.latest`
+#### 26. `forecast.latest`
 
 - actor：user 或 admin。
 - payload：无声明字段；未知字段仍按 2.2 忽略。
@@ -534,7 +526,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - Qt owner：`ForecastService`。
 - 主要失败：仅一般读取失败；stale 不是失败。
 
-#### 28. `demo.reset`
+#### 27. `demo.reset`
 
 - actor：admin。
 - payload：`confirmation` — string，必填，必须逐字等于 `RESET_DEMO`。
@@ -553,7 +545,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 
 ## 9. 冻结治理、签字与 tag
 
-冻结后只允许向后兼容、可忽略的新增字段。现有字段、28 个 action、五组 status、身份权限、枚举值和语义不得改名、删除、重新解释或缩窄原有合法范围；任何兼容新增都必须同时更新本文和可执行合同测试。
+冻结后只允许向后兼容、可忽略的新增字段。现有字段、27 个 action、五组 status、身份权限、枚举值和语义不得改名、删除、重新解释或缩窄原有合法范围；任何兼容新增都必须同时更新本文和可执行合同测试。
 
 不得伪造签名。当前确认状态如下：
 

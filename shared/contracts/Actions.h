@@ -28,7 +28,6 @@ inline const QString AdminStationCreate = QStringLiteral("admin.station_create")
 inline const QString AdminChargerRestart = QStringLiteral("admin.charger_restart");
 inline const QString AdminUserList = QStringLiteral("admin.user_list");
 inline const QString AdminUserSetStatus = QStringLiteral("admin.user_set_status");
-inline const QString AdminRequestLogList = QStringLiteral("admin.request_log_list");
 
 inline const QString TelemetryPush = QStringLiteral("telemetry.push");
 inline const QString SimulatorFaultSet = QStringLiteral("simulator.fault_set");
@@ -63,7 +62,6 @@ inline QStringList all()
         AdminChargerRestart,
         AdminUserList,
         AdminUserSetStatus,
-        AdminRequestLogList,
         TelemetryPush,
         SimulatorFaultSet,
         SimulatorStatus,

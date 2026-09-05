@@ -14,8 +14,7 @@ bool requiresAdminToken(const QString &action)
         || action == ev::actions::AdminStationCreate
         || action == ev::actions::AdminChargerRestart
         || action == ev::actions::AdminUserList
-        || action == ev::actions::AdminUserSetStatus
-        || action == ev::actions::AdminRequestLogList;
+        || action == ev::actions::AdminUserSetStatus;
 }
 
 bool allowsUserOrAdminToken(const QString &action)
@@ -43,16 +42,20 @@ bool requiresUserToken(const QString &action)
 } // namespace
 
 ApiServer::ApiServer(AuthService *authService,
+                     AdminService *adminService,
                      DashboardService *dashboardService,
                      ForecastService *forecastService,
                      RequestLogService *requestLogService,
+                     TelemetryService *telemetryService,
                      UserService *userService,
                      QObject *parent)
     : QTcpServer(parent)
     , m_authService(authService)
+    , m_adminService(adminService)
     , m_dashboardService(dashboardService)
     , m_forecastService(forecastService)
     , m_requestLogService(requestLogService)
+    , m_telemetryService(telemetryService)
     , m_userService(userService)
 {
 }
@@ -131,14 +134,11 @@ ev::protocol::ResponseEnvelope ApiServer::handleRequest(const ev::protocol::Requ
         if (!result.ok) {
             return fail(request.requestId, result.code, result.message);
         }
-        return ok(request.requestId, result.message, QJsonObject{
-            {QStringLiteral("username"), request.payload.value(QStringLiteral("username")).toString()},
-            {QStringLiteral("token"), result.token}
-        });
+        return ok(request.requestId, result.message, result.data);
     }
 
     if (requiresAdminToken(request.action) && !m_authService->isTokenValid(request.token)) {
-        return fail(request.requestId, QStringLiteral("UNAUTHORIZED"), QStringLiteral("admin token is missing or invalid"));
+        return fail(request.requestId, QStringLiteral("AUTH_REQUIRED"), QStringLiteral("admin token is missing or invalid"));
     }
     if (requiresUserToken(request.action) && !m_authService->isUserTokenValid(request.token)) {
         return fail(request.requestId, QStringLiteral("AUTH_REQUIRED"), QStringLiteral("user token is missing or invalid"));
@@ -150,7 +150,32 @@ ev::protocol::ResponseEnvelope ApiServer::handleRequest(const ev::protocol::Requ
     }
 
     if (request.action == ev::actions::AdminDashboard) {
-        return ok(request.requestId, QStringLiteral("success"), m_dashboardService->summary());
+        const int rangeDays = request.payload.value(QStringLiteral("rangeDays")).toInt();
+        if (rangeDays != 7 && rangeDays != 30) {
+            return fail(request.requestId, QStringLiteral("INVALID_REQUEST"), QStringLiteral("rangeDays must be 7 or 30"));
+        }
+        return ok(request.requestId, QStringLiteral("success"), m_dashboardService->summary(rangeDays));
+    }
+
+    QJsonObject adminData;
+    Result adminResult;
+    if (request.action == ev::actions::AdminStationCreate) {
+        adminResult = m_adminService->stationCreate(request.payload, &adminData);
+    } else if (request.action == ev::actions::AdminChargerRestart) {
+        adminResult = m_adminService->chargerRestart(request.payload, &adminData);
+    } else if (request.action == ev::actions::AdminUserList) {
+        adminResult = m_adminService->userList(request.payload, &adminData);
+    } else if (request.action == ev::actions::AdminUserSetStatus) {
+        adminResult = m_adminService->userSetStatus(request.payload, &adminData);
+    }
+    if (request.action == ev::actions::AdminStationCreate
+        || request.action == ev::actions::AdminChargerRestart
+        || request.action == ev::actions::AdminUserList
+        || request.action == ev::actions::AdminUserSetStatus) {
+        if (!adminResult.ok) {
+            return fail(request.requestId, adminResult.code, adminResult.message);
+        }
+        return ok(request.requestId, QStringLiteral("success"), adminData);
     }
 
     const int userId = m_authService->userIdForToken(request.token);
@@ -196,26 +221,37 @@ ev::protocol::ResponseEnvelope ApiServer::handleRequest(const ev::protocol::Requ
         return ok(request.requestId, QStringLiteral("success"), userData);
     }
 
-    if (request.action == ev::actions::AdminRequestLogList) {
-        QJsonObject data;
-        const Result result = m_requestLogService->list(
-            request.payload.value(QStringLiteral("requestId")).toString(),
-            request.payload.value(QStringLiteral("limit")).toInt(20),
-            request.payload.value(QStringLiteral("offset")).toInt(0),
-            &data);
-        if (!result.ok) {
-            return fail(request.requestId, result.code, result.message);
-        }
-        return ok(request.requestId, QStringLiteral("success"), data);
-    }
-
     if (request.action == ev::actions::ForecastPublish) {
+        if (!m_authService->isMlTokenValid(request.token)) {
+            return fail(request.requestId, QStringLiteral("AUTH_REQUIRED"), QStringLiteral("ml token is missing or invalid"));
+        }
         QJsonObject data;
         const Result result = m_forecastService->publish(request.requestId, request.payload, &data);
         if (!result.ok) {
             return fail(request.requestId, result.code, result.message);
         }
         return ok(request.requestId, result.message, data);
+    }
+
+    if (request.action == ev::actions::TelemetryPush
+        || request.action == ev::actions::SimulatorFaultSet
+        || request.action == ev::actions::SimulatorStatus) {
+        if (!m_authService->isSimulatorTokenValid(request.token)) {
+            return fail(request.requestId, QStringLiteral("AUTH_REQUIRED"), QStringLiteral("simulator token is missing or invalid"));
+        }
+        QJsonObject data;
+        Result result;
+        if (request.action == ev::actions::TelemetryPush) {
+            result = m_telemetryService->telemetryPush(request.payload, &data);
+        } else if (request.action == ev::actions::SimulatorFaultSet) {
+            result = m_telemetryService->faultSet(request.payload, &data);
+        } else {
+            result = m_telemetryService->simulatorStatus(request.payload, &data);
+        }
+        if (!result.ok) {
+            return fail(request.requestId, result.code, result.message);
+        }
+        return ok(request.requestId, QStringLiteral("success"), data);
     }
 
     if (request.action == ev::actions::ForecastLatest) {

@@ -1,6 +1,8 @@
 #include "services/DashboardService.h"
 
 #include <QSqlQuery>
+#include <QDate>
+#include <QJsonArray>
 #include <QVariant>
 #include <QtGlobal>
 
@@ -11,23 +13,36 @@ DashboardService::DashboardService(QSqlDatabase database)
 {
 }
 
-QJsonObject DashboardService::summary() const
+QJsonObject DashboardService::summary(int rangeDays) const
 {
     const int idle = countChargersByStatus(QStringLiteral("idle"));
     const int reserved = countChargersByStatus(QStringLiteral("reserved"));
     const int charging = countChargersByStatus(QStringLiteral("charging"));
     const int fault = countChargersByStatus(QStringLiteral("fault"));
     const int restarting = countChargersByStatus(QStringLiteral("restarting"));
-    const double totalRevenue = revenueFen() / 100.0;
+    const qint64 totalRevenue = revenueFen();
+    const QDate today = QDate::currentDate();
+    QJsonArray trend;
+    for (int i = rangeDays - 1; i >= 0; --i) {
+        const QString date = today.addDays(-i).toString(Qt::ISODate);
+        trend.append(QJsonObject{{QStringLiteral("date"), date},
+                                 {QStringLiteral("revenueFen"), revenueFenForDate(date)}});
+    }
 
     return {
-        {QStringLiteral("todayRevenue"), 0.0},
-        {QStringLiteral("monthRevenue"), totalRevenue},
-        {QStringLiteral("totalRevenue"), totalRevenue},
-        {QStringLiteral("pileTotal"), idle + reserved + charging + fault + restarting},
-        {QStringLiteral("pileIdle"), idle},
-        {QStringLiteral("pileUsing"), reserved + charging + restarting},
-        {QStringLiteral("pileFault"), fault}
+        {QStringLiteral("revenue"), QJsonObject{
+            {QStringLiteral("todayRevenueFen"), revenueFenForDate(today.toString(Qt::ISODate))},
+            {QStringLiteral("monthRevenueFen"), totalRevenue},
+            {QStringLiteral("totalRevenueFen"), totalRevenue}}},
+        {QStringLiteral("statusCounts"), QJsonObject{
+            {QStringLiteral("idle"), idle},
+            {QStringLiteral("reserved"), reserved},
+            {QStringLiteral("charging"), charging},
+            {QStringLiteral("fault"), fault},
+            {QStringLiteral("restarting"), restarting},
+            {QStringLiteral("total"), idle + reserved + charging + fault + restarting}}},
+        {QStringLiteral("trend"), trend},
+        {QStringLiteral("alerts"), QJsonArray{}}
     };
 }
 
@@ -125,6 +140,17 @@ qint64 DashboardService::revenueFen() const
 {
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral("SELECT COALESCE(SUM(amount_fen), 0) FROM orders WHERE status = 'completed'"));
+    if (!query.exec() || !query.next()) {
+        return 0;
+    }
+    return query.value(0).toLongLong();
+}
+
+qint64 DashboardService::revenueFenForDate(const QString &date) const
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("SELECT COALESCE(SUM(amount_fen), 0) FROM orders WHERE status='completed' AND substr(ended_at, 1, 10)=?"));
+    query.addBindValue(date);
     if (!query.exec() || !query.next()) {
         return 0;
     }

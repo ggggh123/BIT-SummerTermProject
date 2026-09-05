@@ -1,6 +1,7 @@
 #include "services/AuthService.h"
 
 #include <QCryptographicHash>
+#include <QJsonObject>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTest>
@@ -71,6 +72,10 @@ private slots:
         QCOMPARE(result.code, QStringLiteral("OK"));
         QVERIFY(!result.token.isEmpty());
         QVERIFY(service.isTokenValid(result.token));
+        QCOMPARE(result.data.value(QStringLiteral("token")).toString(), result.token);
+        QCOMPARE(result.data.value(QStringLiteral("admin")).toObject().value(QStringLiteral("adminId")).toInt(), 1);
+        QCOMPARE(result.data.value(QStringLiteral("admin")).toObject().value(QStringLiteral("username")).toString(),
+                 QStringLiteral("admin"));
     }
 
     void invalidCredentialsUseContractFailureCode()
