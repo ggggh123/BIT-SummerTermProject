@@ -6,18 +6,21 @@
 
 ## 运行方法
 
-先在仓库根目录构建核心三个 Qt 程序。下面例子使用已有 `build/debug`；实际构建在其他目录时，给软链接替换为那个构建目录的绝对路径。
+从仓库根目录执行以下命令。它会在 `/tmp` 的原生文件系统创建一个全新、空的 CMake build 目录，并只构建探针实际启动的 `ev_admin_server`；源码树内已有的 `build/debug` 不参与本次复现。探针目录中的 `build` 软链接明确指向这次配置产生的 build 目录，因此实际服务二进制来自 `$build_dir/apps/admin-server/ev_admin_server`。
 
 ```bash
-cmake --preset debug
-cmake --build --preset debug
+repo_root=$PWD
+build_dir=$(mktemp -d /tmp/ev-core-probe-build-XXXXXX)
+cmake -S "$repo_root" -B "$build_dir" -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
+cmake --build "$build_dir" --target ev_admin_server --parallel
+test -x "$build_dir/apps/admin-server/ev_admin_server"
 probe_workspace=$(mktemp -d /tmp/ev-core-probe-XXXXXX)
 cp docs/test/evidence/core-integration-2026-09-06/probe_server.py "$probe_workspace/"
-ln -s "$PWD/build/debug" "$probe_workspace/build"
+ln -s "$build_dir" "$probe_workspace/build"
 python3 "$probe_workspace/probe_server.py"
 ```
 
-每次使用新的目录。不要直接在本证据目录启动脚本，不把用户现有运行库交给 `--existing-copy`；该参数只允许用在额外导出的诊断库副本上，因为服务端启动会迁移表并写入日志。默认流程会生成新的 `probe-fresh.db`，若文件已存在则拒绝复用。
+每次使用新的 build 目录和探针目录。不要直接在本证据目录启动脚本，也不要把封存黄金库、导出副本或用户现有运行库交给探针。脚本只支持在新探针目录中创建 `probe-fresh.db`；若该文件已存在则拒绝复用，任何参数（包括历史上的 `--existing-copy`）都会作为未知参数失败。
 
 脚本不安装环境，不访问腾讯地图，不输出登录 token，不连接指定的外部服务器，也不会自动修改 Git。测试服务只监听回环随机端口，结束时清理自己的服务进程；数据库和脚本目录保留供检查。
 

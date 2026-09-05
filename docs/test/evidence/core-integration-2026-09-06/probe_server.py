@@ -11,11 +11,10 @@ import time
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--existing-copy", help="仅用于已导出的黄金库诊断副本，仅检查启动/迁移")
-args = parser.parse_args()
+parser.parse_args()
 root = Path(__file__).resolve().parent
-database = Path(args.existing_copy) if args.existing_copy else root / "probe-fresh.db"
-if not args.existing_copy and database.exists():
+database = root / "probe-fresh.db"
+if database.exists():
     raise SystemExit("拒绝复用已有诊断库，请使用新的导出目录")
 with socket.socket() as selector:
     selector.bind(("127.0.0.1", 0))
@@ -69,38 +68,37 @@ try:
     health, _ = request("system.health")
     assert set(health["data"]) == {"status", "schemaVersion", "snapshotVersion", "forecastRunId", "serverTime"}
     print("health:", json.dumps(health, ensure_ascii=False))
-    if not args.existing_copy:
-        login, _ = request("auth.user_login", {"mobile": "13800138000"})
-        assert login["ok"], login
-        token = login["data"]["token"]
-        initial_balance = login["data"]["user"]["balanceFen"]
-        stations, _ = request("station.list", {"latitude": 39.9830, "longitude": 116.3150}, token)
-        current, _ = request("order.current", token=token)
-        print("initial-read:", json.dumps({"stationCount": len(stations["data"]["stations"]), "currentOrder": current["data"]["order"]}, ensure_ascii=False))
-        first, first_raw = request("wallet.recharge", {"amountFen": 100}, token, "inspect-same-recharge")
-        again, again_raw = request("wallet.recharge", {"amountFen": 100}, token, "inspect-same-recharge")
-        print("duplicate-recharge:", json.dumps({"before": initial_balance, "first": first["data"], "repeat": again["data"], "sameAckBytes": first_raw == again_raw}, ensure_ascii=False))
-        status, _ = request("simulator.status", {"state": "paused", "simulatedAt": "2026-09-06T01:00:00+08:00", "eventCount": 0}, "sim-token")
-        charger = next(c for c in status["data"]["chargers"] if c["status"] == "idle")
-        reserve, _ = request("charge.reserve", {"chargerId": charger["chargerId"]}, token)
-        order_id = reserve["data"]["order"]["orderId"]
-        start, _ = request("charge.start", {"orderId": order_id}, token)
-        sample = {"chargerId": charger["chargerId"], "recordedAt": "2026-09-06T01:00:05+08:00", "powerKw": 60, "energyIncrementKwh": 0.25, "status": "charging"}
-        telemetry, telemetry_raw = request("telemetry.push", sample, "sim-token", "inspect-same-telemetry")
-        duplicate, duplicate_raw = request("telemetry.push", sample, "sim-token", "inspect-same-telemetry")
-        print("duplicate-telemetry:", json.dumps({"firstOk": telemetry["ok"], "repeatOk": duplicate["ok"], "repeatCode": duplicate["code"], "sameAckBytes": telemetry_raw == duplicate_raw}, ensure_ascii=False))
-        sample.update(recordedAt="2026-09-06T01:00:10+08:00", energyIncrementKwh=0.5)
-        second, _ = request("telemetry.push", sample, "sim-token")
-        stopped, _ = request("charge.stop", {"orderId": order_id}, token)
-        fields = ("energyKwh", "amountFen", "elapsedSec", "status", "startedAt", "endedAt")
-        print("stop-preservation:", json.dumps({"beforeStop": {k: second["data"]["order"][k] for k in fields}, "afterStop": {k: stopped["data"]["order"][k] for k in fields}}, ensure_ascii=False))
-        settled, _ = request("charge.settle", {"orderId": order_id}, token)
-        print("settle:", json.dumps({"ok": settled["ok"], "status": settled["data"]["order"]["status"], "balanceFen": settled["data"]["balanceFen"]}, ensure_ascii=False))
-        request("simulator.fault_set", {"chargerId": charger["chargerId"], "recordedAt": "2026-09-06T01:00:11+08:00", "fault": True}, "sim-token")
-        recovery, _ = request("simulator.fault_set", {"chargerId": charger["chargerId"], "recordedAt": "2026-09-06T01:00:11+08:00", "fault": False}, "sim-token")
-        print("same-second-recovery:", json.dumps({"ok": recovery["ok"], "code": recovery["code"]}))
-        reset, _ = request("demo.reset", {}, token)
-        print("demo-reset-route:", json.dumps({"ok": reset["ok"], "code": reset["code"], "message": reset["message"]}, ensure_ascii=False))
+    login, _ = request("auth.user_login", {"mobile": "13800138000"})
+    assert login["ok"], login
+    token = login["data"]["token"]
+    initial_balance = login["data"]["user"]["balanceFen"]
+    stations, _ = request("station.list", {"latitude": 39.9830, "longitude": 116.3150}, token)
+    current, _ = request("order.current", token=token)
+    print("initial-read:", json.dumps({"stationCount": len(stations["data"]["stations"]), "currentOrder": current["data"]["order"]}, ensure_ascii=False))
+    first, first_raw = request("wallet.recharge", {"amountFen": 100}, token, "inspect-same-recharge")
+    again, again_raw = request("wallet.recharge", {"amountFen": 100}, token, "inspect-same-recharge")
+    print("duplicate-recharge:", json.dumps({"before": initial_balance, "first": first["data"], "repeat": again["data"], "sameAckBytes": first_raw == again_raw}, ensure_ascii=False))
+    status, _ = request("simulator.status", {"state": "paused", "simulatedAt": "2026-09-06T01:00:00+08:00", "eventCount": 0}, "sim-token")
+    charger = next(c for c in status["data"]["chargers"] if c["status"] == "idle")
+    reserve, _ = request("charge.reserve", {"chargerId": charger["chargerId"]}, token)
+    order_id = reserve["data"]["order"]["orderId"]
+    start, _ = request("charge.start", {"orderId": order_id}, token)
+    sample = {"chargerId": charger["chargerId"], "recordedAt": "2026-09-06T01:00:05+08:00", "powerKw": 60, "energyIncrementKwh": 0.25, "status": "charging"}
+    telemetry, telemetry_raw = request("telemetry.push", sample, "sim-token", "inspect-same-telemetry")
+    duplicate, duplicate_raw = request("telemetry.push", sample, "sim-token", "inspect-same-telemetry")
+    print("duplicate-telemetry:", json.dumps({"firstOk": telemetry["ok"], "repeatOk": duplicate["ok"], "repeatCode": duplicate["code"], "sameAckBytes": telemetry_raw == duplicate_raw}, ensure_ascii=False))
+    sample.update(recordedAt="2026-09-06T01:00:10+08:00", energyIncrementKwh=0.5)
+    second, _ = request("telemetry.push", sample, "sim-token")
+    stopped, _ = request("charge.stop", {"orderId": order_id}, token)
+    fields = ("energyKwh", "amountFen", "elapsedSec", "status", "startedAt", "endedAt")
+    print("stop-preservation:", json.dumps({"beforeStop": {k: second["data"]["order"][k] for k in fields}, "afterStop": {k: stopped["data"]["order"][k] for k in fields}}, ensure_ascii=False))
+    settled, _ = request("charge.settle", {"orderId": order_id}, token)
+    print("settle:", json.dumps({"ok": settled["ok"], "status": settled["data"]["order"]["status"], "balanceFen": settled["data"]["balanceFen"]}, ensure_ascii=False))
+    request("simulator.fault_set", {"chargerId": charger["chargerId"], "recordedAt": "2026-09-06T01:00:11+08:00", "fault": True}, "sim-token")
+    recovery, _ = request("simulator.fault_set", {"chargerId": charger["chargerId"], "recordedAt": "2026-09-06T01:00:11+08:00", "fault": False}, "sim-token")
+    print("same-second-recovery:", json.dumps({"ok": recovery["ok"], "code": recovery["code"]}))
+    reset, _ = request("demo.reset", {}, token)
+    print("demo-reset-route:", json.dumps({"ok": reset["ok"], "code": reset["code"], "message": reset["message"]}, ensure_ascii=False))
     with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as db:
         columns = [row[1] for row in db.execute("PRAGMA table_info(request_log)")]
         print("database-check:", json.dumps({"integrity": db.execute("PRAGMA integrity_check").fetchone()[0], "requestLogColumns": columns, "stationCount": db.execute("SELECT COUNT(*) FROM stations").fetchone()[0], "chargerCount": db.execute("SELECT COUNT(*) FROM chargers").fetchone()[0]}, ensure_ascii=False))
