@@ -1,4 +1,6 @@
 #include "services/AdminService.h"
+#include "core/BusinessTime.h"
+#include "db/SqlTransaction.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -12,7 +14,7 @@ namespace {
 
 QString nowIso()
 {
-    return QDateTime::currentDateTime().toString(Qt::ISODate);
+    return BusinessTime::now();
 }
 
 bool isInteger(const QJsonValue &value, int *out, bool allowZero = false)
@@ -90,9 +92,9 @@ Result AdminService::stationCreate(const QJsonObject &payload, QJsonObject *resp
         return Result::failure(QStringLiteral("INVALID_REQUEST"), QStringLiteral("station payload is invalid"));
     }
 
-    QSqlDatabase database = m_database;
+    SqlTransaction database(m_database);
     if (!database.transaction()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
 
     QSqlQuery query(database);
@@ -107,7 +109,7 @@ Result AdminService::stationCreate(const QJsonObject &payload, QJsonObject *resp
     query.addBindValue(nowIso());
     if (!query.exec()) {
         database.rollback();
-        return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     const int stationId = query.lastInsertId().toInt();
     int code = nextChargerCode(database);
@@ -124,17 +126,17 @@ Result AdminService::stationCreate(const QJsonObject &payload, QJsonObject *resp
         query.addBindValue(nowIso());
         if (!query.exec()) {
             database.rollback();
-            return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+            return databaseFailure(query.lastError());
         }
         chargers.append(chargerObject(query.lastInsertId().toInt()));
     }
     if (!bumpSnapshotVersion(database)
         || !insertEvent(database, QStringLiteral("admin.station_create"), QStringLiteral("station"), stationId, QStringLiteral("station created"))) {
         database.rollback();
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     if (!database.commit()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
 
     if (responseData) {
@@ -162,9 +164,9 @@ Result AdminService::chargerRestart(const QJsonObject &payload, QJsonObject *res
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("charger is not fault"));
     }
 
-    QSqlDatabase database = m_database;
+    SqlTransaction database(m_database);
     if (!database.transaction()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     query.prepare(QStringLiteral("UPDATE chargers SET status='restarting', updated_at=? WHERE id=? AND status='fault'"));
     query.addBindValue(nowIso());
@@ -173,10 +175,10 @@ Result AdminService::chargerRestart(const QJsonObject &payload, QJsonObject *res
         || !bumpSnapshotVersion(database)
         || !insertEvent(database, QStringLiteral("admin.charger_restart"), QStringLiteral("charger"), chargerId, QStringLiteral("charger restarting"))) {
         database.rollback();
-        return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     if (!database.commit()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     QTimer::singleShot(1500, [this, chargerId]() {
         finishRestart(chargerId);
@@ -189,18 +191,23 @@ Result AdminService::chargerRestart(const QJsonObject &payload, QJsonObject *res
 
 Result AdminService::finishRestart(int chargerId) const
 {
+    SqlTransaction database(m_database);
+    if (!database.transaction()) return databaseFailure(database.lastError());
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral("UPDATE chargers SET status='idle', updated_at=? WHERE id=? AND status='restarting'"));
     query.addBindValue(nowIso());
     query.addBindValue(chargerId);
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     if (query.numRowsAffected() == 0) {
         return Result::success();
     }
-    bumpSnapshotVersion(m_database);
-    insertEvent(m_database, QStringLiteral("admin.charger_restart.done"), QStringLiteral("charger"), chargerId, QStringLiteral("charger idle"));
+    if (!bumpSnapshotVersion(m_database)
+        || !insertEvent(m_database, QStringLiteral("admin.charger_restart.done"), QStringLiteral("charger"), chargerId, QStringLiteral("charger idle"))) {
+        return databaseFailure(m_database.lastError());
+    }
+    if (!database.commit()) return databaseFailure(database.lastError());
     return Result::success();
 }
 
@@ -227,7 +234,7 @@ Result AdminService::userList(const QJsonObject &payload, QJsonObject *responseD
     countQuery.prepare(QStringLiteral("SELECT COUNT(*) FROM users WHERE mobile LIKE ?"));
     countQuery.addBindValue(filter);
     if (!countQuery.exec() || !countQuery.next()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), countQuery.lastError().text());
+        return databaseFailure(countQuery.lastError());
     }
 
     QSqlQuery query(m_database);
@@ -236,7 +243,7 @@ Result AdminService::userList(const QJsonObject &payload, QJsonObject *responseD
     query.addBindValue(limit);
     query.addBindValue(offset);
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     QJsonArray items;
     while (query.next()) {
@@ -261,9 +268,9 @@ Result AdminService::userSetStatus(const QJsonObject &payload, QJsonObject *resp
         return Result::failure(QStringLiteral("ENTITY_NOT_FOUND"), QStringLiteral("user not found"));
     }
 
-    QSqlDatabase database = m_database;
+    SqlTransaction database(m_database);
     if (!database.transaction()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     QSqlQuery query(database);
     query.prepare(QStringLiteral("UPDATE users SET status=? WHERE id=?"));
@@ -273,10 +280,10 @@ Result AdminService::userSetStatus(const QJsonObject &payload, QJsonObject *resp
         || !bumpSnapshotVersion(database)
         || !insertEvent(database, QStringLiteral("admin.user_set_status"), QStringLiteral("user"), userId, status)) {
         database.rollback();
-        return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     if (!database.commit()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     if (responseData) {
         responseData->insert(QStringLiteral("user"), userObject(userId));

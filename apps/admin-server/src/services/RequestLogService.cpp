@@ -1,8 +1,11 @@
 #include "services/RequestLogService.h"
+#include "core/BusinessTime.h"
+#include "db/SqlTransaction.h"
 
 #include "protocol/JsonEnvelope.h"
 
 #include <QDateTime>
+#include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -14,7 +17,7 @@ namespace {
 
 QString nowIso()
 {
-    return QDateTime::currentDateTime().toString(Qt::ISODateWithMs);
+    return BusinessTime::now();
 }
 
 QJsonValue withoutTokenFields(const QJsonValue &value)
@@ -81,21 +84,75 @@ Result RequestLogService::ensureSchema() const
             "code TEXT NOT NULL DEFAULT '',"
             "response_json TEXT NOT NULL,"
             "created_at TEXT NOT NULL)"))) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
 
     if (!columnExists(m_database, QStringLiteral("request_log"), QStringLiteral("action"))) {
         if (!query.exec(QStringLiteral("ALTER TABLE request_log ADD COLUMN action TEXT NOT NULL DEFAULT ''"))) {
-            return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+            return databaseFailure(query.lastError());
         }
     }
     if (!columnExists(m_database, QStringLiteral("request_log"), QStringLiteral("code"))) {
         if (!query.exec(QStringLiteral("ALTER TABLE request_log ADD COLUMN code TEXT NOT NULL DEFAULT ''"))) {
-            return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+            return databaseFailure(query.lastError());
+        }
+    }
+    for (const QString &column : {QStringLiteral("actor"), QStringLiteral("request_hash")}) {
+        if (!columnExists(m_database, QStringLiteral("request_log"), column)
+            && !query.exec(QStringLiteral("ALTER TABLE request_log ADD COLUMN %1 TEXT NOT NULL DEFAULT ''").arg(column))) {
+            return databaseFailure(query.lastError());
         }
     }
 
     return Result::success();
+}
+
+QByteArray RequestLogService::execute(const ev::protocol::RequestEnvelope &request, const QString &actor,
+                                    const std::function<ev::protocol::ResponseEnvelope()> &business,
+                                    bool twoPhase) const
+{
+    const auto failure = [&](const Result &result) {
+        return ev::protocol::toJson({request.requestId, false, result.code, result.message, QJsonObject{}});
+    };
+    const Result schema = ensureSchema();
+    if (!schema.ok) return failure(schema);
+
+    // 只保存稳定主体和规范 payload 的哈希；token 从不作为持久化身份或日志字段。
+    const QByteArray bytes = QJsonDocument(request.payload).toJson(QJsonDocument::Compact);
+    const QString hash = QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+    SqlTransaction transaction(m_database, true);
+    if (!twoPhase && !transaction.transaction()) return failure(databaseFailure(transaction.lastError()));
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("SELECT actor, action, request_hash, response_json FROM request_log WHERE request_id=?"));
+    query.addBindValue(request.requestId);
+    if (!query.exec()) return failure(databaseFailure(query.lastError()));
+    if (query.next()) {
+        if (query.value(0).toString() != actor) {
+            return failure(Result::failure(QStringLiteral("FORBIDDEN"), QStringLiteral("requestId 已被其他请求使用")));
+        }
+        if (query.value(1).toString() != request.action || query.value(2).toString() != hash) {
+            return failure(Result::failure(QStringLiteral("INVALID_REQUEST"), QStringLiteral("requestId 与首次请求不一致")));
+        }
+        return query.value(3).toString().toUtf8();
+    }
+    query.finish();
+    const ev::protocol::ResponseEnvelope response = business();
+    if (!response.ok) return ev::protocol::toJson(response);
+
+    // forecast.publish 在业务内已提交预测批次并尝试 snapshot；这里只原子保存最终 ACK。
+    if (twoPhase && !transaction.transaction()) return failure(databaseFailure(transaction.lastError()));
+    const QByteArray responseBytes = sanitizedResponseJson(response);
+    query.prepare(QStringLiteral("INSERT INTO request_log(request_id,action,code,response_json,created_at,actor,request_hash) VALUES(?,?,?,?,?,?,?)"));
+    query.addBindValue(request.requestId);
+    query.addBindValue(request.action);
+    query.addBindValue(response.code);
+    query.addBindValue(QString::fromUtf8(responseBytes));
+    query.addBindValue(nowIso());
+    query.addBindValue(actor);
+    query.addBindValue(hash);
+    if (!query.exec()) return failure(databaseFailure(query.lastError()));
+    if (!transaction.commit()) return failure(databaseFailure(transaction.lastError()));
+    return responseBytes;
 }
 
 Result RequestLogService::record(const QString &requestId, const QString &action, const ev::protocol::ResponseEnvelope &response) const
@@ -115,7 +172,7 @@ Result RequestLogService::record(const QString &requestId, const QString &action
     query.addBindValue(QString::fromUtf8(sanitizedResponseJson(response)));
     query.addBindValue(nowIso());
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     return Result::success();
 }
@@ -139,7 +196,7 @@ Result RequestLogService::list(const QString &requestIdFilter, int limit, int of
         countQuery.prepare(QStringLiteral("SELECT COUNT(*) FROM request_log"));
     }
     if (!countQuery.exec() || !countQuery.next()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), countQuery.lastError().text());
+        return databaseFailure(countQuery.lastError());
     }
 
     QSqlQuery query(m_database);
@@ -156,7 +213,7 @@ Result RequestLogService::list(const QString &requestIdFilter, int limit, int of
     query.addBindValue(limit);
     query.addBindValue(offset);
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
 
     QJsonArray items;

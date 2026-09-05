@@ -1,4 +1,6 @@
 #include "db/DatabaseManager.h"
+#include "core/BusinessTime.h"
+#include "db/SqlTransaction.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -23,7 +25,7 @@ QString adminPasswordHash(const QString &password)
 
 QString nowIso()
 {
-    return QDateTime::currentDateTime().toString(Qt::ISODate);
+    return BusinessTime::now();
 }
 
 QString projectSourceDir()
@@ -132,7 +134,7 @@ Result DatabaseManager::open(const QString &databasePath)
 
     db.setDatabaseName(m_databasePath);
     if (!db.open()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), db.lastError().text());
+        return databaseFailure(db.lastError());
     }
 
     execSql(QStringLiteral("PRAGMA foreign_keys = ON"));
@@ -161,7 +163,7 @@ Result DatabaseManager::migrate()
     QSqlQuery exists(database());
     exists.prepare(QStringLiteral("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"));
     if (!exists.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), exists.lastError().text());
+        return databaseFailure(exists.lastError());
     }
     if (exists.next()) {
         return Result::success();
@@ -193,7 +195,7 @@ Result DatabaseManager::seed()
         query.addBindValue(adminPasswordHash(QStringLiteral("123456")));
         query.addBindValue(timestamp);
         if (!query.exec()) {
-            return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+            return databaseFailure(query.lastError());
         }
     }
 
@@ -228,7 +230,7 @@ Result DatabaseManager::seed()
                 query.addBindValue(QStringLiteral("idle"));
                 query.addBindValue(timestamp);
                 if (!query.exec()) {
-                    return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+                    return databaseFailure(query.lastError());
                 }
             }
         }
@@ -244,7 +246,7 @@ Result DatabaseManager::seed()
         query.addBindValue(userIndex == 0 ? 50000 : 10000 + userIndex * 1000);
         query.addBindValue(timestamp);
         if (!query.exec()) {
-            return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+            return databaseFailure(query.lastError());
         }
     }
 
@@ -262,4 +264,3 @@ bool DatabaseManager::execSql(const QString &sql, QString *errorMessage)
     }
     return false;
 }
-

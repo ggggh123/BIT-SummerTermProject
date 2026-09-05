@@ -35,6 +35,7 @@ protected:
 
 private:
     void readSocket(QTcpSocket *socket);
+    QByteArray dispatch(const ev::protocol::RequestEnvelope &request) const;
     ev::protocol::ResponseEnvelope handleRequest(const ev::protocol::RequestEnvelope &request) const;
     ev::protocol::ResponseEnvelope ok(const QString &requestId, const QString &message, const QJsonValue &data = {}) const;
     ev::protocol::ResponseEnvelope fail(const QString &requestId, const QString &code, const QString &message) const;

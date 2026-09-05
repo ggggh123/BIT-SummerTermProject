@@ -131,6 +131,24 @@ private slots:
         QCOMPARE(statusData.value(QStringLiteral("user")).toObject().value(QStringLiteral("status")).toString(),
                  QStringLiteral("frozen"));
     }
+
+    void restartCompletionRollsBackWhenEventInsertFails()
+    {
+        ScopedDatabase db;
+        AdminService service(db.database());
+        QSqlQuery query(db.database());
+        QVERIFY(query.exec(QStringLiteral("UPDATE chargers SET status='restarting' WHERE id=1")));
+        QVERIFY(query.exec(QStringLiteral("CREATE TRIGGER fail_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT, 'private failure'); END")));
+        const Result result = service.finishRestart(1);
+        QVERIFY(!result.ok);
+        QCOMPARE(result.code, QStringLiteral("INTERNAL_ERROR"));
+        QVERIFY(query.exec(QStringLiteral("SELECT status FROM chargers WHERE id=1")));
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toString(), QStringLiteral("restarting"));
+        QVERIFY(query.exec(QStringLiteral("SELECT version FROM snapshot_meta WHERE id=1")));
+        QVERIFY(query.next());
+        QCOMPARE(query.value(0).toInt(), 0);
+    }
 };
 
 QTEST_MAIN(AdminServiceTest)

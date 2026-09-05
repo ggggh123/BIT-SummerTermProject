@@ -26,6 +26,7 @@ public:
     bool isSimulatorTokenValid(const QString &token) const;
     bool isMlTokenValid(const QString &token) const;
     int userIdForToken(const QString &token) const;
+    QString adminIdentityForToken(const QString &token) const;
 
 private:
     QString issueToken(const QString &username) const;
@@ -34,6 +35,6 @@ private:
 
     QSqlDatabase m_database;
     mutable QSet<QString> m_adminTokens;
+    mutable QHash<QString, QString> m_adminIdentities;
     mutable QHash<QString, int> m_userTokens;
 };
-

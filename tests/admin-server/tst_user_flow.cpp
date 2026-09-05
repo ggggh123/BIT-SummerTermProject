@@ -126,6 +126,9 @@ private slots:
                  QStringLiteral("charging"));
 
         QJsonObject stopData;
+        // 明确模拟已接收的 1 kWh/100 分遥测，停止本身不得凭空产生费用。
+        QSqlQuery sample(db.database());
+        QVERIFY(sample.exec(QStringLiteral("UPDATE orders SET energy_kwh=1, amount_fen=100")));
         QVERIFY(users.stop(userId, QJsonObject{{QStringLiteral("orderId"), orderId}}, &stopData).ok);
         QVERIFY(stopData.value(QStringLiteral("order")).toObject().value(QStringLiteral("endedAt")).isString());
 

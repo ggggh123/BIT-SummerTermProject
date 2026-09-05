@@ -66,3 +66,11 @@ add_executable(tst_telemetry_service
 target_include_directories(tst_telemetry_service PRIVATE ../../apps/admin-server/src)
 target_link_libraries(tst_telemetry_service PRIVATE Qt6::Test Qt6::Sql)
 add_test(NAME telemetry_service COMMAND tst_telemetry_service)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+foreach(zone IN ITEMS UTC Asia/Shanghai)
+    string(REPLACE "/" "_" zone_name "${zone}")
+    add_test(NAME server_tcp_p0_${zone_name}
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_tcp_p0.py $<TARGET_FILE:ev_admin_server>)
+    set_tests_properties(server_tcp_p0_${zone_name} PROPERTIES ENVIRONMENT "TZ=${zone}" TIMEOUT 90)
+endforeach()

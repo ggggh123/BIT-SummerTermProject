@@ -99,17 +99,51 @@ void ApiServer::readSocket(QTcpSocket *socket)
     }
 
     for (const QByteArray &frame : frames) {
-        ev::protocol::ResponseEnvelope response;
+        QByteArray payload;
         try {
             const ev::protocol::RequestEnvelope request = ev::protocol::parseRequest(frame);
-            response = handleRequest(request);
-            m_requestLogService->record(request.requestId, request.action, response);
+            payload = dispatch(request);
         } catch (const ev::protocol::EnvelopeError &error) {
-            response = fail(QString(), error.code(), error.message());
+            payload = ev::protocol::toJson(fail(QString(), error.code(), error.message()));
         }
-        const QByteArray payload = ev::protocol::toJson(response);
         socket->write(ev::protocol::encodeFrame(QByteArrayView(payload.constData(), payload.size())));
     }
+}
+
+QByteArray ApiServer::dispatch(const ev::protocol::RequestEnvelope &request) const
+{
+    QString actor;
+    bool mutation = false;
+    const QString &action = request.action;
+    if (action == ev::actions::UserUpdate || action == ev::actions::WalletRecharge
+        || action == ev::actions::ChargeReserve || action == ev::actions::ChargeStart
+        || action == ev::actions::ChargeStop || action == ev::actions::ChargeSettle
+        || action == ev::actions::OrderCancel) {
+        mutation = true;
+        if (m_authService->isUserTokenValid(request.token))
+            actor = QStringLiteral("user:%1").arg(m_authService->userIdForToken(request.token));
+    } else if (action == ev::actions::AdminStationCreate || action == ev::actions::AdminChargerRestart
+               || action == ev::actions::AdminUserSetStatus) {
+        mutation = true;
+        if (m_authService->isTokenValid(request.token))
+            actor = QStringLiteral("admin:") + m_authService->adminIdentityForToken(request.token);
+    } else if (action == ev::actions::TelemetryPush || action == ev::actions::SimulatorFaultSet
+               || action == ev::actions::SimulatorStatus) {
+        mutation = true;
+        if (m_authService->isSimulatorTokenValid(request.token)) actor = QStringLiteral("simulator");
+    } else if (action == ev::actions::ForecastPublish) {
+        mutation = true;
+        if (m_authService->isMlTokenValid(request.token)) actor = QStringLiteral("ml");
+    }
+    if (mutation) {
+        if (actor.isEmpty()) return ev::protocol::toJson(fail(request.requestId, QStringLiteral("AUTH_REQUIRED"), QStringLiteral("token is missing or invalid")));
+        return m_requestLogService->execute(request, actor, [this, &request] { return handleRequest(request); },
+                                            action == ev::actions::ForecastPublish);
+    }
+    const auto response = handleRequest(request);
+    const Result logged = m_requestLogService->record(request.requestId, request.action, response);
+    if (!logged.ok) return ev::protocol::toJson(fail(request.requestId, logged.code, logged.message));
+    return ev::protocol::toJson(response);
 }
 
 ev::protocol::ResponseEnvelope ApiServer::handleRequest(const ev::protocol::RequestEnvelope &request) const
@@ -273,7 +307,10 @@ ev::protocol::ResponseEnvelope ApiServer::ok(const QString &requestId, const QSt
 
 ev::protocol::ResponseEnvelope ApiServer::fail(const QString &requestId, const QString &code, const QString &message) const
 {
+    if (code == QStringLiteral("DB_ERROR") || code == QStringLiteral("INTERNAL_ERROR"))
+        return {requestId, false, QStringLiteral("INTERNAL_ERROR"), QStringLiteral("数据库操作失败"), QJsonObject{}};
+    if (code == QStringLiteral("DB_BUSY"))
+        return {requestId, false, code, QStringLiteral("数据库暂时忙，请重试"), QJsonObject{}};
     return {requestId, false, code, message, QJsonObject{}};
 }
-
 

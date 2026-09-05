@@ -1,4 +1,6 @@
 #include "services/AuthService.h"
+#include "core/BusinessTime.h"
+#include "db/SqlTransaction.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -43,6 +45,7 @@ LoginResult AuthService::login(const QString &username, const QString &password)
 
     const QString token = issueToken(username.trimmed());
     m_adminTokens.insert(token);
+    m_adminIdentities.insert(token, username.trimmed());
     return {true, QStringLiteral("OK"), QStringLiteral("login success"), token,
             QJsonObject{{QStringLiteral("token"), token}, {QStringLiteral("admin"), adminObject(username.trimmed())}}};
 }
@@ -52,6 +55,12 @@ LoginResult AuthService::loginUser(const QString &mobile) const
     const QString normalized = mobile.trimmed();
     if (!kMobilePattern.match(normalized).hasMatch()) {
         return {false, QStringLiteral("INVALID_PHONE"), QStringLiteral("手机号格式无效"), QString(), {}};
+    }
+
+    SqlTransaction transaction(m_database);
+    if (!transaction.transaction()) {
+        const Result error = databaseFailure(transaction.lastError());
+        return {false, error.code, error.message, QString(), {}};
     }
 
     QSqlQuery query(m_database);
@@ -70,13 +79,18 @@ LoginResult AuthService::loginUser(const QString &mobile) const
             "VALUES(?, ?, '', 0, 'active', ?)"));
         query.addBindValue(normalized);
         query.addBindValue(QStringLiteral("用户") + normalized.right(4));
-        query.addBindValue(QDateTime::currentDateTime().toString(Qt::ISODate));
+        query.addBindValue(BusinessTime::now());
         if (!query.exec()) {
             return {false, QStringLiteral("DB_ERROR"), query.lastError().text(), QString(), {}};
         }
         userId = query.lastInsertId().toInt();
     }
 
+    query.finish();
+    if (!transaction.commit()) {
+        const Result error = databaseFailure(transaction.lastError());
+        return {false, error.code, error.message, QString(), {}};
+    }
     const QString token = issueToken(normalized);
     m_userTokens.insert(token, userId);
     return {true, QStringLiteral("OK"), QStringLiteral("login success"), token,
@@ -112,6 +126,11 @@ bool AuthService::isMlTokenValid(const QString &token) const
 int AuthService::userIdForToken(const QString &token) const
 {
     return m_userTokens.value(token.trimmed(), 0);
+}
+
+QString AuthService::adminIdentityForToken(const QString &token) const
+{
+    return m_adminIdentities.value(token.trimmed());
 }
 
 QString AuthService::issueToken(const QString &username) const
@@ -159,4 +178,3 @@ QJsonObject AuthService::userObject(int userId) const
         {QStringLiteral("registeredAt"), query.value(6).toString()}
     };
 }
-

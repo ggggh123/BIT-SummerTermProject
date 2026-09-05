@@ -1,4 +1,6 @@
 #include "services/UserService.h"
+#include "core/BusinessTime.h"
+#include "db/SqlTransaction.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -11,7 +13,7 @@ namespace {
 
 QString nowIso()
 {
-    return QDateTime::currentDateTime().toString(Qt::ISODate);
+    return BusinessTime::now();
 }
 
 QJsonValue nullableText(const QString &value)
@@ -71,13 +73,16 @@ Result UserService::updateUser(int userId, const QJsonObject &payload, QJsonObje
     if (nickname.isEmpty()) {
         return Result::failure(QStringLiteral("INVALID_REQUEST"), QStringLiteral("nickname is required"));
     }
+    SqlTransaction database(m_database);
+    if (!database.transaction()) return databaseFailure(database.lastError());
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral("UPDATE users SET nickname=? WHERE id=?"));
     query.addBindValue(nickname);
     query.addBindValue(userId);
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
+    if (!database.commit()) return databaseFailure(database.lastError());
     return getUser(userId, responseData);
 }
 
@@ -87,6 +92,8 @@ Result UserService::recharge(int userId, const QJsonObject &payload, QJsonObject
     if (!isInteger(payload.value(QStringLiteral("amountFen")), &amountFen)) {
         return Result::failure(QStringLiteral("INVALID_REQUEST"), QStringLiteral("amountFen is invalid"));
     }
+    SqlTransaction database(m_database);
+    if (!database.transaction()) return databaseFailure(database.lastError());
     if (userFrozen(userId)) {
         return Result::failure(QStringLiteral("USER_FROZEN"), QStringLiteral("user is frozen"));
     }
@@ -95,17 +102,19 @@ Result UserService::recharge(int userId, const QJsonObject &payload, QJsonObject
     query.addBindValue(amountFen);
     query.addBindValue(userId);
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     query.prepare(QStringLiteral("SELECT balance_fen FROM users WHERE id=?"));
     query.addBindValue(userId);
     if (!query.exec() || !query.next()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     if (responseData) {
         responseData->insert(QStringLiteral("userId"), userId);
         responseData->insert(QStringLiteral("balanceFen"), query.value(0).toLongLong());
     }
+    query.finish();
+    if (!database.commit()) return databaseFailure(database.lastError());
     return Result::success();
 }
 
@@ -126,7 +135,7 @@ Result UserService::stationList(const QJsonObject &payload, QJsonObject *respons
     QJsonArray stations;
     QSqlQuery query(m_database);
     if (!query.exec(QStringLiteral("SELECT id FROM stations ORDER BY id"))) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     while (query.next()) {
         stations.append(stationObject(query.value(0).toInt(), hasLatitude, latitude, longitude));
@@ -153,7 +162,7 @@ Result UserService::stationDetail(const QJsonObject &payload, QJsonObject *respo
     query.prepare(QStringLiteral("SELECT id FROM chargers WHERE station_id=? ORDER BY CAST(code AS INTEGER)"));
     query.addBindValue(stationId);
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     while (query.next()) {
         chargers.append(chargerObject(query.value(0).toInt()));
@@ -198,7 +207,7 @@ Result UserService::orderList(int userId, const QJsonObject &payload, QJsonObjec
     countQuery.prepare(QStringLiteral("SELECT COUNT(*) FROM orders WHERE user_id=?"));
     countQuery.addBindValue(userId);
     if (!countQuery.exec() || !countQuery.next()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), countQuery.lastError().text());
+        return databaseFailure(countQuery.lastError());
     }
 
     QSqlQuery query(m_database);
@@ -207,7 +216,7 @@ Result UserService::orderList(int userId, const QJsonObject &payload, QJsonObjec
     query.addBindValue(limit);
     query.addBindValue(offset);
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     QJsonArray items;
     while (query.next()) {
@@ -227,6 +236,8 @@ Result UserService::reserve(int userId, const QJsonObject &payload, QJsonObject 
     if (!idResult.ok) {
         return idResult;
     }
+    SqlTransaction database(m_database);
+    if (!database.transaction()) return databaseFailure(database.lastError());
     if (userFrozen(userId)) {
         return Result::failure(QStringLiteral("USER_FROZEN"), QStringLiteral("user is frozen"));
     }
@@ -234,19 +245,17 @@ Result UserService::reserve(int userId, const QJsonObject &payload, QJsonObject 
         return Result::failure(QStringLiteral("ACTIVE_ORDER_EXISTS"), QStringLiteral("active order exists"));
     }
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral("SELECT status FROM chargers WHERE id=?"));
+    query.prepare(QStringLiteral("SELECT status FROM chargers WHERE id=? AND NOT EXISTS (SELECT 1 FROM orders WHERE charger_id=chargers.id AND status IN ('reserved','charging'))"));
     query.addBindValue(chargerId);
-    if (!query.exec() || !query.next() || query.value(0).toString() != QStringLiteral("idle")) {
+    if (!query.exec()) return databaseFailure(query.lastError());
+    if (!query.next() || query.value(0).toString() != QStringLiteral("idle")) {
         return Result::failure(QStringLiteral("CHARGER_NOT_AVAILABLE"), QStringLiteral("charger is not available"));
-    }
-    QSqlDatabase database = m_database;
-    if (!database.transaction()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), database.lastError().text());
     }
     query.prepare(QStringLiteral("UPDATE chargers SET status='reserved', updated_at=? WHERE id=? AND status='idle'"));
     query.addBindValue(nowIso());
     query.addBindValue(chargerId);
-    if (!query.exec() || query.numRowsAffected() != 1) {
+    if (!query.exec()) return databaseFailure(query.lastError());
+    if (query.numRowsAffected() != 1) {
         database.rollback();
         return Result::failure(QStringLiteral("CHARGER_NOT_AVAILABLE"), QStringLiteral("charger is not available"));
     }
@@ -256,10 +265,10 @@ Result UserService::reserve(int userId, const QJsonObject &payload, QJsonObject 
     query.addBindValue(nowIso());
     if (!query.exec()) {
         database.rollback();
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     const int orderId = query.lastInsertId().toInt();
-    database.commit();
+    if (!database.commit()) return databaseFailure(database.lastError());
     if (responseData) {
         responseData->insert(QStringLiteral("order"), orderObject(orderId));
     }
@@ -273,6 +282,8 @@ Result UserService::start(int userId, const QJsonObject &payload, QJsonObject *r
     if (!idResult.ok) {
         return idResult;
     }
+    SqlTransaction database(m_database);
+    if (!database.transaction()) return databaseFailure(database.lastError());
     if (orderOwner(orderId) == 0) {
         return Result::failure(QStringLiteral("ENTITY_NOT_FOUND"), QStringLiteral("order not found"));
     }
@@ -283,9 +294,10 @@ Result UserService::start(int userId, const QJsonObject &payload, QJsonObject *r
         return Result::failure(QStringLiteral("USER_FROZEN"), QStringLiteral("user is frozen"));
     }
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral("SELECT charger_id, status FROM orders WHERE id=?"));
+    query.prepare(QStringLiteral("SELECT o.charger_id, o.status, c.status FROM orders o JOIN chargers c ON c.id=o.charger_id WHERE o.id=?"));
     query.addBindValue(orderId);
-    if (!query.exec() || !query.next() || query.value(1).toString() != QStringLiteral("reserved")) {
+    if (!query.exec()) return databaseFailure(query.lastError());
+    if (!query.next() || query.value(1).toString() != QStringLiteral("reserved") || query.value(2).toString() != QStringLiteral("reserved")) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("order is not reserved"));
     }
     const int chargerId = query.value(0).toInt();
@@ -293,12 +305,13 @@ Result UserService::start(int userId, const QJsonObject &payload, QJsonObject *r
     query.addBindValue(nowIso());
     query.addBindValue(orderId);
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     query.prepare(QStringLiteral("UPDATE chargers SET status='charging', updated_at=? WHERE id=?"));
     query.addBindValue(nowIso());
     query.addBindValue(chargerId);
-    query.exec();
+    if (!query.exec()) return databaseFailure(query.lastError());
+    if (!database.commit()) return databaseFailure(database.lastError());
     if (responseData) {
         responseData->insert(QStringLiteral("order"), orderObject(orderId));
     }
@@ -312,6 +325,8 @@ Result UserService::stop(int userId, const QJsonObject &payload, QJsonObject *re
     if (!idResult.ok) {
         return idResult;
     }
+    SqlTransaction database(m_database);
+    if (!database.transaction()) return databaseFailure(database.lastError());
     if (orderOwner(orderId) == 0) {
         return Result::failure(QStringLiteral("ENTITY_NOT_FOUND"), QStringLiteral("order not found"));
     }
@@ -321,17 +336,17 @@ Result UserService::stop(int userId, const QJsonObject &payload, QJsonObject *re
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral("SELECT status, ended_at, started_at, charger_id FROM orders WHERE id=?"));
     query.addBindValue(orderId);
-    if (!query.exec() || !query.next() || query.value(0).toString() != QStringLiteral("charging") || !query.value(1).toString().isEmpty()) {
+    if (!query.exec()) return databaseFailure(query.lastError());
+    if (!query.next() || query.value(0).toString() != QStringLiteral("charging") || !query.value(1).toString().isEmpty()) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("order is not active charging"));
     }
-    query.prepare(QStringLiteral("UPDATE orders SET ended_at=?, energy_kwh=?, amount_fen=? WHERE id=?"));
+    query.prepare(QStringLiteral("UPDATE orders SET ended_at=? WHERE id=?"));
     query.addBindValue(nowIso());
-    query.addBindValue(1.0);
-    query.addBindValue(100);
     query.addBindValue(orderId);
     if (!query.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
+    if (!database.commit()) return databaseFailure(database.lastError());
     if (responseData) {
         responseData->insert(QStringLiteral("order"), orderObject(orderId));
     }
@@ -345,6 +360,8 @@ Result UserService::settle(int userId, const QJsonObject &payload, QJsonObject *
     if (!idResult.ok) {
         return idResult;
     }
+    SqlTransaction database(m_database);
+    if (!database.transaction()) return databaseFailure(database.lastError());
     if (orderOwner(orderId) == 0) {
         return Result::failure(QStringLiteral("ENTITY_NOT_FOUND"), QStringLiteral("order not found"));
     }
@@ -352,38 +369,42 @@ Result UserService::settle(int userId, const QJsonObject &payload, QJsonObject *
         return Result::failure(QStringLiteral("FORBIDDEN"), QStringLiteral("order belongs to another user"));
     }
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral("SELECT status, ended_at, amount_fen, charger_id FROM orders WHERE id=?"));
+    query.prepare(QStringLiteral("SELECT status, ended_at, amount_fen, charger_id, started_at FROM orders WHERE id=?"));
     query.addBindValue(orderId);
-    if (!query.exec() || !query.next() || query.value(0).toString() != QStringLiteral("charging") || query.value(1).toString().isEmpty()) {
+    if (!query.exec()) return databaseFailure(query.lastError());
+    if (!query.next() || query.value(0).toString() != QStringLiteral("charging") || query.value(1).toString().isEmpty()) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("order is not stopped"));
     }
     const qint64 amountFen = query.value(2).toLongLong();
     const int chargerId = query.value(3).toInt();
+    const qint64 duration = BusinessTime::elapsed(query.value(4).toString(), query.value(1).toString());
     query.prepare(QStringLiteral("SELECT balance_fen FROM users WHERE id=?"));
     query.addBindValue(userId);
-    query.exec();
-    query.next();
+    if (!query.exec() || !query.next()) return databaseFailure(query.lastError());
     if (query.value(0).toLongLong() < amountFen) {
         return Result::failure(QStringLiteral("INSUFFICIENT_BALANCE"), QStringLiteral("balance is insufficient"));
     }
     query.prepare(QStringLiteral("UPDATE users SET balance_fen=balance_fen-? WHERE id=?"));
     query.addBindValue(amountFen);
     query.addBindValue(userId);
-    query.exec();
+    if (!query.exec()) return databaseFailure(query.lastError());
     query.prepare(QStringLiteral("UPDATE orders SET status='completed' WHERE id=?"));
     query.addBindValue(orderId);
-    query.exec();
-    query.prepare(QStringLiteral("UPDATE chargers SET status='idle', charge_count=charge_count+1, total_duration_sec=total_duration_sec+3600, updated_at=? WHERE id=? AND status='charging'"));
+    if (!query.exec()) return databaseFailure(query.lastError());
+    query.prepare(QStringLiteral("UPDATE chargers SET status=CASE WHEN status='charging' THEN 'idle' ELSE status END, charge_count=charge_count+1, total_duration_sec=total_duration_sec+?, updated_at=? WHERE id=?"));
+    query.addBindValue(duration);
     query.addBindValue(nowIso());
     query.addBindValue(chargerId);
-    query.exec();
+    if (!query.exec()) return databaseFailure(query.lastError());
     query.prepare(QStringLiteral("SELECT balance_fen FROM users WHERE id=?"));
     query.addBindValue(userId);
-    query.exec();
-    query.next();
+    if (!query.exec() || !query.next()) return databaseFailure(query.lastError());
+    const qint64 balance = query.value(0).toLongLong();
+    query.finish();
+    if (!database.commit()) return databaseFailure(database.lastError());
     if (responseData) {
         responseData->insert(QStringLiteral("order"), orderObject(orderId));
-        responseData->insert(QStringLiteral("balanceFen"), query.value(0).toLongLong());
+        responseData->insert(QStringLiteral("balanceFen"), balance);
     }
     return Result::success();
 }
@@ -395,6 +416,8 @@ Result UserService::cancel(int userId, const QJsonObject &payload, QJsonObject *
     if (!idResult.ok) {
         return idResult;
     }
+    SqlTransaction database(m_database);
+    if (!database.transaction()) return databaseFailure(database.lastError());
     if (orderOwner(orderId) == 0) {
         return Result::failure(QStringLiteral("ENTITY_NOT_FOUND"), QStringLiteral("order not found"));
     }
@@ -402,20 +425,22 @@ Result UserService::cancel(int userId, const QJsonObject &payload, QJsonObject *
         return Result::failure(QStringLiteral("FORBIDDEN"), QStringLiteral("order belongs to another user"));
     }
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral("SELECT charger_id, status FROM orders WHERE id=?"));
+    query.prepare(QStringLiteral("SELECT o.charger_id, o.status, c.status FROM orders o JOIN chargers c ON c.id=o.charger_id WHERE o.id=?"));
     query.addBindValue(orderId);
-    if (!query.exec() || !query.next() || query.value(1).toString() != QStringLiteral("reserved")) {
+    if (!query.exec()) return databaseFailure(query.lastError());
+    if (!query.next() || query.value(1).toString() != QStringLiteral("reserved") || query.value(2).toString() != QStringLiteral("reserved")) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("order is not reserved"));
     }
     const int chargerId = query.value(0).toInt();
     query.prepare(QStringLiteral("UPDATE orders SET status='cancelled', ended_at=? WHERE id=?"));
     query.addBindValue(nowIso());
     query.addBindValue(orderId);
-    query.exec();
+    if (!query.exec()) return databaseFailure(query.lastError());
     query.prepare(QStringLiteral("UPDATE chargers SET status='idle', updated_at=? WHERE id=?"));
     query.addBindValue(nowIso());
     query.addBindValue(chargerId);
-    query.exec();
+    if (!query.exec()) return databaseFailure(query.lastError());
+    if (!database.commit()) return databaseFailure(database.lastError());
     if (responseData) {
         responseData->insert(QStringLiteral("order"), orderObject(orderId));
     }
@@ -507,7 +532,7 @@ QJsonObject UserService::orderObject(int orderId) const
             {QStringLiteral("endedAt"), nullableText(query.value(9).toString())},
             {QStringLiteral("energyKwh"), query.value(10).toDouble()},
             {QStringLiteral("amountFen"), query.value(11).toLongLong()},
-            {QStringLiteral("elapsedSec"), query.value(9).toString().isEmpty() ? 0 : 3600}};
+            {QStringLiteral("elapsedSec"), BusinessTime::elapsed(query.value(8).toString(), query.value(9).toString())}};
 }
 
 Result UserService::requirePositiveId(const QJsonObject &payload, const QString &field, int *value) const

@@ -1,4 +1,6 @@
 #include "services/TelemetryService.h"
+#include "core/BusinessTime.h"
+#include "db/SqlTransaction.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -11,7 +13,7 @@ namespace {
 
 QString nowIso()
 {
-    return QDateTime::currentDateTime().toString(Qt::ISODate);
+    return BusinessTime::now();
 }
 
 QJsonValue nullableText(const QString &value)
@@ -89,7 +91,7 @@ Result TelemetryService::telemetryPush(const QJsonObject &payload, QJsonObject *
         return Result::failure(QStringLiteral("INVALID_REQUEST"), QStringLiteral("telemetry payload is invalid"));
     }
     const QString lastEvent = lastDeviceEventAt(chargerId);
-    if (!lastEvent.isEmpty() && recordedAt <= lastEvent) {
+    if (!lastEvent.isEmpty() && QDateTime::fromString(recordedAt, Qt::ISODate) <= QDateTime::fromString(lastEvent, Qt::ISODate)) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("device event timestamp is stale"));
     }
 
@@ -104,30 +106,31 @@ Result TelemetryService::telemetryPush(const QJsonObject &payload, QJsonObject *
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("charger status mismatch"));
     }
 
-    QSqlDatabase database = m_database;
+    SqlTransaction database(m_database);
     if (!database.transaction()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     if (!insertTelemetry(database, chargerId, recordedAt, powerKw, energyIncrement, QStringLiteral("telemetry"))) {
         database.rollback();
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
 
     const int orderId = activeOrderForCharger(chargerId);
     if (currentStatus == QStringLiteral("charging") && orderId > 0) {
-        const QString sql = QStringLiteral(
-            "UPDATE orders SET energy_kwh=energy_kwh+%1, "
-            "amount_fen=CAST((energy_kwh+%1) * (SELECT s.price_fen_per_kwh FROM chargers c JOIN stations s ON s.id=c.station_id WHERE c.id=orders.charger_id) + 0.5 AS INTEGER) "
-            "WHERE id=%2 AND status='charging' AND ended_at IS NULL")
-            .arg(QString::number(energyIncrement, 'f', 6))
-            .arg(orderId);
-        if (!query.exec(sql)) {
+        query.prepare(QStringLiteral(
+            "UPDATE orders SET energy_kwh=energy_kwh+?, "
+            "amount_fen=CAST((energy_kwh+?) * (SELECT s.price_fen_per_kwh FROM chargers c JOIN stations s ON s.id=c.station_id WHERE c.id=orders.charger_id) + 0.5 AS INTEGER) "
+            "WHERE id=? AND status='charging' AND ended_at IS NULL"));
+        query.addBindValue(energyIncrement);
+        query.addBindValue(energyIncrement);
+        query.addBindValue(orderId);
+        if (!query.exec()) {
             database.rollback();
-            return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+            return databaseFailure(query.lastError());
         }
     }
     if (!database.commit()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
 
     if (responseData) {
@@ -148,7 +151,7 @@ Result TelemetryService::faultSet(const QJsonObject &payload, QJsonObject *respo
     }
     const bool fault = payload.value(QStringLiteral("fault")).toBool();
     const QString lastEvent = lastDeviceEventAt(chargerId);
-    if (!lastEvent.isEmpty() && recordedAt <= lastEvent) {
+    if (!lastEvent.isEmpty() && QDateTime::fromString(recordedAt, Qt::ISODate) <= QDateTime::fromString(lastEvent, Qt::ISODate)) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("device event timestamp is stale"));
     }
 
@@ -159,17 +162,17 @@ Result TelemetryService::faultSet(const QJsonObject &payload, QJsonObject *respo
         return Result::failure(QStringLiteral("CHARGER_NOT_AVAILABLE"), QStringLiteral("charger not found"));
     }
     const QString currentStatus = query.value(0).toString();
-    if ((fault && currentStatus == QStringLiteral("fault")) || (!fault && currentStatus != QStringLiteral("fault"))) {
+    if ((fault && currentStatus != QStringLiteral("idle") && currentStatus != QStringLiteral("reserved") && currentStatus != QStringLiteral("charging")) || (!fault && currentStatus != QStringLiteral("fault"))) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("fault intent does not match charger state"));
     }
 
-    QSqlDatabase database = m_database;
+    SqlTransaction database(m_database);
     if (!database.transaction()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     if (!insertTelemetry(database, chargerId, recordedAt, 0.0, 0.0, QStringLiteral("fault"))) {
         database.rollback();
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     const int orderId = activeOrderForCharger(chargerId);
     if (fault) {
@@ -179,15 +182,15 @@ Result TelemetryService::faultSet(const QJsonObject &payload, QJsonObject *respo
             query.addBindValue(orderId);
             if (!query.exec()) {
                 database.rollback();
-                return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+                return databaseFailure(query.lastError());
             }
         } else if (currentStatus == QStringLiteral("charging") && orderId > 0) {
-            query.prepare(QStringLiteral("UPDATE orders SET ended_at=COALESCE(ended_at, ?) WHERE id=? AND status='charging'"));
+            query.prepare(QStringLiteral("UPDATE orders SET ended_at=?, amount_fen=CAST(energy_kwh * (SELECT s.price_fen_per_kwh FROM chargers c JOIN stations s ON s.id=c.station_id WHERE c.id=orders.charger_id) + 0.5 AS INTEGER) WHERE id=? AND status='charging' AND ended_at IS NULL"));
             query.addBindValue(recordedAt);
             query.addBindValue(orderId);
             if (!query.exec()) {
                 database.rollback();
-                return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+                return databaseFailure(query.lastError());
             }
         }
         query.prepare(QStringLiteral("UPDATE chargers SET status='fault', updated_at=? WHERE id=?"));
@@ -195,15 +198,15 @@ Result TelemetryService::faultSet(const QJsonObject &payload, QJsonObject *respo
         query.addBindValue(chargerId);
         if (!query.exec()) {
             database.rollback();
-            return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+            return databaseFailure(query.lastError());
         }
     }
     if (!insertEvent(database, QStringLiteral("simulator.fault_set"), QStringLiteral("charger"), chargerId, fault ? QStringLiteral("fault") : QStringLiteral("recover intent"))) {
         database.rollback();
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     if (!database.commit()) {
-        return Result::failure(QStringLiteral("DB_BUSY"), database.lastError().text());
+        return databaseFailure(database.lastError());
     }
     if (responseData) {
         responseData->insert(QStringLiteral("charger"), chargerObject(chargerId));
@@ -221,16 +224,22 @@ Result TelemetryService::simulatorStatus(const QJsonObject &payload, QJsonObject
         || !isInteger(payload.value(QStringLiteral("eventCount")), &eventCount, true)) {
         return Result::failure(QStringLiteral("INVALID_REQUEST"), QStringLiteral("simulator status payload is invalid"));
     }
-    insertEvent(m_database, QStringLiteral("simulator.status"), QStringLiteral("simulator"), 0, state);
+    SqlTransaction database(m_database);
+    if (!database.transaction()) return databaseFailure(database.lastError());
+    if (!insertEvent(m_database, QStringLiteral("simulator.status"), QStringLiteral("simulator"), 0, state)) {
+        return databaseFailure(m_database.lastError());
+    }
 
     QSqlQuery query(m_database);
     if (!query.exec(QStringLiteral("SELECT id FROM chargers ORDER BY CAST(code AS INTEGER)"))) {
-        return Result::failure(QStringLiteral("DB_BUSY"), query.lastError().text());
+        return databaseFailure(query.lastError());
     }
     QJsonArray chargers;
     while (query.next()) {
         chargers.append(chargerObject(query.value(0).toInt()));
     }
+    query.finish();
+    if (!database.commit()) return databaseFailure(database.lastError());
     if (responseData) {
         responseData->insert(QStringLiteral("acceptedAt"), nowIso());
         responseData->insert(QStringLiteral("chargers"), chargers);
@@ -280,7 +289,7 @@ QJsonObject TelemetryService::orderObject(int orderId) const
             {QStringLiteral("endedAt"), nullableText(query.value(9).toString())},
             {QStringLiteral("energyKwh"), query.value(10).toDouble()},
             {QStringLiteral("amountFen"), query.value(11).toLongLong()},
-            {QStringLiteral("elapsedSec"), query.value(9).toString().isEmpty() ? 0 : 3600}};
+            {QStringLiteral("elapsedSec"), BusinessTime::elapsed(query.value(8).toString(), query.value(9).toString())}};
 }
 
 Result TelemetryService::requirePositiveId(const QJsonObject &payload, const QString &field, int *value) const
@@ -307,7 +316,7 @@ bool TelemetryService::validTimestamp(const QString &value) const
 QString TelemetryService::lastDeviceEventAt(int chargerId) const
 {
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral("SELECT MAX(recorded_at) FROM telemetry WHERE charger_id=?"));
+    query.prepare(QStringLiteral("SELECT recorded_at FROM telemetry WHERE charger_id=? ORDER BY julianday(recorded_at) DESC LIMIT 1"));
     query.addBindValue(chargerId);
     return query.exec() && query.next() ? query.value(0).toString() : QString();
 }
