@@ -1,8 +1,9 @@
 #include "services/DashboardService.h"
 
 #include <QSqlQuery>
-#include <QDate>
+#include <QDateTime>
 #include <QJsonArray>
+#include <QTimeZone>
 #include <QVariant>
 #include <QtGlobal>
 
@@ -13,7 +14,7 @@ DashboardService::DashboardService(QSqlDatabase database)
 {
 }
 
-QJsonObject DashboardService::summary(int rangeDays) const
+QJsonObject DashboardService::summary(int rangeDays, const QDateTime &now) const
 {
     const int idle = countChargersByStatus(QStringLiteral("idle"));
     const int reserved = countChargersByStatus(QStringLiteral("reserved"));
@@ -21,7 +22,9 @@ QJsonObject DashboardService::summary(int rangeDays) const
     const int fault = countChargersByStatus(QStringLiteral("fault"));
     const int restarting = countChargersByStatus(QStringLiteral("restarting"));
     const qint64 totalRevenue = revenueFen();
-    const QDate today = QDate::currentDate();
+    const QDate today = now.toTimeZone(QTimeZone(QByteArrayLiteral("Asia/Shanghai"))).date();
+    const QString todayText = today.toString(Qt::ISODate);
+    const QString monthText = today.toString(QStringLiteral("yyyy-MM"));
     QJsonArray trend;
     for (int i = rangeDays - 1; i >= 0; --i) {
         const QString date = today.addDays(-i).toString(Qt::ISODate);
@@ -31,8 +34,8 @@ QJsonObject DashboardService::summary(int rangeDays) const
 
     return {
         {QStringLiteral("revenue"), QJsonObject{
-            {QStringLiteral("todayRevenueFen"), revenueFenForDate(today.toString(Qt::ISODate))},
-            {QStringLiteral("monthRevenueFen"), totalRevenue},
+            {QStringLiteral("todayRevenueFen"), revenueFenForDate(todayText)},
+            {QStringLiteral("monthRevenueFen"), revenueFenForMonth(monthText)},
             {QStringLiteral("totalRevenueFen"), totalRevenue}}},
         {QStringLiteral("statusCounts"), QJsonObject{
             {QStringLiteral("idle"), idle},
@@ -42,7 +45,7 @@ QJsonObject DashboardService::summary(int rangeDays) const
             {QStringLiteral("restarting"), restarting},
             {QStringLiteral("total"), idle + reserved + charging + fault + restarting}}},
         {QStringLiteral("trend"), trend},
-        {QStringLiteral("alerts"), QJsonArray{}}
+        {QStringLiteral("alerts"), activeForecastAlerts()}
     };
 }
 
@@ -181,3 +184,46 @@ qint64 DashboardService::revenueFenForDate(const QString &date) const
     return query.value(0).toLongLong();
 }
 
+qint64 DashboardService::revenueFenForMonth(const QString &month) const
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT COALESCE(SUM(amount_fen), 0) FROM orders "
+        "WHERE status='completed' AND substr(ended_at, 1, 7)=?"));
+    query.addBindValue(month);
+    if (!query.exec() || !query.next()) {
+        return 0;
+    }
+    return query.value(0).toLongLong();
+}
+
+QJsonArray DashboardService::activeForecastAlerts() const
+{
+    QJsonArray alerts;
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "SELECT f.station_id, s.name, f.forecast_at, f.congestion_level, "
+        "f.predicted_load_kw, f.predicted_busy_count, f.predicted_idle_count, f.is_peak "
+        "FROM forecasts f "
+        "JOIN forecast_runs r ON r.run_id=f.run_id "
+        "JOIN stations s ON s.id=f.station_id "
+        "WHERE r.status='active' AND (f.congestion_level='high' OR f.is_peak=1) "
+        "ORDER BY f.forecast_at, f.station_id"));
+    if (!query.exec()) {
+        return alerts;
+    }
+
+    while (query.next()) {
+        alerts.append(QJsonObject{
+            {QStringLiteral("stationId"), query.value(0).toInt()},
+            {QStringLiteral("stationName"), query.value(1).toString()},
+            {QStringLiteral("forecastAt"), query.value(2).toString()},
+            {QStringLiteral("congestionLevel"), query.value(3).toString()},
+            {QStringLiteral("predictedLoadKw"), query.value(4).toDouble()},
+            {QStringLiteral("predictedBusyCount"), query.value(5).toInt()},
+            {QStringLiteral("predictedIdleCount"), query.value(6).toInt()},
+            {QStringLiteral("isPeak"), query.value(7).toInt() == 1}
+        });
+    }
+    return alerts;
+}

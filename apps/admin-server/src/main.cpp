@@ -11,22 +11,16 @@
 
 namespace {
 
-bool hasServiceArgument(int argc, char *argv[])
+bool isHeadlessRequested(int argc, char *argv[])
 {
-    const QStringList serviceOptions = {
+    const QStringList headlessOptions = {
         QStringLiteral("--server"),
-        QStringLiteral("--no-gui"),
-        QStringLiteral("--db"),
-        QStringLiteral("--host"),
-        QStringLiteral("--port"),
-        QStringLiteral("--snapshot")
+        QStringLiteral("--no-gui")
     };
 
     for (int i = 1; i < argc; ++i) {
         const QString argument = QString::fromLocal8Bit(argv[i]);
-        if (serviceOptions.contains(argument) || argument.startsWith(QStringLiteral("--db="))
-            || argument.startsWith(QStringLiteral("--host=")) || argument.startsWith(QStringLiteral("--port="))
-            || argument.startsWith(QStringLiteral("--snapshot="))) {
+        if (headlessOptions.contains(argument)) {
             return true;
         }
     }
@@ -57,12 +51,23 @@ AppContext::Options optionsFromParser(const QCommandLineParser &parser)
     return options;
 }
 
+void printStartup(const QString &mode,
+                  const AppContext &context,
+                  const AppContext::Options &options)
+{
+    QTextStream output(stdout);
+    output << QStringLiteral("ev_admin_server mode=") << mode
+           << QStringLiteral(" listening on ") << context.host() << QStringLiteral(":") << context.port()
+           << QStringLiteral(", db=") << context.databasePath()
+           << QStringLiteral(", snapshot=") << options.snapshotPath << Qt::endl;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
 {
-    const bool serviceMode = hasServiceArgument(argc, argv);
-    if (serviceMode) {
+    const bool headless = isHeadlessRequested(argc, argv);
+    if (headless) {
         QCoreApplication app(argc, argv);
         QCoreApplication::setApplicationName(QStringLiteral("ChargingPlatformServer"));
         QCoreApplication::setOrganizationName(QStringLiteral("NeusoftTraining"));
@@ -71,18 +76,16 @@ int main(int argc, char *argv[])
         configureParser(&parser);
         parser.process(app);
 
+        const AppContext::Options options = optionsFromParser(parser);
         AppContext context;
-        const Result initResult = context.initialize(optionsFromParser(parser));
-        QTextStream output(stdout);
+        const Result initResult = context.initialize(options);
         QTextStream error(stderr);
         if (!initResult.ok) {
             error << QStringLiteral("启动失败：") << initResult.message << Qt::endl;
             return 1;
         }
 
-        output << QStringLiteral("ev_admin_server listening on ")
-               << context.host() << QStringLiteral(":") << context.port()
-               << QStringLiteral(", db=") << context.databasePath() << Qt::endl;
+        printStartup(QStringLiteral("headless"), context, options);
         return app.exec();
     }
 
@@ -90,12 +93,19 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName(QStringLiteral("ChargingPlatformServer"));
     QApplication::setOrganizationName(QStringLiteral("NeusoftTraining"));
 
+    QCommandLineParser parser;
+    configureParser(&parser);
+    parser.process(app);
+
+    const AppContext::Options options = optionsFromParser(parser);
     AppContext context;
-    const Result initResult = context.initialize();
+    const Result initResult = context.initialize(options);
     if (!initResult.ok) {
         QMessageBox::critical(nullptr, QStringLiteral("启动失败"), initResult.message);
         return 1;
     }
+
+    printStartup(QStringLiteral("gui"), context, options);
 
     LoginDialog login(context.authService());
     if (login.exec() != QDialog::Accepted) {
@@ -106,4 +116,3 @@ int main(int argc, char *argv[])
     window.show();
     return app.exec();
 }
-

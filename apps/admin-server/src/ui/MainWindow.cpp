@@ -13,12 +13,15 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <utility>
 
 #ifdef EV_HAS_QT_CHARTS
 #include <QtCharts/QChart>
@@ -48,10 +51,17 @@ QTableWidget *makeTable(const QStringList &headers)
 
 void fillTable(QTableWidget *table, const QList<QStringList> &rows)
 {
+    QString selectedKey;
+    if (table->currentRow() >= 0 && table->item(table->currentRow(), 0)) {
+        selectedKey = table->item(table->currentRow(), 0)->text();
+    }
     table->setRowCount(rows.size());
     for (int row = 0; row < rows.size(); ++row) {
         for (int column = 0; column < table->columnCount() && column < rows[row].size(); ++column) {
             table->setItem(row, column, new QTableWidgetItem(rows[row][column]));
+        }
+        if (!selectedKey.isEmpty() && !rows[row].isEmpty() && rows[row].first() == selectedKey) {
+            table->selectRow(row);
         }
     }
 }
@@ -74,21 +84,29 @@ MainWindow::MainWindow(AppContext *context, QWidget *parent)
     setWindowTitle(QStringLiteral("东软电动汽车充电桩应用管理平台 - 管理端"));
     resize(1180, 720);
 
-    auto *tabs = new QTabWidget;
-    tabs->addTab(createDashboardPage(), QStringLiteral("销售业绩"));
-    tabs->addTab(createPileStatusPage(), QStringLiteral("电桩状态"));
-    tabs->addTab(createChargerManagementPage(), QStringLiteral("充电桩管理"));
-    tabs->addTab(createStationManagementPage(), QStringLiteral("充电站管理"));
-    tabs->addTab(createUserManagementPage(), QStringLiteral("用户管理"));
-    tabs->addTab(createPlaceholderTablePage(
+    m_tabs = new QTabWidget;
+    m_tabs->setObjectName(QStringLiteral("adminTabs"));
+    m_tabs->addTab(createDashboardPage(), QStringLiteral("销售业绩"));
+    m_tabs->addTab(createPileStatusPage(), QStringLiteral("电桩状态"));
+    m_tabs->addTab(createChargerManagementPage(), QStringLiteral("充电桩管理"));
+    m_tabs->addTab(createStationManagementPage(), QStringLiteral("充电站管理"));
+    m_tabs->addTab(createUserManagementPage(), QStringLiteral("用户管理"));
+    m_tabs->addTab(createPlaceholderTablePage(
                      {QStringLiteral("项目"), QStringLiteral("值")},
                      {{QStringLiteral("监听地址"), QStringLiteral("%1:%2").arg(m_context->host()).arg(m_context->port())},
                       {QStringLiteral("数据库"), m_context->databasePath()}}),
                  QStringLiteral("接口服务"));
-    tabs->addTab(createRequestLogPage(), QStringLiteral("请求日志"));
-    tabs->addTab(createHealthPage(), QStringLiteral("系统健康"));
+    m_tabs->addTab(createRequestLogPage(), QStringLiteral("请求日志"));
+    m_tabs->addTab(createHealthPage(), QStringLiteral("系统健康"));
 
-    setCentralWidget(tabs);
+    setCentralWidget(m_tabs);
+    connect(m_tabs, &QTabWidget::currentChanged, this, [this]() {
+        refreshCurrentPage();
+    });
+    m_refreshTimer = new QTimer(this);
+    m_refreshTimer->setInterval(1000);
+    connect(m_refreshTimer, &QTimer::timeout, this, &MainWindow::refreshCurrentPage);
+    m_refreshTimer->start();
 }
 
 QWidget *MainWindow::createDashboardPage()
@@ -102,6 +120,10 @@ QWidget *MainWindow::createDashboardPage()
     auto *month = metricLabel(QStringLiteral("本月营收"), QString());
     auto *total = metricLabel(QStringLiteral("总营收"), QString());
     auto *trend = makeTable({QStringLiteral("日期"), QStringLiteral("营收")});
+    today->setObjectName(QStringLiteral("todayRevenueMetric"));
+    month->setObjectName(QStringLiteral("monthRevenueMetric"));
+    total->setObjectName(QStringLiteral("totalRevenueMetric"));
+    trend->setObjectName(QStringLiteral("revenueTrendTable"));
 #ifdef EV_HAS_QT_CHARTS
     auto *series = new QLineSeries;
     auto *chart = new QChart;
@@ -165,20 +187,19 @@ QWidget *MainWindow::createDashboardPage()
     layout->addWidget(chartView);
 #endif
     layout->addWidget(trend);
+    registerPageRefresh(page, refresh);
     refresh();
     return page;
 }
 
 QWidget *MainWindow::createPileStatusPage()
 {
-    const QJsonObject summary = m_context->dashboardService()->summary();
-    const QJsonObject status = summary.value(QStringLiteral("statusCounts")).toObject();
     auto *page = new QWidget;
     auto *layout = new QVBoxLayout(page);
     auto *summaryTable = makeTable({QStringLiteral("状态"), QStringLiteral("数量"), QStringLiteral("占比")});
     auto *detailTable = makeTable({QStringLiteral("桩ID"), QStringLiteral("编号"), QStringLiteral("所属电站"), QStringLiteral("类型"), QStringLiteral("功率(kW)"), QStringLiteral("状态"), QStringLiteral("累计次数"), QStringLiteral("累计时长(s)")});
-    QList<QStringList> rows;
-    const int total = status.value(QStringLiteral("total")).toInt();
+    summaryTable->setObjectName(QStringLiteral("pileStatusSummaryTable"));
+    detailTable->setObjectName(QStringLiteral("pileStatusDetailTable"));
     const QList<QPair<QString, QString>> states = {
         {QStringLiteral("idle"), QStringLiteral("空闲")},
         {QStringLiteral("reserved"), QStringLiteral("预约")},
@@ -186,12 +207,22 @@ QWidget *MainWindow::createPileStatusPage()
         {QStringLiteral("fault"), QStringLiteral("故障")},
         {QStringLiteral("restarting"), QStringLiteral("重启中")}
     };
-    for (const auto &state : states) {
-        const int count = status.value(state.first).toInt();
-        rows.append({state.second, QString::number(count),
-                     total == 0 ? QStringLiteral("0%") : QStringLiteral("%1%").arg(qRound(count * 100.0 / total))});
-    }
-    fillTable(summaryTable, rows);
+    auto refresh = [this, summaryTable, detailTable, states]() {
+        const QJsonObject summary = m_context->dashboardService()->summary();
+        const QJsonObject status = summary.value(QStringLiteral("statusCounts")).toObject();
+        QList<QStringList> rows;
+        const int total = status.value(QStringLiteral("total")).toInt();
+        for (const auto &state : states) {
+            const int count = status.value(state.first).toInt();
+            rows.append({state.second, QString::number(count),
+                         total == 0 ? QStringLiteral("0%") : QStringLiteral("%1%").arg(qRound(count * 100.0 / total))});
+        }
+        fillTable(summaryTable, rows);
+        const int selectedState = summaryTable->currentRow();
+        const QString statusFilter = selectedState >= 0 && selectedState < states.size()
+            ? states.at(selectedState).first : QString();
+        fillTable(detailTable, m_context->dashboardService()->chargerRows(0, statusFilter));
+    };
     connect(summaryTable, &QTableWidget::cellClicked, this, [this, detailTable, states](int row, int) {
         if (row >= 0 && row < states.size()) {
             fillTable(detailTable, m_context->dashboardService()->chargerRows(0, states.at(row).first));
@@ -199,7 +230,8 @@ QWidget *MainWindow::createPileStatusPage()
     });
     layout->addWidget(summaryTable);
     layout->addWidget(detailTable);
-    fillTable(detailTable, m_context->dashboardService()->chargerRows());
+    registerPageRefresh(page, refresh);
+    refresh();
     return page;
 }
 
@@ -209,14 +241,21 @@ QWidget *MainWindow::createChargerManagementPage()
     auto *layout = new QVBoxLayout(page);
     auto *toolbar = new QHBoxLayout;
     auto *stationBox = new QComboBox;
-    stationBox->addItem(QStringLiteral("全部电站"), 0);
-    for (const QStringList &row : m_context->dashboardService()->stationRows()) {
-        stationBox->addItem(row.value(1), row.value(0).toInt());
-    }
+    stationBox->setObjectName(QStringLiteral("chargerStationFilter"));
     auto *refreshButton = new QPushButton(QStringLiteral("刷新"));
     auto *restartButton = new QPushButton(QStringLiteral("远程重启故障桩"));
     auto *table = makeTable({QStringLiteral("桩ID"), QStringLiteral("编号"), QStringLiteral("所属电站"), QStringLiteral("类型"), QStringLiteral("功率(kW)"), QStringLiteral("状态"), QStringLiteral("累计次数"), QStringLiteral("累计时长(s)")});
+    table->setObjectName(QStringLiteral("chargerManagementTable"));
     auto refresh = [this, stationBox, table]() {
+        const int selectedStationId = stationBox->currentData().toInt();
+        const QSignalBlocker blocker(stationBox);
+        stationBox->clear();
+        stationBox->addItem(QStringLiteral("全部电站"), 0);
+        for (const QStringList &row : m_context->dashboardService()->stationRows()) {
+            stationBox->addItem(row.value(1), row.value(0).toInt());
+        }
+        const int restoredIndex = stationBox->findData(selectedStationId);
+        stationBox->setCurrentIndex(restoredIndex >= 0 ? restoredIndex : 0);
         fillTable(table, m_context->dashboardService()->chargerRows(stationBox->currentData().toInt()));
     };
     connect(stationBox, &QComboBox::currentIndexChanged, this, refresh);
@@ -244,6 +283,7 @@ QWidget *MainWindow::createChargerManagementPage()
     toolbar->addWidget(restartButton);
     layout->addLayout(toolbar);
     layout->addWidget(table);
+    registerPageRefresh(page, refresh);
     refresh();
     return page;
 }
@@ -253,6 +293,7 @@ QWidget *MainWindow::createStationManagementPage()
     auto *page = new QWidget;
     auto *layout = new QVBoxLayout(page);
     auto *table = makeTable({QStringLiteral("站ID"), QStringLiteral("站名"), QStringLiteral("地址"), QStringLiteral("纬度"), QStringLiteral("经度"), QStringLiteral("总桩数"), QStringLiteral("在线率"), QStringLiteral("forecastEnabled")});
+    table->setObjectName(QStringLiteral("stationManagementTable"));
     auto *formBox = new QGroupBox(QStringLiteral("新增充电站"));
     auto *form = new QFormLayout(formBox);
     auto *nameEdit = new QLineEdit;
@@ -300,6 +341,7 @@ QWidget *MainWindow::createStationManagementPage()
     });
     layout->addWidget(table);
     layout->addWidget(formBox);
+    registerPageRefresh(page, refresh);
     refresh();
     return page;
 }
@@ -316,6 +358,10 @@ QWidget *MainWindow::createUserManagementPage()
     auto *freezeButton = new QPushButton(QStringLiteral("冻结"));
     auto *activeButton = new QPushButton(QStringLiteral("解冻"));
     auto *table = makeTable({QStringLiteral("用户ID"), QStringLiteral("手机号"), QStringLiteral("昵称"), QStringLiteral("余额"), QStringLiteral("注册时间"), QStringLiteral("状态")});
+    searchEdit->setObjectName(QStringLiteral("userSearchEdit"));
+    limitSpin->setObjectName(QStringLiteral("userLimitSpin"));
+    offsetSpin->setObjectName(QStringLiteral("userOffsetSpin"));
+    table->setObjectName(QStringLiteral("userManagementTable"));
     searchEdit->setPlaceholderText(QStringLiteral("手机号模糊搜索"));
     limitSpin->setRange(1, 100);
     limitSpin->setValue(20);
@@ -354,49 +400,66 @@ QWidget *MainWindow::createUserManagementPage()
     toolbar->addWidget(activeButton);
     layout->addLayout(toolbar);
     layout->addWidget(table);
+    registerPageRefresh(page, refresh);
     refresh();
     return page;
 }
 
 QWidget *MainWindow::createRequestLogPage()
 {
-    QJsonObject data;
-    const Result result = m_context->requestLogService()->list(QString(), 50, 0, &data);
-    QList<QStringList> rows;
-    if (result.ok) {
-        const QJsonArray items = data.value(QStringLiteral("items")).toArray();
-        for (const QJsonValue &itemValue : items) {
-            const QJsonObject item = itemValue.toObject();
-            rows.append({
-                item.value(QStringLiteral("requestId")).toString(),
-                item.value(QStringLiteral("action")).toString(),
-                item.value(QStringLiteral("code")).toString(),
-                item.value(QStringLiteral("createdAt")).toString()
-            });
+    auto *page = new QWidget;
+    auto *layout = new QVBoxLayout(page);
+    auto *table = makeTable(
+        {QStringLiteral("请求ID"), QStringLiteral("动作"), QStringLiteral("响应码"), QStringLiteral("时间")});
+    table->setObjectName(QStringLiteral("requestLogTable"));
+    auto refresh = [this, table]() {
+        QJsonObject data;
+        const Result result = m_context->requestLogService()->list(QString(), 50, 0, &data);
+        QList<QStringList> rows;
+        if (result.ok) {
+            const QJsonArray items = data.value(QStringLiteral("items")).toArray();
+            for (const QJsonValue &itemValue : items) {
+                const QJsonObject item = itemValue.toObject();
+                rows.append({
+                    item.value(QStringLiteral("requestId")).toString(),
+                    item.value(QStringLiteral("action")).toString(),
+                    item.value(QStringLiteral("code")).toString(),
+                    item.value(QStringLiteral("createdAt")).toString()
+                });
+            }
+        } else {
+            rows.append({QStringLiteral("-"), QStringLiteral("-"), result.code, result.message});
         }
-    } else {
-        rows.append({QStringLiteral("-"), QStringLiteral("-"), result.code, result.message});
-    }
-
-    return createPlaceholderTablePage(
-        {QStringLiteral("请求ID"), QStringLiteral("动作"), QStringLiteral("响应码"), QStringLiteral("时间")},
-        rows);
+        fillTable(table, rows);
+    };
+    layout->addWidget(table);
+    registerPageRefresh(page, refresh);
+    refresh();
+    return page;
 }
 
 QWidget *MainWindow::createHealthPage()
 {
-    const QJsonObject health = m_context->forecastService()->healthState();
-    const QString forecastState = health.value(QStringLiteral("forecastRunId")).isNull()
-        ? QStringLiteral("无活动预测批次")
-        : QStringLiteral("活动批次：") + health.value(QStringLiteral("forecastRunId")).toString();
-
-    return createPlaceholderTablePage(
-        {QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")},
-        {{QStringLiteral("服务监听"), QStringLiteral("正常"), QStringLiteral("%1:%2").arg(m_context->host()).arg(m_context->port())},
-         {QStringLiteral("数据库 schema"), QStringLiteral("正常"), QString::number(health.value(QStringLiteral("schemaVersion")).toInt())},
-         {QStringLiteral("快照版本"), QStringLiteral("正常"), QString::number(health.value(QStringLiteral("snapshotVersion")).toInt())},
-         {QStringLiteral("预测批次"), health.value(QStringLiteral("status")).toString() == QStringLiteral("ready") ? QStringLiteral("正常") : QStringLiteral("降级"), forecastState},
-         {QStringLiteral("模拟器心跳"), QStringLiteral("未接入"), QStringLiteral("当前服务端尚无 simulator.status 持久化来源")}});
+    auto *page = new QWidget;
+    auto *layout = new QVBoxLayout(page);
+    auto *table = makeTable({QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")});
+    table->setObjectName(QStringLiteral("healthTable"));
+    auto refresh = [this, table]() {
+        const QJsonObject health = m_context->forecastService()->healthState();
+        const QString forecastState = health.value(QStringLiteral("forecastRunId")).isNull()
+            ? QStringLiteral("无活动预测批次")
+            : QStringLiteral("活动批次：") + health.value(QStringLiteral("forecastRunId")).toString();
+        fillTable(table,
+                  {{QStringLiteral("服务监听"), QStringLiteral("正常"), QStringLiteral("%1:%2").arg(m_context->host()).arg(m_context->port())},
+                   {QStringLiteral("数据库 schema"), QStringLiteral("正常"), QString::number(health.value(QStringLiteral("schemaVersion")).toInt())},
+                   {QStringLiteral("快照版本"), QStringLiteral("正常"), QString::number(health.value(QStringLiteral("snapshotVersion")).toInt())},
+                   {QStringLiteral("预测批次"), health.value(QStringLiteral("status")).toString() == QStringLiteral("ready") ? QStringLiteral("正常") : QStringLiteral("降级"), forecastState},
+                   {QStringLiteral("模拟器心跳"), QStringLiteral("未接入"), QStringLiteral("当前服务端尚无 simulator.status 持久化来源")}});
+    };
+    layout->addWidget(table);
+    registerPageRefresh(page, refresh);
+    refresh();
+    return page;
 }
 
 QWidget *MainWindow::createPlaceholderTablePage(const QStringList &headers, const QList<QStringList> &rows)
@@ -430,3 +493,18 @@ QLabel *MainWindow::metricLabel(const QString &title, const QString &value)
     return label;
 }
 
+void MainWindow::registerPageRefresh(QWidget *page, std::function<void()> refresh)
+{
+    m_pageRefreshers.insert(page, std::move(refresh));
+}
+
+void MainWindow::refreshCurrentPage()
+{
+    if (!m_tabs) {
+        return;
+    }
+    const auto refresh = m_pageRefreshers.constFind(m_tabs->currentWidget());
+    if (refresh != m_pageRefreshers.constEnd()) {
+        refresh.value()();
+    }
+}
