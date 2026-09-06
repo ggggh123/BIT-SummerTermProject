@@ -229,14 +229,37 @@ class TcpP0(unittest.TestCase):
         self.assertTrue(self.sample("next-second", "2026-09-06T10:00:01+08:00", 0)["ok"])
         self.assertEqual(self.sample("whole-equal", "2026-09-06T10:00:01.0000000000000000000+08:00")["code"], "ORDER_STATE_CONFLICT")
 
-    def test_forecast_publish_keeps_two_phase_and_stable_final_ack(self):
+    def forecast_payload(self):
         cutoff = dt.datetime.fromisoformat("2026-09-06T00:00:00+08:00")
-        payload = {"runId": "p0-run", "modelVersion": "test", "dataCutoff": cutoff.isoformat(),
+        return {"runId": "p0-run", "modelVersion": "test", "dataCutoff": cutoff.isoformat(),
                    "generatedAt": cutoff.isoformat(), "records": [
                        {"stationId": station, "forecastAt": (cutoff + dt.timedelta(hours=hour)).isoformat(),
                         "horizonH": hour, "predictedLoadKw": 0, "predictedBusyCount": 0,
                         "predictedIdleCount": 8, "congestionLevel": "low", "isPeak": False}
                        for station in range(1, 7) for hour in range(1, 25)]}
+
+    def test_forecast_horizon_separates_integer_type_from_business_range(self):
+        payload = self.forecast_payload()
+        before_version = self.sql("SELECT version FROM snapshot_meta")
+        cases = ((-1, "FORECAST_INVALID"), (0, "FORECAST_INVALID"), (25, "FORECAST_INVALID"),
+                 (1.5, "INVALID_REQUEST"), ("1", "INVALID_REQUEST"), (True, "INVALID_REQUEST"),
+                 (None, "INVALID_REQUEST"), (-9007199254740992, "INVALID_REQUEST"),
+                 (9007199254740992, "INVALID_REQUEST"))
+        for horizon, expected in cases:
+            with self.subTest(horizon=horizon):
+                payload["records"][0]["horizonH"] = horizon
+                result = self.call("forecast.publish", payload, "ml-token")
+                self.assertFalse(result["ok"], result)
+                self.assertEqual(result["code"], expected)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM forecasts"), [(0,)])
+        self.assertEqual(self.sql("SELECT version FROM snapshot_meta"), before_version)
+        payload["records"][0]["horizonH"] = 1
+        accepted = self.call("forecast.publish", payload, "ml-token")
+        self.assertTrue(accepted["ok"], accepted)
+        self.assertEqual(accepted["data"]["acceptedCount"], 144)
+
+    def test_forecast_publish_keeps_two_phase_and_stable_final_ack(self):
+        payload = self.forecast_payload()
         self.sql("CREATE TRIGGER injected_failure BEFORE INSERT ON request_log BEGIN SELECT RAISE(ABORT,'private ACK failure'); END")
         failed = self.call("forecast.publish", payload, "ml-token", "forecast")
         self.assertFalse(failed["ok"], failed)

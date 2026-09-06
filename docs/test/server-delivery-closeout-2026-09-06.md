@@ -1,5 +1,7 @@
 # 服务端交付收尾验证记录（2026-09-06）
 
+> 当前新增结果见末节“用户批准容量规则后的补交验证”。前文保留各历史轮次实测结果和当时未关闭的发现。
+
 ## 范围与基线
 
 - 共享基线：PR #10 已合入 `dev@97c6da13adb3b50503091dab9456fa704728771a`。
@@ -91,3 +93,25 @@ node --test apps/user-client/tests/test_navigation_html.mjs
 - 原综合审查中止和未证实异常仍按[原审查归档](../review/core-fixes-review-2026-09-06.md)保留；本批普通功能测试不是接续被工具限制中止的诊断，也不证明旧风险已消失。
 - 黄金 core 库批准 SHA-256：`5dd13bef7990c8166949d836a6fd8eadcc0b1ef8b11dc1b91272c33bead3a0f7`。
 - 不以自动回归成功替代真实人工操作、换机运行、PM 签字或同 SHA 两次彩排；本批没有腾讯调用，也没有推送或合并新的共享分支。
+
+## 用户批准容量规则后的补交验证
+
+起点 `60d2c0f`；用户回复“同意，继续”，已将准入例外写入[接口合同 §5.1](../design/interface-contract.md)及[批准记录](../management/interface-amendment-2026-09-06-capacity.md)。本节属于获批准的新有限补交，不继续旧最终修复循环或已中止的诊断。
+
+- 修改前基线重新构建，CTest **29/29**（38.81 秒）。
+- N1 新增真实 TCP 测试先 RED：`horizonH=-1` 实际 `INVALID_REQUEST`，期望 `FORECAST_INVALID`；`0/25` 正常。其余非整数、字符串、布尔、null、超 signed safe integer 均应为 `INVALID_REQUEST`。9 个无效输入均检查数据库无预测写入/版本不变，最后合法 144 条仍成功发布。
+- 生产修复只放行 horizon 的 signed safe integer 类型，`1..24` 仍由原业务检查判定。相同测试 GREEN：1/1（0.076 秒）。
+- 满队列定向验证不存在的站点、不能重启的设备、业务无效预测和合法充值均先返回 `SERVER_BUSY`，排空后以原 ID 分别返回原业务错误或成功；拒绝期间余额不变。已成功充值的原 ACK 在再次 BUSY 后仍逐字节重放，不重复充值。三个 Qt 定向函数及初始化/清理 **5 passed / 0 failed**（871 ms）。此项是已批准现有容量行为的特征测试，没有为制造 RED 故意破坏实现。
+- 修复与新测试组合后的完整构建退出 0，CTest **29/29**（38.60 秒），数据库 pytest **15/15**（1.19 秒）。UTC/上海两套真实 TCP 测试均包含新 horizon 边界；不是拼接局部通过结果。
+
+命令（构建目录同前文）：
+
+```bash
+TZ=UTC python3 tests/admin-server/test_tcp_p0.py /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/admin-server/ev_admin_server TcpP0.test_forecast_horizon_separates_integer_type_from_business_range
+QT_QPA_PLATFORM=offscreen /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server/tst_server_threads capacityRejectionDefersBusinessChecksWithoutAcceptingMutation queueCapacityDoesNotHideUnknownActionsOrCachedHealth purePayloadErrorsMatchBeforeAndAfterCapacityAdmission
+cmake --build /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0 -j4
+QT_QPA_PLATFORM=offscreen ctest --test-dir /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0 --output-on-failure -j4
+python3 -m pytest database/tests -q
+```
+
+独立代码评审单独登记在[审查归档](../review/server-delivery-review-2026-09-06.md)。没有腾讯调用、黄金原件写入、需求矩阵操作或远端推送；这里的 GREEN 不替代正式演示、换机与人员审核。

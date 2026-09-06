@@ -33,7 +33,7 @@ DatabaseWorker 所属 QThread
 
 最多同时服务 16 个 TCP 连接，额外连接收到 `SERVER_BUSY` 后关闭。已接纳的数据库请求串行执行，本地和 TCP 共用 256 个待完成请求的容量；容量耗尽返回 `SERVER_BUSY`。未知 action 仍优先返回 `INVALID_REQUEST`；权限判断消费共享 Actions／Permissions，缺少有效身份为 `AUTH_REQUIRED`，有效身份无相应权限为 `FORBIDDEN`。
 
-容量准入前，入口使用 DB worker 发布的会话角色值副本，执行统一身份和基础参数校验；worker 内分发器复用同一纯校验。未知非空 token 不能作为匿名身份登录，`demo.reset` 的角色与 confirmation 错误在满队列时仍保留原错误码。前台没有数据库或服务引用，也不增加验证队列。当前仍有待裁决的合同差异：依赖权威数据库状态的业务判定（以及尚在 worker 内的 forecast 整批语义检查）可能被满队列的 `SERVER_BUSY` 提前覆盖；冻结合同第 5 节要求这些错误先于基础设施错误，本轮未修改该规则，不能据此宣布服务端候选已可合并。
+容量准入前，入口使用 DB worker 发布的会话角色值副本，执行统一身份和基础参数校验；worker 内分发器复用同一纯校验。未知非空 token 不能作为匿名身份登录，`demo.reset` 的角色与 confirmation 错误在满队列时仍保留原错误码。前台没有数据库或服务引用，也不增加验证队列。2026-09-06 用户已批准[合同第 5.1 节](../../docs/design/interface-contract.md#51-命令容量准入例外2026-09-06-用户批准)：基础检查通过后，满队列可先返回 `SERVER_BUSY`，成功准入后才检查权威数据库和 forecast 整批语义。这次容量拒绝不改业务数据、不占用 requestId、不覆盖历史 ACK；恢复容量后可用原 ID 重试，已提交请求仍重放原 ACK，不能重复业务。该规则不等同于整项目发布验收通过。
 
 运行期 GUI 通过 `executeLocal(RequestEnvelope, QObject *receiver, callback)` 异步调用。登录、创建站点、冻结／解冻和重启复用 TCP 的调度器与幂等日志。执行中的按钮禁用；失败显示响应码及可解释信息。内部聚合表和日志使用 `AdminView` 闭合枚举及管理员校验，未新增 TCP action，也没有公开数据库或服务指针。
 

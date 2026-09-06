@@ -302,6 +302,52 @@ private slots:
         QCOMPARE(codes,(QStringList{"AUTH_REQUIRED","FORBIDDEN","INVALID_REQUEST","INVALID_REQUEST",
             "INVALID_REQUEST","FORBIDDEN","AUTH_REQUIRED","INVALID_REQUEST","INVALID_REQUEST","INVALID_PHONE"}));
     }
+    void capacityRejectionDefersBusinessChecksWithoutAcceptingMutation()
+    {
+        QTemporaryDir dir; AppContext context; QVERIFY(initialize(context,dir).ok);
+        QTcpSocket socket; socket.connectToHost(QHostAddress::LocalHost,context.port()); QVERIFY(socket.waitForConnected());
+        const auto user=login(socket); const auto admin=login(socket,true);
+        QVERIFY(!user.isEmpty() && !admin.isEmpty());
+        struct Case { QString id,action,token; QJsonObject payload; QString admittedCode; };
+        const QList<Case> cases={
+            {"deferred-station","station.detail",user,{{"stationId",999999}},"ENTITY_NOT_FOUND"},
+            {"deferred-restart","admin.charger_restart",admin,{{"chargerId",1}},"ORDER_STATE_CONFLICT"},
+            {"deferred-forecast","forecast.publish","ml-token",{{"runId","deferred-run"},{"modelVersion","test"},
+                {"generatedAt","2026-09-06T00:00:00+08:00"},{"dataCutoff","2026-09-06T00:00:00+08:00"},
+                {"records",QJsonArray{}}},"FORECAST_INVALID"},
+            {"deferred-recharge","wallet.recharge",user,{{"amountFen",100}},"OK"}
+        };
+        int drained=0;
+        QStringList codes;
+        QObject replies;
+        for (int i=0;i<256;++i)
+            context.executeLocal({1,QString("deferred-fill-%1").arg(i),"user.get",user,{}},&replies,[&](auto) { ++drained; });
+        for (const auto &item : cases)
+            context.executeLocal({1,item.id,item.action,item.token,item.payload},&replies,
+                [&](auto bytes) { codes.append(ev::protocol::parseResponse(bytes).code); });
+        QTRY_COMPARE(codes.size(),cases.size());
+        QCOMPARE(codes,(QStringList{"SERVER_BUSY","SERVER_BUSY","SERVER_BUSY","SERVER_BUSY"}));
+        QTRY_COMPARE(drained,256);
+        const auto balanceBefore=ev::protocol::parseResponse(exchange(socket,"before-retry","user.get",user));
+        QCOMPARE(balanceBefore.data.toObject().value("user").toObject().value("balanceFen").toInt(),50000);
+        for (const auto &item : cases)
+            QCOMPARE(ev::protocol::parseResponse(exchange(socket,item.id,item.action,item.token,item.payload)).code,item.admittedCode);
+        const auto retry=exchange(socket,"deferred-recharge","wallet.recharge",user,{{"amountFen",100}});
+        QCOMPARE(ev::protocol::parseResponse(retry).data.toObject().value("balanceFen").toInt(),50100);
+        const auto balanceAfter=ev::protocol::parseResponse(exchange(socket,"after-retry","user.get",user));
+        QCOMPARE(balanceAfter.data.toObject().value("user").toObject().value("balanceFen").toInt(),50100);
+        drained=0;
+        QByteArray busyReplay;
+        QObject replayReplies;
+        for (int i=0;i<256;++i)
+            context.executeLocal({1,QString("replay-fill-%1").arg(i),"user.get",user,{}},&replayReplies,[&](auto) { ++drained; });
+        context.executeLocal({1,"deferred-recharge","wallet.recharge",user,{{"amountFen",100}}},&replayReplies,
+            [&](auto bytes) { busyReplay=bytes; });
+        QTRY_VERIFY(!busyReplay.isEmpty());
+        QCOMPARE(ev::protocol::parseResponse(busyReplay).code,QString("SERVER_BUSY"));
+        QTRY_COMPARE(drained,256);
+        QCOMPARE(exchange(socket,"deferred-recharge","wallet.recharge",user,{{"amountFen",100}}),retry);
+    }
     void purePayloadErrorsMatchBeforeAndAfterCapacityAdmission()
     {
         QTemporaryDir dir; AppContext context; QVERIFY(initialize(context,dir).ok);

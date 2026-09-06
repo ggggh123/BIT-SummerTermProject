@@ -2,7 +2,7 @@
 
 充电桩管理与演示平台小学期项目。
 
-> **2026-09-06 共享集成基线：** [PR #10](https://github.com/ggggh123/BIT-SummerTermProject/pull/10) 已合入 `dev@97c6da1`，合并基线重新构建成功、CTest **25/25**。本机后续分支 `feat/core-delivery-20260906` 已实现专属 DB worker、在线 reset 和恢复加固，最终实现组合构建成功、CTest **29/29**，见[服务端收尾证据](docs/test/server-delivery-closeout-2026-09-06.md)。[最后限定复审](docs/review/server-delivery-review-2026-09-06.md)仍留下 I1 容量合同决策和 N1 可选预测错误码回归，当前不标为可合并。第二批 UI、运行交付、换机验证及人工三端/地图双彩排仍未完成；此前[综合审查中断记录](docs/review/core-fixes-review-2026-09-06.md)继续保留。当前按[整项目交付路线](docs/management/project-plan.md)推进，尚未宣布 GO 或发布到 main。
+> **2026-09-06 共享集成基线：** [PR #10](https://github.com/ggggh123/BIT-SummerTermProject/pull/10) 已合入 `dev@97c6da1`，合并基线重新构建成功、CTest **25/25**。本机后续分支 `feat/core-delivery-20260906` 已实现专属 DB worker、在线 reset 和恢复加固。用户已批准 [I1 容量准入补充](docs/management/interface-amendment-2026-09-06-capacity.md)，N1 预测整数错误域已按 RED/GREEN 修复；本次完整构建、CTest **29/29**、数据库 **15/15** 通过，见[服务端收尾证据](docs/test/server-delivery-closeout-2026-09-06.md)，限定代码评审结论另行登记。第二批 UI、运行交付、换机验证及人工三端/地图双彩排仍未完成；此前[综合审查中断记录](docs/review/core-fixes-review-2026-09-06.md)继续保留。当前按[整项目交付路线](docs/management/project-plan.md)推进，尚未宣布 GO 或发布到 main。
 
 ## 当前交付口径（2026-09-04 生效）
 
@@ -24,7 +24,7 @@
 - [范围基线 v2](docs/management/scope-baseline.md) 与 [2026-09-04 范围变更记录](docs/management/scope-change-2026-09-04.md)
 - [仓库进展审计（2026-09-04）](docs/review/repository-progress-audit-2026-09-04.md)
 - [核心阻塞修复与同版本复验（2026-09-06）](docs/test/core-fixes-2026-09-06.md)、[最终综合审查归档（2026-09-06）](docs/review/core-fixes-review-2026-09-06.md) 与 [团队交接状态](docs/management/core-integration-handoff-2026-09-06.md)
-- [本批服务端交付审查](docs/review/server-delivery-review-2026-09-06.md)（含已修项目与尚待决定的满队列合同边界）
+- [本批服务端交付审查](docs/review/server-delivery-review-2026-09-06.md)（保留历史发现，新增用户批准后的修复与关闭证据）
 - [接口合同](docs/design/interface-contract.md) 与 [当前实施计划索引](docs/superpowers/plans/README.md)
 - [核心验收清单](docs/release/core-acceptance-checklist.md)
 - [核心演示与交付操作手册](docs/release/core-demo-runbook.md)（当前手动启动方法、八分钟主线、数值核对和双彩排要求）

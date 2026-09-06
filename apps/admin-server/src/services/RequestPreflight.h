@@ -100,7 +100,7 @@ inline Result payload(const QString &action, const QJsonObject &p)
         for (const auto &value : p.value("records").toArray()) {
             if (!value.isObject()) return invalid();
             const auto record=value.toObject();
-            if (!integer(record.value("stationId"),1) || !integer(record.value("horizonH"))
+            if (!integer(record.value("stationId"),1) || !integer(record.value("horizonH"),-9007199254740991.0)
                 || !record.value("forecastAt").isString() || !record.value("predictedLoadKw").isDouble()
                 || !integer(record.value("predictedBusyCount"),-9007199254740991.0)
                 || !integer(record.value("predictedIdleCount"),-9007199254740991.0)
