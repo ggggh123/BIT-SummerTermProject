@@ -9,7 +9,9 @@
 #include "ui/MainWindow.h"
 #include "ui/NearbyPage.h"
 #include "ui/ProfilePage.h"
+#include "ui/UiTheme.h"
 
+#include <QDir>
 #include <QEventLoop>
 #include <QElapsedTimer>
 #include <QComboBox>
@@ -998,7 +1000,7 @@ void UserApiTest::loginPageDisablesWhilePendingAndShowsConnectionFailure()
     QCOMPARE(button->text(), QStringLiteral("登录中…"));
     page.setPending(false);
     QVERIFY(button->isEnabled());
-    QCOMPARE(button->text(), QStringLiteral("登录"));
+    QCOMPARE(button->text(), QStringLiteral("登录 / 注册"));
     page.setConnectionAvailable(false);
     QCOMPARE(banner->text(), QStringLiteral("服务器连接不可用"));
 }
@@ -3133,7 +3135,7 @@ void UserApiTest::offlineNearbyCacheRemainsBrowsableAndCannotStartSearch()
         && !page.foregroundSearchPending_
         && page.searchGeneration_ == searchGenerationBefore
         && banner->text().contains(QStringLiteral("离线缓存"))
-        && banner->styleSheet().contains(QStringLiteral("red"))
+        && banner->styleSheet().contains(QStringLiteral("#BE4B42"))
         && status->text().contains(QStringLiteral("离线缓存"));
     QVERIFY2(offlineInvariant,
              "offline search changed cache controls or dispatched a geocode request");
@@ -3233,15 +3235,14 @@ void UserApiTest::terminalBackWaitsForNearbyFactsToCommit()
         auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
         const ev::user::GeoPoint origin{39.958, 116.317};
         auto station = stationValue();
-        const QString initialStatus = settle ? QStringLiteral("charging")
-                                             : QStringLiteral("reserved");
         nearbyPage->displayStations({origin, {station}});
-        nearbyPage->displayStationDetail({station, {chargerValue(initialStatus)}});
+        nearbyPage->displayStationDetail({station, {chargerValue()}});
         QSignalSpy selections(nearbyPage, &NearbyPage::chargerSelected);
         nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
         auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
         QCOMPARE(selections.size(), 1);
-        const auto remembered = qvariant_cast<ev::user::StationSelection>(selections.first().at(0));
+        auto remembered = qvariant_cast<ev::user::StationSelection>(selections.first().at(0));
+        remembered.charger.status = settle ? QStringLiteral("charging") : QStringLiteral("reserved");
         chargePage->enterOrder(settle
             ? orderValue(QStringLiteral("charging"), true)
             : orderValue(QStringLiteral("reserved")), remembered);
@@ -3293,7 +3294,7 @@ void UserApiTest::terminalBackWaitsForNearbyFactsToCommit()
         QTRY_VERIFY(back->isEnabled());
         back->click();
         QTRY_COMPARE(pages->currentWidget(), static_cast<QWidget *>(nearbyPage));
-        QTRY_VERIFY(nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->text()
+        QTRY_VERIFY(nearbyPage->findChild<QLabel *>(QStringLiteral("chargerStatus_7"))->text()
                         .contains(QStringLiteral("空闲")));
         bool foundCount = false;
         for (QLabel *label : nearbyPage->findChildren<QLabel *>()) {
@@ -3325,15 +3326,14 @@ void UserApiTest::terminalAndNullBackRemainReachableAcrossReconnect()
         auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
         const ev::user::GeoPoint origin{39.958, 116.317};
         const auto station = stationValue();
-        const QString initialStatus = settle ? QStringLiteral("charging")
-                                             : QStringLiteral("reserved");
         nearbyPage->displayStations({origin, {station}});
-        nearbyPage->displayStationDetail({station, {chargerValue(initialStatus)}});
+        nearbyPage->displayStationDetail({station, {chargerValue()}});
         QSignalSpy selections(nearbyPage, &NearbyPage::chargerSelected);
         nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
         auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
         QCOMPARE(selections.size(), 1);
-        const auto remembered = qvariant_cast<ev::user::StationSelection>(selections.first().at(0));
+        auto remembered = qvariant_cast<ev::user::StationSelection>(selections.first().at(0));
+        remembered.charger.status = settle ? QStringLiteral("charging") : QStringLiteral("reserved");
         chargePage->enterOrder(settle
             ? orderValue(QStringLiteral("charging"), true)
             : orderValue(QStringLiteral("reserved")),
@@ -3504,13 +3504,15 @@ void UserApiTest::terminalWithoutMatchingNearbyContextDoesNotStrandBack()
     const ev::user::GeoPoint origin{39.958, 116.317};
     const auto station = stationValue();
     nearbyPage->displayStations({origin, {station}});
-    nearbyPage->displayStationDetail({station, {chargerValue(QStringLiteral("reserved"))}});
+    nearbyPage->displayStationDetail({station, {chargerValue()}});
     QSignalSpy selections(nearbyPage, &NearbyPage::chargerSelected);
     nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
     auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
     QCOMPARE(selections.size(), 1);
+    auto remembered = qvariant_cast<ev::user::StationSelection>(selections.first().at(0));
+    remembered.charger.status = QStringLiteral("reserved");
     chargePage->enterOrder(orderValue(QStringLiteral("reserved")),
-                           qvariant_cast<ev::user::StationSelection>(selections.first().at(0)));
+                           remembered);
     auto *cancel = window.findChild<QPushButton *>(QStringLiteral("chargeCancelButton"));
     cancel->click();
     const auto mutation = takeRequest(peer.data());
@@ -3554,14 +3556,21 @@ void UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing()
         const auto station = stationValue();
         nearbyPage->displayStations({origin, {station}});
         nearbyPage->displayStationDetail(
-            {station, {chargerValue(QStringLiteral("reserved"))}});
+            {station, {chargerValue()}});
+        auto *detailStatus = nearbyPage->findChild<QLabel *>(QStringLiteral("detailStatus"));
+        QVERIFY(detailStatus);
+        QVERIFY(detailStatus->isHidden());
+        QCOMPARE(nearbyPage->findChild<QStackedWidget *>(QStringLiteral("nearbyViews"))->currentWidget(),
+                 nearbyPage->findChild<QWidget *>(QStringLiteral("stationDetailView")));
         QSignalSpy selections(nearbyPage, &NearbyPage::chargerSelected);
         nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
         auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
         QCOMPARE(selections.size(), 1);
+        auto remembered = qvariant_cast<ev::user::StationSelection>(selections.first().at(0));
+        remembered.charger.status = QStringLiteral("reserved");
         chargePage->enterOrder(
             orderValue(QStringLiteral("reserved")),
-            qvariant_cast<ev::user::StationSelection>(selections.first().at(0)));
+            remembered);
 
         QSignalSpy committed(nearbyPage, &NearbyPage::chargeRefreshCommitted);
         QSignalSpy failed(nearbyPage, &NearbyPage::chargeRefreshFailed);
@@ -3610,6 +3619,29 @@ void UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing()
         QVERIFY(nearbyPage->findChild<QPushButton *>(QStringLiteral("stationButton_4")) != nullptr);
         QTest::qWait(20);
         QCOMPARE(unavailable.size(), 1);
+        window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"))->click();
+        QTRY_COMPARE(window.findChild<QStackedWidget *>(QStringLiteral("mainPages"))->currentWidget(), nearbyPage);
+        QCOMPARE(nearbyPage->findChild<QStackedWidget *>(QStringLiteral("nearbyViews"))->currentWidget(),
+                 nearbyPage->findChild<QWidget *>(QStringLiteral("stationDetailView")));
+        QCOMPARE(detailStatus->text(), QStringLiteral("原充电站已不在附近列表中"));
+        QVERIFY(detailStatus->isVisibleTo(&window));
+
+        const auto screenshotDir = qEnvironmentVariable("EV_UI_SCREENSHOT_DIR");
+        if (!screenshotDir.isEmpty()) {
+            const auto originalStyleSheet = qApp->styleSheet();
+            const auto originalFont = qApp->font();
+            UiTheme::apply(*qApp);
+            window.resize(390, 844);
+            QTest::qWait(30);
+            const bool directoryReady = QDir().mkpath(screenshotDir);
+            const bool saved = directoryReady && window.grab().save(
+                screenshotDir + (detailFirst
+                    ? QStringLiteral("/detail-missing-station-detail-first-390x844.png")
+                    : QStringLiteral("/detail-missing-station-list-first-390x844.png")));
+            qApp->setStyleSheet(originalStyleSheet);
+            qApp->setFont(originalFont);
+            QVERIFY(saved);
+        }
     }
 
     QTcpServer server;
@@ -3633,14 +3665,16 @@ void UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing()
     const auto station = stationValue();
     nearbyPage->displayStations({origin, {station}});
     nearbyPage->displayStationDetail(
-        {station, {chargerValue(QStringLiteral("reserved"))}});
+        {station, {chargerValue()}});
     QSignalSpy selections(nearbyPage, &NearbyPage::chargerSelected);
     nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
     auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
     QCOMPARE(selections.size(), 1);
+    auto remembered = qvariant_cast<ev::user::StationSelection>(selections.first().at(0));
+    remembered.charger.status = QStringLiteral("reserved");
     chargePage->enterOrder(
         orderValue(QStringLiteral("reserved")),
-        qvariant_cast<ev::user::StationSelection>(selections.first().at(0)));
+        remembered);
     QSignalSpy committed(nearbyPage, &NearbyPage::chargeRefreshCommitted);
     QSignalSpy failed(nearbyPage, &NearbyPage::chargeRefreshFailed);
     QSignalSpy unavailable(nearbyPage, &NearbyPage::chargeRefreshUnavailable);
@@ -3949,19 +3983,19 @@ void UserApiTest::exitRefreshFirstFailureWins()
     const ev::user::GeoPoint origin{39.958, 116.317};
     const auto station = stationValue();
     const bool settle = scenario >= 4;
-    const QString selectedStatus = settle ? QStringLiteral("charging")
-                                          : QStringLiteral("reserved");
     nearbyPage->displayStations({origin, {station}});
     nearbyPage->displayStationDetail(
-        {station, {chargerValue(selectedStatus)}});
+        {station, {chargerValue()}});
     QSignalSpy selections(nearbyPage, &NearbyPage::chargerSelected);
     nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
     auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
     QCOMPARE(selections.size(), 1);
+    auto remembered = qvariant_cast<ev::user::StationSelection>(selections.first().at(0));
+    remembered.charger.status = settle ? QStringLiteral("charging") : QStringLiteral("reserved");
     chargePage->enterOrder(
         settle ? orderValue(QStringLiteral("charging"), true)
                : orderValue(QStringLiteral("reserved")),
-        qvariant_cast<ev::user::StationSelection>(selections.first().at(0)));
+        remembered);
     QSignalSpy committed(nearbyPage, &NearbyPage::chargeRefreshCommitted);
     QSignalSpy failed(nearbyPage, &NearbyPage::chargeRefreshFailed);
     QSignalSpy unavailable(nearbyPage, &NearbyPage::chargeRefreshUnavailable);
@@ -4128,18 +4162,18 @@ void UserApiTest::externalActiveOrderSupersedesTerminalExit()
     auto *nearbyPage = window.findChild<NearbyPage *>(QStringLiteral("nearbyPage"));
     const ev::user::GeoPoint origin{39.958, 116.317};
     const auto station = stationValue();
-    const QString oldChargerStatus = sameSelection ? QStringLiteral("reserved")
-                                                   : QStringLiteral("charging");
     nearbyPage->displayStations({origin, {station}});
-    nearbyPage->displayStationDetail({station, {chargerValue(oldChargerStatus)}});
+    nearbyPage->displayStationDetail({station, {chargerValue()}});
     QSignalSpy selections(nearbyPage, &NearbyPage::chargerSelected);
     nearbyPage->findChild<QPushButton *>(QStringLiteral("chargerButton_7"))->click();
     auto *chargePage = window.findChild<ChargePage *>(QStringLiteral("chargePage"));
     QCOMPARE(selections.size(), 1);
+    auto remembered = qvariant_cast<ev::user::StationSelection>(selections.first().at(0));
+    remembered.charger.status = sameSelection ? QStringLiteral("reserved") : QStringLiteral("charging");
     chargePage->enterOrder(
         sameSelection ? orderValue(QStringLiteral("reserved"))
                       : orderValue(QStringLiteral("charging"), true),
-        qvariant_cast<ev::user::StationSelection>(selections.first().at(0)));
+        remembered);
     window.findChild<QPushButton *>(sameSelection
         ? QStringLiteral("chargeCancelButton") : QStringLiteral("chargeSettleButton"))->click();
     const auto mutation = takeRequest(peer.data());

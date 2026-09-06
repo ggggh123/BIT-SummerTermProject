@@ -20,11 +20,11 @@ Qt 用户端 → Qt 管理/服务端（唯一运行期 SQLite writer） ← Qt �
 
 ## 2. 当前事实与前置条件
 
-本计划只描述待达成的发布流程。开始 reset/start/smoke 前，责任人必须以进展审计和当前提交的可执行证据确认下列条件，而不是引用旧计划的 checkbox：
+本计划只描述待达成的发布流程。以下工程事实于 2026-09-06 按本地集成候选更新；详细版本与证据见[核心修复复验记录](../../test/core-fixes-2026-09-06.md)。开始 reset/start/smoke 前，责任人仍须以当前提交的可执行证据确认条件，而不是引用旧计划的 checkbox：
 
-- 服务端核心 P0（27 个 v1 action 的实现、根构建接入和专属测试）尚未完成，不能宣称现已可进行端到端 core 彩排。
+- 根构建与服务端专属测试已接入，三个原始时间/计费/幂等 P0 已在本地候选修复并评审，组合 CTest 24/24。27 个 v1 action 与架构尚未全部验收，特别是专属 DatabaseWorker 和在线 `demo.reset` 仍有实现缺口；不能据此宣称最终彩排完成。
 - 已跟踪的 `runtime/golden/demo.db` 是含 1 个预测批次、144 条预测的封存 optional 增强 demo 库；它保留但不是 core 基础库。
-- 独立 `runtime/golden/core.db` 尚未封存。core reset 使用它之前，必须先按 [`database/README.md`](../../../database/README.md) 的基础库流程构建、校验和批准。
+- 独立 `runtime/golden/core.db` 已由数据分支 `10034fd` 提供并引入本地候选，6 站/48 桩，配套 `core.manifest.json` 与 checksum。按 [`database/README.md`](../../../database/README.md) 校验并用 `database/create_runtime_copy.py` 创建全新运行副本；不得直接把封存原件交给会迁移/写库的服务端。
 - 当前仓库没有 `ops/` 目录，也没有本计划所需的 reset/start/stop/smoke/rehearsal/release shell 入口。任何人不得把下文的目标接口当作可直接执行的现有命令。
 - 正式 C++ 构建证据应在 `/tmp` 或其他 Linux 原生文件系统的独立 build 目录中产生，避免 VMware 共享目录的瞬态问题。
 

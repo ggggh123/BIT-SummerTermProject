@@ -19,6 +19,7 @@ add_library(ev_user_client_core STATIC
     src/ui/NavigationPage.cpp
     src/ui/NearbyPage.cpp
     src/ui/ProfilePage.cpp
+    src/ui/UiTheme.cpp
 )
 target_include_directories(ev_user_client_core PUBLIC src)
 target_link_libraries(ev_user_client_core
@@ -67,6 +68,11 @@ add_executable(tst_user_recommendation tests/tst_recommendation.cpp resources/re
 target_link_libraries(tst_user_recommendation PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_recommendation COMMAND tst_user_recommendation)
 set_tests_properties(user_recommendation PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_executable(tst_user_mobileui tests/tst_mobileui.cpp resources/resources.qrc)
+target_link_libraries(tst_user_mobileui PRIVATE ev_user_client_core Qt6::Test)
+add_test(NAME user_mobileui COMMAND tst_user_mobileui)
+set_tests_properties(user_mobileui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # Explicit opt-in: real Tencent calls must never run in the default build/CTest gate.
 add_executable(user_map_online_smoke EXCLUDE_FROM_ALL

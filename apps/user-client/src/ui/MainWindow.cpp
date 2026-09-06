@@ -11,11 +11,126 @@
 #include "ui/ProfilePage.h"
 
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
+#include <QPainter>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QSizePolicy>
 #include <QStackedWidget>
+#include <QStyle>
+#include <QStyleOptionButton>
 #include <QVBoxLayout>
 #include <QWidget>
+
+#include <utility>
+
+namespace {
+
+class ResponsiveStackedWidget final : public QStackedWidget
+{
+public:
+    using QStackedWidget::QStackedWidget;
+
+    [[nodiscard]] QSize minimumSizeHint() const override
+    {
+        const QWidget *current = currentWidget();
+        const int height = current == nullptr ? 0 : current->minimumSizeHint().height();
+        return {0, height};
+    }
+
+    [[nodiscard]] QSize sizeHint() const override
+    {
+        const QWidget *current = currentWidget();
+        if (current == nullptr) {
+            return {390, 720};
+        }
+        QSize hint = current->sizeHint();
+        hint.setWidth(qMin(390, hint.width()));
+        return hint;
+    }
+};
+
+class MobileTabButton final : public QPushButton
+{
+public:
+    MobileTabButton(QString text, const QString &iconPath, QWidget *parent)
+        : QPushButton(std::move(text), parent)
+    {
+        setIcon(QIcon(iconPath));
+        setIconSize(QSize(22, 22));
+    }
+
+    [[nodiscard]] QSize sizeHint() const override
+    {
+        QSize hint = QPushButton::sizeHint();
+        hint.setHeight(qMax(64, hint.height()));
+        return hint;
+    }
+
+    [[nodiscard]] QSize minimumSizeHint() const override
+    {
+        QSize hint = QPushButton::minimumSizeHint();
+        hint.setHeight(qMax(56, hint.height()));
+        return hint;
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QStyleOptionButton option;
+        initStyleOption(&option);
+        const QString label = option.text;
+        const QIcon tabIcon = option.icon;
+        option.text.clear();
+        option.icon = {};
+
+        QPainter painter(this);
+        style()->drawControl(QStyle::CE_PushButton, &option, &painter, this);
+        const QRect content = style()->subElementRect(
+            QStyle::SE_PushButtonContents, &option, this);
+        const int iconSide = qMin(22, qMax(0, content.height() - 24));
+        const QRect iconRect(content.center().x() - iconSide / 2,
+                             content.top() + 2, iconSide, iconSide);
+        const QIcon::Mode mode = isEnabled()
+            ? ((option.state & QStyle::State_MouseOver) ? QIcon::Active : QIcon::Normal)
+            : QIcon::Disabled;
+        const QColor textColor = option.palette.color(
+            isEnabled() ? QPalette::Active : QPalette::Disabled,
+            QPalette::ButtonText);
+        QPixmap iconPixmap(iconRect.size() * devicePixelRatioF());
+        iconPixmap.setDevicePixelRatio(devicePixelRatioF());
+        iconPixmap.fill(Qt::transparent);
+        {
+            QPainter iconPainter(&iconPixmap);
+            const QRect logicalPixmapRect(QPoint(), iconRect.size());
+            tabIcon.paint(&iconPainter, logicalPixmapRect, Qt::AlignCenter, mode);
+            iconPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            iconPainter.fillRect(logicalPixmapRect, textColor);
+        }
+        painter.drawPixmap(iconRect.topLeft(), iconPixmap);
+
+        painter.setPen(textColor);
+        const QRect textRect(content.left(), iconRect.bottom() + 1,
+                             content.width(),
+                             qMax(0, content.bottom() - iconRect.bottom()));
+        painter.drawText(textRect, Qt::AlignHCenter | Qt::AlignTop | Qt::TextSingleLine,
+                         label);
+    }
+};
+
+void setSelected(QPushButton *button, bool selected)
+{
+    if (button->property("selected").toBool() == selected) {
+        return;
+    }
+    button->setProperty("selected", selected);
+    button->style()->unpolish(button);
+    button->style()->polish(button);
+    button->update();
+}
+
+} // namespace
 
 MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     : QMainWindow(parent)
@@ -28,27 +143,33 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
 
     auto *centralWidget = new QWidget(this);
     auto *layout = new QVBoxLayout(centralWidget);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
 
     auto *configurationMessage = new QLabel(centralWidget);
     configurationMessage->setObjectName(QStringLiteral("configurationMessage"));
     configurationMessage->setWordWrap(true);
     if (config.isValid()) {
         configurationMessage->setText(QStringLiteral("配置已就绪"));
+        configurationMessage->hide();
     } else {
         configurationMessage->setText(QStringLiteral("配置错误：\n%1").arg(config.validationMessage()));
+        configurationMessage->setProperty("role", QStringLiteral("danger"));
+        configurationMessage->setContentsMargins(20, 12, 20, 12);
     }
     layout->addWidget(configurationMessage);
 
     currentAuthorityStatus_ = new QLabel(centralWidget);
     currentAuthorityStatus_->setObjectName(QStringLiteral("currentAuthorityStatus"));
     currentAuthorityStatus_->setWordWrap(true);
-    currentAuthorityStatus_->setStyleSheet(
-        QStringLiteral("color: red; font-weight: bold;"));
+    currentAuthorityStatus_->setProperty("role", QStringLiteral("danger"));
+    currentAuthorityStatus_->setContentsMargins(20, 8, 20, 4);
     currentAuthorityStatus_->hide();
     currentAuthorityRetryButton_ = new QPushButton(
         QStringLiteral("重试订单校验"), centralWidget);
     currentAuthorityRetryButton_->setObjectName(
         QStringLiteral("currentAuthorityRetryButton"));
+    currentAuthorityRetryButton_->setProperty("role", QStringLiteral("danger"));
     currentAuthorityRetryButton_->hide();
     layout->addWidget(currentAuthorityStatus_);
     layout->addWidget(currentAuthorityRetryButton_);
@@ -56,26 +177,44 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     authenticatedNavigation_ = new QWidget(centralWidget);
     authenticatedNavigation_->setObjectName(QStringLiteral("authenticatedNavigation"));
     auto *navigationLayout = new QHBoxLayout(authenticatedNavigation_);
-    navigationLayout->setContentsMargins(0, 0, 0, 0);
-    nearbyNavigationButton_ = new QPushButton(QStringLiteral("附近充电站"), authenticatedNavigation_);
+    navigationLayout->setContentsMargins(4, 4, 4, 4);
+    navigationLayout->setSpacing(4);
+    nearbyNavigationButton_ = new MobileTabButton(
+        QStringLiteral("找桩"), QStringLiteral(":/ui/location.svg"),
+        authenticatedNavigation_);
     nearbyNavigationButton_->setObjectName(QStringLiteral("nearbyNavigationButton"));
-    currentOrderNavigationButton_ = new QPushButton(QStringLiteral("当前订单"), authenticatedNavigation_);
+    currentOrderNavigationButton_ = new MobileTabButton(
+        QStringLiteral("当前订单"), QStringLiteral(":/ui/battery-charging.svg"),
+        authenticatedNavigation_);
     currentOrderNavigationButton_->setObjectName(QStringLiteral("currentOrderNavigationButton"));
     currentOrderNavigationButton_->setVisible(false);
-    historyNavigationButton_ = new QPushButton(QStringLiteral("历史订单"), authenticatedNavigation_);
+    historyNavigationButton_ = new MobileTabButton(
+        QStringLiteral("历史订单"), QStringLiteral(":/ui/history.svg"),
+        authenticatedNavigation_);
     historyNavigationButton_->setObjectName(QStringLiteral("historyNavigationButton"));
-    profileNavigationButton_ = new QPushButton(QStringLiteral("我的账户"), authenticatedNavigation_);
+    profileNavigationButton_ = new MobileTabButton(
+        QStringLiteral("我的账户"), QStringLiteral(":/ui/person.svg"),
+        authenticatedNavigation_);
     profileNavigationButton_->setObjectName(QStringLiteral("profileNavigationButton"));
-    navigationLayout->addWidget(nearbyNavigationButton_);
-    navigationLayout->addWidget(currentOrderNavigationButton_);
-    navigationLayout->addWidget(historyNavigationButton_);
-    navigationLayout->addWidget(profileNavigationButton_);
-    navigationLayout->addStretch();
+    const QList<QPushButton *> navigationButtons{
+        nearbyNavigationButton_, currentOrderNavigationButton_,
+        historyNavigationButton_, profileNavigationButton_};
+    for (QPushButton *button : navigationButtons) {
+        button->setProperty("role", QStringLiteral("tab"));
+        button->setProperty("selected", false);
+        navigationLayout->addWidget(button, 1);
+    }
     authenticatedNavigation_->setVisible(false);
-    layout->addWidget(authenticatedNavigation_);
 
-    pages_ = new QStackedWidget(centralWidget);
+    auto *contentViewport = new QScrollArea(centralWidget);
+    contentViewport->setObjectName(QStringLiteral("contentViewport"));
+    contentViewport->setWidgetResizable(true);
+    contentViewport->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    contentViewport->setFrameShape(QFrame::NoFrame);
+
+    pages_ = new ResponsiveStackedWidget;
     pages_->setObjectName(QStringLiteral("mainPages"));
+    pages_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     loginPage_ = new LoginPage(pages_);
     nearbyPage_ = new NearbyPage(userApi_, mapClient_, pages_);
     historyPage_ = new HistoryPage(userApi_, pages_);
@@ -87,7 +226,9 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     pages_->addWidget(profilePage_);
     pages_->addWidget(chargePage_);
     showPage(loginPage_);
-    layout->addWidget(pages_);
+    contentViewport->setWidget(pages_);
+    layout->addWidget(contentViewport, 1);
+    layout->addWidget(authenticatedNavigation_);
 
     connect(loginPage_, &LoginPage::loginRequested, userApi_, &UserApi::loginByPhone);
     connect(userApi_, &UserApi::loginPendingChanged, loginPage_, &LoginPage::setPending);
@@ -443,6 +584,10 @@ void MainWindow::showPage(QWidget *page, NavigationTransition transition)
         }
     }
     pages_->setCurrentWidget(page);
+    setSelected(nearbyNavigationButton_, page == nearbyPage_);
+    setSelected(currentOrderNavigationButton_, page == chargePage_);
+    setSelected(historyNavigationButton_, page == historyPage_);
+    setSelected(profileNavigationButton_, page == profilePage_);
 }
 
 void MainWindow::updateAuthenticatedNavigation()

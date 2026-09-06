@@ -6,6 +6,8 @@
 #include <QRandomGenerator>
 #include <QString>
 
+#include <functional>
+
 namespace ev::simulator {
 
 struct ChargerSnapshot
@@ -35,7 +37,10 @@ struct FaultIntent
 class TelemetryEngine
 {
 public:
-    TelemetryEngine(quint32 seed, const QDateTime &initialTime, int intervalMs);
+    using Clock = std::function<QDateTime()>;
+
+    TelemetryEngine(quint32 seed, const QDateTime &initialTime, int intervalMs,
+                    Clock wallClock = {});
 
     void replaceChargers(const QList<ChargerSnapshot> &chargers);
     QList<ChargerSnapshot> chargers() const;
@@ -53,10 +58,17 @@ public:
     int intervalMs() const { return intervalMs_; }
 
 private:
+    // R14: the v1 contract requires recordedAt to increase strictly across
+    // telemetry and fault events per charger, so every event timestamp is
+    // allocated from this monotonic clock instead of reusing currentTime_.
+    QDateTime nextEventTime(const QDateTime &base);
+
     quint32 seed_;
     QRandomGenerator rng_;
     QDateTime currentTime_;
+    QDateTime lastEventAt_;
     int intervalMs_;
+    Clock wallClock_;
     QMap<int, ChargerSnapshot> chargers_;
     QList<FaultIntent> pendingIntents_;
 };

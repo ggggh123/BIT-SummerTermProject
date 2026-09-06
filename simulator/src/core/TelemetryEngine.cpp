@@ -1,13 +1,17 @@
 #include "core/TelemetryEngine.h"
 
+#include <utility>
+
 namespace ev::simulator {
 
 TelemetryEngine::TelemetryEngine(quint32 seed, const QDateTime &initialTime,
-                                 int intervalMs)
+                                 int intervalMs, Clock wallClock)
     : seed_(seed),
       rng_(QRandomGenerator(seed)),
       currentTime_(initialTime),
-      intervalMs_(intervalMs)
+      lastEventAt_(initialTime),
+      intervalMs_(intervalMs),
+      wallClock_(std::move(wallClock))
 {}
 
 void TelemetryEngine::replaceChargers(const QList<ChargerSnapshot> &chargers)
@@ -27,9 +31,23 @@ QDateTime TelemetryEngine::currentTime() const
     return currentTime_;
 }
 
+QDateTime TelemetryEngine::nextEventTime(const QDateTime &base)
+{
+    QDateTime t = base;
+    if (wallClock_) {
+        const QDateTime wallNow = wallClock_();
+        if (wallNow.isValid() && wallNow > t)
+            t = wallNow;
+    }
+    if (t <= lastEventAt_)
+        t = lastEventAt_.addMSecs(1);
+    lastEventAt_ = t;
+    return t;
+}
+
 QList<TelemetrySample> TelemetryEngine::tick()
 {
-    currentTime_ = currentTime_.addMSecs(intervalMs_);
+    currentTime_ = nextEventTime(currentTime_.addMSecs(intervalMs_));
     QList<TelemetrySample> samples;
     samples.reserve(chargers_.size());
 
@@ -77,7 +95,8 @@ bool TelemetryEngine::requestFault(int chargerId)
     FaultIntent intent;
     intent.chargerId = chargerId;
     intent.fault = true;
-    intent.recordedAt = currentTime_;
+    intent.recordedAt = nextEventTime(currentTime_);
+    currentTime_ = intent.recordedAt;
     pendingIntents_.append(intent);
     return true;
 }
@@ -93,7 +112,8 @@ bool TelemetryEngine::requestRecovery(int chargerId)
     FaultIntent intent;
     intent.chargerId = chargerId;
     intent.fault = false;
-    intent.recordedAt = currentTime_;
+    intent.recordedAt = nextEventTime(currentTime_);
+    currentTime_ = intent.recordedAt;
     pendingIntents_.append(intent);
     return true;
 }

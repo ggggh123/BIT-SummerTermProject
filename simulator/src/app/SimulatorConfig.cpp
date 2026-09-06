@@ -6,6 +6,13 @@
 
 namespace ev::simulator {
 
+QDateTime resolvedStartTime(const SimulatorConfig &config, const QDateTime &now)
+{
+    if (config.startTime.trimmed().isEmpty())
+        return now.toOffsetFromUtc(8 * 3600);
+    return QDateTime::fromString(config.startTime, Qt::ISODate);
+}
+
 SimulatorConfig configFromCommandLine(const QCoreApplication &app)
 {
     QCommandLineParser parser;
