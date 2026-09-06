@@ -10,6 +10,10 @@
 
 **Spec:** `docs/design/interface-contract.md`；`docs/superpowers/specs/2026-09-04-core-scope-rebaseline-design.md`；既有 `docs/superpowers/plans/2026-09-01-admin-server.md` Tasks 1–2、5、7 的尚未实现部分。2026-09-06 用户已批准按整项目交付路线继续实施，本计划细化其中服务端工作线，不另行改变协议或产品范围。
 
+## 执行状态（2026-09-06）
+
+Task 1 已以 `47bcdae` 完成并通过独立任务审查；Task 2 已以 `876edaa` 实现，`91e87be` 修复默认库路径预检缺口后通过限定复审。两任务组合重新构建及 CTest 29/29 通过。下方保留开工时的步骤清单，完成证据及最终整分支审查状态以[服务端收尾验证记录](../../test/server-delivery-closeout-2026-09-06.md)为准；不据此宣布整项目 GO。
+
 ## Global Constraints
 
 - 基线 `origin/dev@97c6da13adb3b50503091dab9456fa704728771a`，截止 2026-09-10。
