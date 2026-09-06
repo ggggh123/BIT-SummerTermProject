@@ -1,5 +1,7 @@
 # 核心三端运行入口实施计划
 
+> **执行状态：已完成。** Task 1/2、最终单次修复与独立复审均已闭环；生产候选 `2876575` 已由主控全量复验（CTest32/32，其中脚本121项与live2项，数据库15项）。后续提交仅更新记录。本计划不应重新派发已完成任务；证据与四项裁定见[运行交付评审](../../review/core-runtime-entrypoints-review-2026-09-06.md)。整项目的人工GUI、腾讯在线、换机与完整双彩排仍须另行完成。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把已确认的手动三端冷启动流程落实为可重复的 reset/start/smoke/stop 四个入口。
