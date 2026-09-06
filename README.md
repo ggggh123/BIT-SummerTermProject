@@ -24,6 +24,7 @@
 - [范围基线 v2](docs/management/scope-baseline.md) 与 [2026-09-04 范围变更记录](docs/management/scope-change-2026-09-04.md)
 - [仓库进展审计（2026-09-04）](docs/review/repository-progress-audit-2026-09-04.md)
 - [核心阻塞修复与同版本复验（2026-09-06）](docs/test/core-fixes-2026-09-06.md)、[最终综合审查归档（2026-09-06）](docs/review/core-fixes-review-2026-09-06.md) 与 [团队交接状态](docs/management/core-integration-handoff-2026-09-06.md)
+- [本批服务端交付审查](docs/review/server-delivery-review-2026-09-06.md)（含已修项目与尚待决定的满队列合同边界）
 - [接口合同](docs/design/interface-contract.md) 与 [当前实施计划索引](docs/superpowers/plans/README.md)
 - [核心验收清单](docs/release/core-acceptance-checklist.md)
 - [核心演示与交付操作手册](docs/release/core-demo-runbook.md)（当前手动启动方法、八分钟主线、数值核对和双彩排要求）

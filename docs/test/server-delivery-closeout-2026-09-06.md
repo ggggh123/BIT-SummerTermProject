@@ -33,7 +33,7 @@ cmake --build /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0 -j
 QT_QPA_PLATFORM=offscreen ctest --test-dir /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0 --output-on-failure -j4
 ```
 
-本任务最终构建退出码 0，CTest **27/27**，38.98 秒。包含新 `database_worker`、`server_threads` 与既有 `core_workflow`、UTC/上海 TCP、管理 GUI 等测试。
+本任务最终构建退出码 0，CTest **27/27**，38.98 秒。包含新 `database_worker`、`server_threads` 与既有 `core_workflow`、UTC/上海 TCP、管理 GUI 等测试。本文件后续列出组合到在线复位及最终修复后的新结果，不能将此历史计数当作最终计数。
 
 独立任务评审：规格通过、质量 Approved，无 Critical/Important。两项 Minor 为测试提前失败时 singleShot 局部捕获的生命周期保护，以及额外的重启关闭/失败事务覆盖建议，交整分支评审统一处理。本段不是整个项目或历史全部 action 的重新认证。
 
@@ -65,6 +65,14 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir /home/hushengyuan/.cache/ev-core-fixe
 在 `91e87be` 上重新执行本文件构建/CTest 及下节三条命令：构建退出码 0，CTest **29/29**（38.67 秒）、数据库 pytest **15/15**（1.16 秒）、地图 HTML 离线 **15/15**（342.68 ms）、环境脚本 **13/13**。以上是同一修复后源码的组合结果，不复用初版 29/29。整分支最终审查结果另行追加。
 
 ## 其他独立复验
+
+### 最终审查修复中的回归记录
+
+整分支审查发现的满队列校验优先级及有限测试修复以 `76ff1de` 提交，见[本批审查归档](../review/server-delivery-review-2026-09-06.md)。修复中的一次完整构建成功、数据库 15/15，CTest **27/29**：UTC/上海运行的同一高精度事件游标用例失败，新加入的 QDateTime 预检拒绝了原合法长小数 Timestamp。修正为服务和预检共用原有字符串小数算法，原测试向量未改；先取得 UTC/上海 **2/2**，再由本机主控执行下述最终完整验证。完整 RED、定向覆盖和修复过程见[归档报告](evidence/server-delivery-2026-09-06/final-fix-report.md)。
+
+在最终实现 `76ff1de`（文档 HEAD 为 `bc436e9`）重新运行构建/全部 CTest/数据库 pytest：构建退出 0、CTest **29/29**（38.29 秒）、数据库 **15/15**（1.11 秒）；黄金 SHA-256 仍为批准值。这是时间戳修正后的实际全量结果，非拼接两次局部 GREEN。新测试包括满队列身份/基础参数、未知 token、重启关闭/首次 ACK 失败、跨新 reset 的旧 pending 和 GUI 失败复用请求 ID。
+
+纯基础参数检查与身份副本解决了 I1 的已复现认证/格式分支；依赖权威数据库的业务检查和仍在 worker 内的 forecast 整批语义尚未获得满队列前判定，因此 **29/29 不代表该合同 Important 已关闭**。容量合同建议尚未获用户批准。
 
 本批服务端修改之外，执行以下不调用腾讯网络服务的检查：
 
