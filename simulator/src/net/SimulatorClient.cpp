@@ -93,15 +93,6 @@ void SimulatorClient::requestStatusRefresh()
     sendStatus();
 }
 
-void SimulatorClient::setRunning(bool running)
-{
-    running_ = running;
-    // Push the state change immediately so the server does not keep a stale
-    // "running" heartbeat after the panel pauses (R13).
-    if (socket_.state() == QAbstractSocket::ConnectedState)
-        sendStatus();
-}
-
 void SimulatorClient::sendStatus()
 {
     QJsonObject payload;
