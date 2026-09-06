@@ -142,6 +142,16 @@ private slots:
         QVERIFY(elapsed.elapsed() >= 1400);
         QCOMPARE(exchange(socket,"restart","admin.charger_restart",token,{{"chargerId",10}}),bytes);
     }
+    void unknownNonemptyTokenCannotUseAnonymousLogin()
+    {
+        QTemporaryDir dir; AppContext context; QVERIFY(initialize(context,dir).ok);
+        QTcpSocket socket; socket.connectToHost(QHostAddress::LocalHost,context.port()); QVERIFY(socket.waitForConnected());
+        QCOMPARE(ev::protocol::parseResponse(exchange(socket,"invalid-login","auth.user_login","unknown-session",
+            {{"mobile","13800138000"}})).code,QString("AUTH_REQUIRED"));
+        QCOMPARE(ev::protocol::parseResponse(exchange(socket,"invalid-admin-login","admin.login","unknown-session",
+            {{"username","admin"},{"password","123456"}})).code,QString("AUTH_REQUIRED"));
+        QVERIFY(ev::protocol::parseResponse(exchange(socket,"unknown-health","system.health","unknown-session")).ok);
+    }
     void shutdownDrainsAcceptedCommandsAndDiscardsDeadReceivers()
     {
         QTemporaryDir dir; AppContext context; QVERIFY(initialize(context,dir).ok);
@@ -165,6 +175,53 @@ private slots:
             QVERIFY(query.next()); QCOMPARE(query.value(0).toInt(),50900);
         }
         db.close(); db = {}; QSqlDatabase::removeDatabase("drain-check");
+    }
+    void restartAckThenShutdownCompletesExactlyOnce()
+    {
+        QTemporaryDir dir; AppContext context; QVERIFY(initialize(context,dir).ok);
+        QTcpSocket socket; socket.connectToHost(QHostAddress::LocalHost,context.port()); QVERIFY(socket.waitForConnected());
+        const auto admin = login(socket,true); QVERIFY(!admin.isEmpty());
+        const auto ack = exchange(socket,"shutdown-restart","admin.charger_restart",admin,{{"chargerId",10}});
+        QVERIFY(ev::protocol::parseResponse(ack).ok);
+        context.shutdown(); // 成功 ACK 后立即关闭，stop 必须等已提交的重启完成。
+        auto db = QSqlDatabase::addDatabase("QSQLITE","restart-shutdown-check");
+        db.setDatabaseName(context.databasePath()); QVERIFY(db.open());
+        {
+            QSqlQuery query(db);
+            QVERIFY(query.exec("SELECT status FROM chargers WHERE id=10")); QVERIFY(query.next());
+            QCOMPARE(query.value(0).toString(),QString("idle"));
+            QVERIFY(query.exec("SELECT COUNT(*) FROM events WHERE event_type='admin.charger_restart.done' AND entity_id=10"));
+            QVERIFY(query.next()); QCOMPARE(query.value(0).toInt(),1);
+            query.prepare("SELECT response_json FROM request_log WHERE request_id='shutdown-restart'");
+            QVERIFY(query.exec()); QVERIFY(query.next()); QCOMPARE(query.value(0).toString().toUtf8(),ack);
+        }
+        db.close(); db = {}; QSqlDatabase::removeDatabase("restart-shutdown-check");
+    }
+    void failedFirstRestartAckNeverSchedulesCompletion()
+    {
+        QTemporaryDir dir; AppContext context; QVERIFY(initialize(context,dir).ok);
+        QTcpSocket socket; socket.connectToHost(QHostAddress::LocalHost,context.port()); QVERIFY(socket.waitForConnected());
+        const auto admin = login(socket,true); QVERIFY(!admin.isEmpty());
+        auto db = QSqlDatabase::addDatabase("QSQLITE","restart-failure-check");
+        db.setDatabaseName(context.databasePath()); QVERIFY(db.open());
+        {
+            QSqlQuery query(db);
+            QVERIFY(query.exec("CREATE TRIGGER reject_restart_ack BEFORE INSERT ON request_log "
+                "WHEN NEW.action='admin.charger_restart' BEGIN SELECT RAISE(ABORT,'test ACK failure'); END"));
+            const auto ack = exchange(socket,"failed-restart","admin.charger_restart",admin,{{"chargerId",10}});
+            QCOMPARE(ev::protocol::parseResponse(ack).code,QString("INTERNAL_ERROR"));
+            QVERIFY(query.exec("DROP TRIGGER reject_restart_ack"));
+            QTest::qWait(1700); // 单次跨过 1500 ms 完成时限，观察失败 ACK 没有延迟写。
+            QVERIFY(query.exec("SELECT status FROM chargers WHERE id=10")); QVERIFY(query.next());
+            QCOMPARE(query.value(0).toString(),QString("fault"));
+            QVERIFY(query.exec("SELECT COUNT(*) FROM events WHERE event_type IN ('admin.charger_restart','admin.charger_restart.done') AND entity_id=10"));
+            QVERIFY(query.next()); QCOMPARE(query.value(0).toInt(),0);
+            QVERIFY(query.exec("SELECT COUNT(*) FROM request_log WHERE request_id='failed-restart'"));
+            QVERIFY(query.next()); QCOMPARE(query.value(0).toInt(),0);
+            QVERIFY(query.exec("SELECT version FROM snapshot_meta")); QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(),0);
+        }
+        db.close(); db = {}; QSqlDatabase::removeDatabase("restart-failure-check");
     }
     void disconnectedClientCanReplayItsAlreadyAcceptedCommand()
     {
@@ -214,9 +271,26 @@ private slots:
         QTemporaryDir dir; AppContext context; QVERIFY(initialize(context,dir).ok);
         QTcpSocket socket; socket.connectToHost(QHostAddress::LocalHost,context.port()); QVERIFY(socket.waitForConnected());
         const auto token = login(socket);
+        const auto admin = login(socket,true);
+        QVERIFY(!token.isEmpty() && !admin.isEmpty());
         for (int i = 0; i < 256; ++i)
             context.executeLocal({1,QString("fill-%1").arg(i),"user.get",token,{}},this,[](auto) {});
         QByteArray unknown,busy,health;
+        const QList<ev::protocol::RequestEnvelope> rejected = {
+            {1,"anonymous-full","demo.reset",{},{{"confirmation","RESET_DEMO"}}},
+            {1,"user-full","demo.reset",token,{{"confirmation","RESET_DEMO"}}},
+            {1,"confirmation-full","demo.reset",admin,{}},
+            {1,"confirmation-type-full","demo.reset",admin,{{"confirmation",true}}},
+            {1,"confirmation-case-full","demo.reset",admin,{{"confirmation","reset_demo"}}},
+            {1,"sim-full","demo.reset","sim-token",{}},
+            {1,"invalid-token-full","demo.reset","invalid-session",{}},
+            {1,"amount-full","wallet.recharge",token,{{"amountFen",0}}},
+            {1,"id-full","station.detail",token,{{"stationId",1.5}}},
+            {1,"phone-full","auth.user_login",{},{{"mobile","bad"}}}
+        };
+        QStringList codes;
+        for (const auto &request : rejected)
+            context.executeLocal(request,this,[&](auto bytes) { codes.append(ev::protocol::parseResponse(bytes).code); });
         context.executeLocal({1,"unknown-full","nonexistent",token,{}},this,[&](auto bytes) { unknown = bytes; });
         context.executeLocal({1,"busy-full","user.get",token,{}},this,[&](auto bytes) { busy = bytes; });
         context.executeLocal({1,"health-full","system.health",{},{}},this,[&](auto bytes) { health = bytes; });
@@ -224,6 +298,59 @@ private slots:
         QCOMPARE(ev::protocol::parseResponse(unknown).code,QString("INVALID_REQUEST"));
         QCOMPARE(ev::protocol::parseResponse(busy).code,QString("SERVER_BUSY"));
         QVERIFY(ev::protocol::parseResponse(health).ok);
+        QTRY_COMPARE(codes.size(),rejected.size());
+        QCOMPARE(codes,(QStringList{"AUTH_REQUIRED","FORBIDDEN","INVALID_REQUEST","INVALID_REQUEST",
+            "INVALID_REQUEST","FORBIDDEN","AUTH_REQUIRED","INVALID_REQUEST","INVALID_REQUEST","INVALID_PHONE"}));
+    }
+    void purePayloadErrorsMatchBeforeAndAfterCapacityAdmission()
+    {
+        QTemporaryDir dir; AppContext context; QVERIFY(initialize(context,dir).ok);
+        QTcpSocket socket; socket.connectToHost(QHostAddress::LocalHost,context.port()); QVERIFY(socket.waitForConnected());
+        const auto user=login(socket); const auto admin=login(socket,true);
+        QVERIFY(!user.isEmpty() && !admin.isEmpty());
+        struct Case { QString action,token; QJsonObject payload; };
+        const QList<Case> cases={
+            {"auth.user_login",{},{{"mobile",123}}},
+            {"admin.login",{},{{"username","admin"},{"password",false}}},
+            {"user.update",user,{{"nickname"," "}}},
+            {"wallet.recharge",user,{{"amountFen",9007199254740992.0}}},
+            {"station.list",user,{{"latitude",true},{"longitude",10}}},
+            {"charger.list",user,{{"stationId",0}}},
+            {"charge.reserve",user,{{"chargerId","1"}}},
+            {"charge.start",user,{}}, {"charge.stop",user,{}},
+            {"charge.settle",user,{}}, {"order.cancel",user,{}},
+            {"order.list",user,{{"limit",2.5}}},
+            {"admin.dashboard",admin,{{"rangeDays",7.5}}},
+            {"admin.station_create",admin,{{"name","test"},{"address","test"},{"longitude",120},
+                {"priceFenPerKwh",100},{"fastChargerCount",1},{"slowChargerCount",0}}},
+            {"admin.charger_restart",admin,{{"chargerId",-1}}},
+            {"admin.user_list",admin,{{"mobileLike",true}}},
+            {"admin.user_set_status",admin,{{"userId",1},{"status","unknown"}}},
+            {"telemetry.push","sim-token",{{"chargerId",1},{"recordedAt","2026-09-06T10:00:00Z"},
+                {"powerKw",1},{"energyIncrementKwh",0},{"status","idle"}}},
+            {"simulator.fault_set","sim-token",{{"chargerId",1},{"recordedAt","2026-09-06T10:00:00+08:00"},{"fault",1}}},
+            {"simulator.status","sim-token",{{"simulatedAt","2026-09-06T10:00:00+08:00"},{"state","running"},{"eventCount",0.5}}},
+            {"forecast.publish","ml-token",{{"runId","test"},{"modelVersion","test"},{"generatedAt","2026-09-06T10:00:00+08:00"},
+                {"dataCutoff","2026-09-06T10:00:00+08:00"},{"records",false}}}
+        };
+        int drained=0;
+        QStringList codes;
+        QObject replies; // 早退时丢弃全部按引用捕获的异步响应。
+        for (int i=0;i<256;++i)
+            context.executeLocal({1,QString("matrix-fill-%1").arg(i),"user.get",user,{}},&replies,[&](auto) { ++drained; });
+        for (int i=0;i<cases.size();++i) {
+            const auto &item=cases[i];
+            context.executeLocal({1,QString("matrix-full-%1").arg(i),item.action,item.token,item.payload},&replies,
+                [&](auto bytes) { codes.append(ev::protocol::parseResponse(bytes).code); });
+        }
+        QTRY_COMPARE(codes.size(),cases.size());
+        for (int i=0;i<cases.size();++i) QCOMPARE(codes[i],QString("INVALID_REQUEST"));
+        QTRY_COMPARE(drained,256);
+        for (int i=0;i<cases.size();++i) {
+            const auto &item=cases[i];
+            QCOMPARE(ev::protocol::parseResponse(exchange(socket,QString("matrix-normal-%1").arg(i),
+                item.action,item.token,item.payload)).code,QString("INVALID_REQUEST"));
+        }
     }
 };
 QTEST_GUILESS_MAIN(ServerThreadsTest)

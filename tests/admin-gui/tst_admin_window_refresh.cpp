@@ -94,6 +94,74 @@ class AdminWindowRefreshTest : public QObject
     Q_OBJECT
 
 private slots:
+    void failedResetAckKeepsRequestIdForConfirmedRetry()
+    {
+        QTemporaryDir dir; AppContext context;
+        AppContext::Options options;
+        options.port=0; options.databasePath=dir.filePath("retry.db"); options.snapshotPath=dir.filePath("snapshot.json");
+        QVERIFY(context.initialize(options).ok);
+        const auto admin=loginAdmin(context); QVERIFY(!admin.isEmpty());
+        MainWindow window(&context,admin); window.show();
+        window.findChild<QTabWidget *>("adminTabs")->setCurrentIndex(7);
+        auto *reset=window.findChild<QPushButton *>("demoResetButton"); QVERIFY(reset);
+        auto db=QSqlDatabase::addDatabase("QSQLITE","gui-reset-retry");
+        db.setDatabaseName(options.databasePath); QVERIFY(db.open());
+        {
+            QSqlQuery query(db);
+            QVERIFY(query.exec("CREATE TRIGGER reject_gui_ack BEFORE INSERT ON request_log WHEN NEW.action='demo.reset' "
+                "BEGIN SELECT RAISE(ABORT,'test ACK failure'); END"));
+            auto confirm=[&] {
+                QTimer::singleShot(0,&window,[] {
+                    if (auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+                        box->button(QMessageBox::Yes)->click();
+                });
+            };
+            bool failureSeen=false, enabledOnFailure=false;
+            QTimer failureDialog;
+            connect(&failureDialog,&QTimer::timeout,&window,[&] {
+                if (auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+                    box && box->windowTitle()==QStringLiteral("复位未完成")) {
+                    failureSeen=true; enabledOnFailure=reset->isEnabled(); box->accept(); failureDialog.stop();
+                }
+            });
+            failureDialog.start(10);
+            confirm(); reset->click();
+            QVERIFY(!reset->isEnabled());
+            const auto requestId=reset->property("requestId").toString(); QVERIFY(!requestId.isEmpty());
+            QTRY_VERIFY(failureSeen); QVERIFY(enabledOnFailure); QVERIFY(reset->isEnabled());
+            QCOMPARE(reset->property("requestId").toString(),requestId);
+            query.prepare("SELECT request_id,state,reset_at,golden_hash,snapshot_version FROM demo_reset_receipts");
+            QVERIFY(query.exec()); QVERIFY(query.next());
+            QCOMPARE(query.value(0).toString(),requestId); QCOMPARE(query.value(1).toString(),QString("pending"));
+            const auto resetAt=query.value(2); const auto hash=query.value(3); const auto version=query.value(4);
+            QVERIFY(!query.next()); query.finish();
+            QVERIFY(query.exec("DROP TRIGGER reject_gui_ack"));
+            // 核心复位后写入新业务；重试 final ACK 不能再次清库。
+            QByteArray loginBytes,rechargeBytes;
+            QObject replyScope;
+            context.executeLocal({1,"retry-user","auth.user_login",{},{{"mobile","13800138000"}}},&replyScope,
+                [&](auto bytes) { loginBytes=bytes; });
+            QTRY_VERIFY(!loginBytes.isEmpty());
+            const auto user=ev::protocol::parseResponse(loginBytes).data.toObject();
+            const auto balance=user.value("user").toObject().value("balanceFen").toInteger();
+            context.executeLocal({1,"between-reset-attempts","wallet.recharge",user.value("token").toString(),{{"amountFen",123}}},
+                &replyScope,[&](auto bytes) { rechargeBytes=bytes; });
+            QTRY_VERIFY(!rechargeBytes.isEmpty()); QVERIFY(ev::protocol::parseResponse(rechargeBytes).ok);
+            confirm(); reset->click();
+            QVERIFY(!reset->isEnabled()); QCOMPARE(reset->property("requestId").toString(),requestId);
+            QTRY_VERIFY(reset->isEnabled()); QTRY_VERIFY(reset->property("requestId").toString().isEmpty());
+            QVERIFY(query.exec("SELECT request_id,state,reset_at,golden_hash,snapshot_version FROM demo_reset_receipts"));
+            QVERIFY(query.next()); QCOMPARE(query.value(0).toString(),requestId); QCOMPARE(query.value(1).toString(),QString("final"));
+            QCOMPARE(query.value(2),resetAt); QCOMPARE(query.value(3),hash); QCOMPARE(query.value(4),version);
+            QVERIFY(!query.next());
+            QVERIFY(query.exec("SELECT balance_fen FROM users WHERE mobile='13800138000'")); QVERIFY(query.next());
+            QCOMPARE(query.value(0).toLongLong(),balance+123);
+            QVERIFY(query.exec("SELECT version FROM snapshot_meta")); QVERIFY(query.next()); QCOMPARE(query.value(0),version);
+            QVERIFY(query.exec("SELECT COUNT(*) FROM request_log WHERE action='demo.reset' AND code='OK'"));
+            QVERIFY(query.next()); QCOMPARE(query.value(0).toInt(),1);
+        }
+        db.close(); db={}; QSqlDatabase::removeDatabase("gui-reset-retry");
+    }
     void guiLoginAndMutationsUseQueuedAuthenticatedDispatcher()
     {
         QTemporaryDir dir;

@@ -23,6 +23,7 @@ Result AppContext::initialize(const Options &options)
     connect(&m_databaseThread,&QThread::finished,m_worker,&QObject::deleteLater);
     connect(m_worker,&DatabaseWorker::completed,this,&AppContext::deliver);
     connect(m_worker,&DatabaseWorker::healthChanged,this,[this](const auto &health) { m_health = health; });
+    connect(m_worker,&DatabaseWorker::tokenRolesChanged,this,[this](const TokenRoles &roles) { m_tokenRoles=roles; });
     m_databaseThread.setObjectName("DatabaseWorker");
     m_databaseThread.start();
     Result initialized;
@@ -79,6 +80,10 @@ void AppContext::executeLocal(ev::protocol::RequestEnvelope request, QObject *re
     if (request.action == ev::actions::SystemHealth) {
         deliver(sequence,ev::protocol::toJson({request.requestId,true,"OK","ready",healthSnapshot()})); return;
     }
+    const auto preflight=RequestPreflight::check(RequestPreflight::roleForToken(m_tokenRoles,request.token),request);
+    if (!preflight.ok) {
+        deliver(sequence,ev::protocol::toJson({request.requestId,false,preflight.code,preflight.message,QJsonObject{}})); return;
+    }
     if (m_pending.size() > 256) {
         deliver(sequence,ev::protocol::toJson({request.requestId,false,"SERVER_BUSY","请求队列已满",QJsonObject{}})); return;
     }
@@ -90,6 +95,11 @@ void AppContext::queryAdmin(AdminView view, const QString &token, const QJsonObj
     Q_ASSERT(QThread::currentThread() == thread());
     if (!m_accepting->load() || !receiver) return;
     const auto sequence = enqueue(receiver,std::move(callback));
+    const auto auth=RequestPreflight::authorize(RequestPreflight::roleForToken(m_tokenRoles,token),
+        {1,"internal-admin-view",ev::actions::AdminDashboard,token,{}});
+    if (!auth.ok) {
+        deliver(sequence,ev::protocol::toJson({{},false,auth.code,auth.message,QJsonObject{}})); return;
+    }
     if (m_pending.size() > 256) {
         deliver(sequence,ev::protocol::toJson({{},false,"SERVER_BUSY","请求队列已满",QJsonObject{}})); return;
     }
@@ -102,6 +112,7 @@ void AppContext::shutdown()
     m_accepting->store(false);
     if (m_apiServer) m_apiServer->stop();
     m_pending.clear();
+    m_tokenRoles.clear();
     if (m_worker) {
         QMetaObject::invokeMethod(m_worker,&DatabaseWorker::stop,Qt::QueuedConnection);
         m_databaseThread.wait();

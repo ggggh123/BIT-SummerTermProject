@@ -44,6 +44,7 @@ private:
     QHash<quint64, Pending> m_pending;
     quint64 m_sequence = 0;
     QJsonObject m_health;
+    TokenRoles m_tokenRoles;
     QString m_databasePath;
     QString m_host;
     quint16 m_port = 0;

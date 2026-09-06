@@ -43,8 +43,9 @@ private slots:
             QSqlQuery lock(lockDb); QVERIFY(lock.exec("BEGIN IMMEDIATE"));
             QElapsedTimer elapsed; elapsed.start();
             qint64 uiTick = -1;
-            QTimer::singleShot(30, this, [&]{ uiTick = elapsed.elapsed(); });
-            QTimer::singleShot(700, this, [&]{ lock.exec("ROLLBACK"); });
+            QObject timerScope; // 早退时先取消回调，再析构所捕获的局部对象。
+            QTimer::singleShot(30, &timerScope, [&]{ uiTick = elapsed.elapsed(); });
+            QTimer::singleShot(700, &timerScope, [&]{ lock.exec("ROLLBACK"); });
             send(rechargeSocket, {1,"recharge","wallet.recharge",token,{{"amountFen",100}}});
             QTest::qWait(50);
             send(healthSocket, {1,"health","system.health",{}, {}});

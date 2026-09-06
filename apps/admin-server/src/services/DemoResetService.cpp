@@ -1,4 +1,5 @@
 #include "services/DemoResetService.h"
+#include "services/RequestPreflight.h"
 #include "core/BusinessTime.h"
 #include "dashboard/SnapshotWriter.h"
 #include "db/SqlTransaction.h"
@@ -135,9 +136,8 @@ bool DemoResetService::snapshot(qint64 version) const {
 
 QByteArray DemoResetService::execute(const ev::protocol::RequestEnvelope &request, const QString &actor) const {
     const auto fail=[&](const Result &r) { return failure(request.requestId,r); };
-    const auto confirmation=request.payload.value("confirmation");
-    if (!confirmation.isString() || confirmation.toString()!="RESET_DEMO")
-        return fail(Result::failure("INVALID_REQUEST","confirmation 必须为 RESET_DEMO"));
+    const auto validation=RequestPreflight::payload(ev::actions::DemoReset,request.payload);
+    if (!validation.ok) return fail(validation);
     QSqlQuery receipt(m_database);
     receipt.prepare("SELECT actor,payload_identity,state,reset_at,golden_hash,snapshot_version,ack FROM demo_reset_receipts WHERE request_id=?");
     receipt.addBindValue(request.requestId);

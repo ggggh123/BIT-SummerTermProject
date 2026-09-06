@@ -96,6 +96,9 @@ void DatabaseWorker::execute(quint64 sequence, const ev::protocol::RequestEnvelo
 {
     Q_ASSERT(QThread::currentThread() == thread());
     const auto bytes = m_state->dispatcher->dispatch(request);
+    // 同一 sender 的排队信号先于 completed，前台在发送登录 ACK 前已取得独立会话值副本。
+    if (request.action==ev::actions::AdminLogin || request.action==ev::actions::AuthUserLogin)
+        emit tokenRolesChanged(m_state->auth->tokenRoles());
     if (request.action == ev::actions::AdminChargerRestart) {
         const auto response = ev::protocol::parseResponse(bytes);
         if (response.ok) scheduleRestart(request.payload.value(QStringLiteral("chargerId")).toInt());

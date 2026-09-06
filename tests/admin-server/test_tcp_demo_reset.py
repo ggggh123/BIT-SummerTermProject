@@ -160,6 +160,32 @@ class DemoResetTcp(unittest.TestCase):
         time.sleep(.8)
         self.assertEqual(self.sql("SELECT status FROM chargers WHERE id=1"),[("idle",)])
 
+    def test_old_pending_across_new_reset_business_and_process_restart(self):
+        self.sql("CREATE TRIGGER reject_old_ack BEFORE INSERT ON request_log WHEN NEW.request_id='old-pending' BEGIN SELECT RAISE(ABORT,'test ACK failure'); END")
+        self.assertEqual(self.reset("old-pending")["code"],"INTERNAL_ERROR")
+        metadata=self.sql("SELECT reset_at,golden_hash,snapshot_version FROM demo_reset_receipts WHERE request_id='old-pending'")
+        self.assertEqual(metadata[0][1:],(HASH,1))
+        self.assertTrue(self.reset("new-reset")["ok"])
+        self.assertEqual(self.sql("SELECT state FROM demo_reset_receipts WHERE request_id='old-pending'"),[("pending",)])
+        balance=self.sql("SELECT balance_fen FROM users WHERE id=1")[0][0]
+        self.assertTrue(self.call("wallet.recharge",{"amountFen":321},rid="new-business")["ok"])
+        snapshot=self.snapshot.read_bytes()
+        self.assertEqual(json.loads(snapshot)["snapshotVersion"],2)
+        self.stop_server()
+        self.sql("DROP TRIGGER reject_old_ack")
+        self.start_server()
+        recovered=self.reset("old-pending",raw=True)
+        response=json.loads(recovered)
+        self.assertTrue(response["ok"],response)
+        self.assertEqual(response["data"],{"resetAt":metadata[0][0],"goldenHash":HASH})
+        self.assertEqual(self.sql("SELECT reset_at,golden_hash,snapshot_version FROM demo_reset_receipts WHERE request_id='old-pending'"),metadata)
+        self.assertEqual(self.sql("SELECT state FROM demo_reset_receipts WHERE request_id='old-pending'"),[("final",)])
+        self.assertEqual(self.sql("SELECT balance_fen FROM users WHERE id=1"),[(balance+321,)])
+        self.assertEqual(self.sql("SELECT version FROM snapshot_meta"),[(2,)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM request_log WHERE request_id='new-business'"),[(1,)])
+        self.assertEqual(self.snapshot.read_bytes(),snapshot)
+        self.assertEqual(self.reset("old-pending",raw=True),recovered)
+
     def test_golden_preflight_failures_do_not_mutate(self):
         self.sql("UPDATE users SET balance_fen=8765 WHERE id=1")
         for suffix in ["-wal","-shm","-journal"]:

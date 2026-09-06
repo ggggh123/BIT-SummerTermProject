@@ -1,6 +1,7 @@
 #pragma once
 #include "core/Result.h"
 #include "protocol/Envelope.h"
+#include "services/RequestPreflight.h"
 #include <QObject>
 #include <QJsonObject>
 #include <QSet>
@@ -23,6 +24,7 @@ public:
 signals:
     void completed(quint64 sequence, QByteArray response);
     void healthChanged(QJsonObject health);
+    void tokenRolesChanged(TokenRoles roles);
 private:
     void refreshHealth();
     void scheduleRestart(int chargerId);

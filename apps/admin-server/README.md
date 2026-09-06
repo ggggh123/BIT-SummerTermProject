@@ -33,6 +33,8 @@ DatabaseWorker 所属 QThread
 
 最多同时服务 16 个 TCP 连接，额外连接收到 `SERVER_BUSY` 后关闭。已接纳的数据库请求串行执行，本地和 TCP 共用 256 个待完成请求的容量；容量耗尽返回 `SERVER_BUSY`。未知 action 仍优先返回 `INVALID_REQUEST`；权限判断消费共享 Actions／Permissions，缺少有效身份为 `AUTH_REQUIRED`，有效身份无相应权限为 `FORBIDDEN`。
 
+容量准入前，入口使用 DB worker 发布的会话角色值副本，执行统一身份和基础参数校验；worker 内分发器复用同一纯校验。未知非空 token 不能作为匿名身份登录，`demo.reset` 的角色与 confirmation 错误在满队列时仍保留原错误码。前台没有数据库或服务引用，也不增加验证队列。当前仍有待裁决的合同差异：依赖权威数据库状态的业务判定（以及尚在 worker 内的 forecast 整批语义检查）可能被满队列的 `SERVER_BUSY` 提前覆盖；冻结合同第 5 节要求这些错误先于基础设施错误，本轮未修改该规则，不能据此宣布服务端候选已可合并。
+
 运行期 GUI 通过 `executeLocal(RequestEnvelope, QObject *receiver, callback)` 异步调用。登录、创建站点、冻结／解冻和重启复用 TCP 的调度器与幂等日志。执行中的按钮禁用；失败显示响应码及可解释信息。内部聚合表和日志使用 `AdminView` 闭合枚举及管理员校验，未新增 TCP action，也没有公开数据库或服务指针。
 
 健康对象由 DB worker 在初始化、命令完成和定期队列任务中刷新，其他线程只接收值副本。`system.health` 直接读取缓存并生成当前 `serverTime`，不为每次健康请求执行 SQL。因此数据库等待锁时，主界面事件循环和独立健康请求仍可响应。

@@ -1,4 +1,5 @@
 #include "services/RequestDispatcher.h"
+#include "services/RequestPreflight.h"
 #include "contracts/Permissions.h"
 
 #include "contracts/Actions.h"
@@ -16,9 +17,8 @@ QByteArray RequestDispatcher::dispatch(const ev::protocol::RequestEnvelope &requ
     else if (m_authService->isUserTokenValid(request.token)) role = QStringLiteral("user");
     else if (m_authService->isSimulatorTokenValid(request.token)) role = QStringLiteral("simulator");
     else if (m_authService->isMlTokenValid(request.token)) role = QStringLiteral("ml");
-    if (!ev::permissions::allows(role, action))
-        return ev::protocol::toJson(fail(request.requestId, role.isEmpty() ? QStringLiteral("AUTH_REQUIRED") : QStringLiteral("FORBIDDEN"),
-                                         QStringLiteral("当前身份无权调用此接口")));
+    const auto preflight=RequestPreflight::check(role,request);
+    if (!preflight.ok) return ev::protocol::toJson(fail(request.requestId,preflight.code,preflight.message));
     QString actor;
     if (role=="admin") actor="admin:"+m_authService->adminIdentityForToken(request.token);
     else if (role=="user") actor=QStringLiteral("user:%1").arg(m_authService->userIdForToken(request.token));
