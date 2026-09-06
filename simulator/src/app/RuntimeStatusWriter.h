@@ -26,6 +26,7 @@ private:
     void transitionTo(const QString &sessionState);
 
     QString filePath_;
+    bool hasPublished_ = false;
 };
 
 } // namespace ev::simulator

@@ -31,6 +31,7 @@ add_test(NAME simulator_client COMMAND tst_simulator_client)
 
 add_executable(tst_simulator_runtime_status tests/tst_runtimestatus.cpp)
 target_link_libraries(tst_simulator_runtime_status PRIVATE simulator_core Qt6::Test)
+add_dependencies(tst_simulator_runtime_status ev_charger_simulator)
 add_test(NAME simulator_runtime_status COMMAND tst_simulator_runtime_status)
 
 add_executable(tst_simulator_window

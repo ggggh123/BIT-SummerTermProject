@@ -2,6 +2,8 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
@@ -65,29 +67,41 @@ bool RuntimeStatusWriter::writeState(const QString &sessionState,
         QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
     const QByteArray contents = QJsonDocument(status).toJson(QJsonDocument::Compact);
 
+    const auto failWrite = [this, errorMessage](QString message) {
+        if (hasPublished_) {
+            QFile published(filePath_);
+            if (published.remove() || !QFileInfo::exists(filePath_)) {
+                hasPublished_ = false;
+                message += QStringLiteral("；已撤销先前发布的运行状态文件");
+            } else {
+                message += QStringLiteral(
+                               "；撤销失败，先前发布的运行状态文件仍可能存在：%1")
+                               .arg(published.errorString());
+            }
+        }
+        if (errorMessage)
+            *errorMessage = message;
+        return false;
+    };
+
     QSaveFile file(filePath_);
     if (!file.open(QIODevice::WriteOnly)) {
         const QString message = QStringLiteral("无法打开运行状态文件 %1：%2")
                                     .arg(filePath_, file.errorString());
-        if (errorMessage)
-            *errorMessage = message;
-        return false;
+        return failWrite(message);
     }
     if (file.write(contents) != contents.size()) {
         const QString message = QStringLiteral("无法写入运行状态文件 %1：%2")
                                     .arg(filePath_, file.errorString());
         file.cancelWriting();
-        if (errorMessage)
-            *errorMessage = message;
-        return false;
+        return failWrite(message);
     }
     if (!file.commit()) {
         const QString message = QStringLiteral("无法提交运行状态文件 %1：%2")
                                     .arg(filePath_, file.errorString());
-        if (errorMessage)
-            *errorMessage = message;
-        return false;
+        return failWrite(message);
     }
+    hasPublished_ = true;
     return true;
 }
 

@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -12,6 +13,11 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTemporaryDir>
+
+#include <csignal>
+#include <cstdlib>
+#include <functional>
+#include <sys/resource.h>
 
 #include "app/RuntimeStatusWriter.h"
 #include "app/SimulatorConfig.h"
@@ -32,6 +38,56 @@ QJsonObject readStatus(const QString &path)
         return {};
     return QJsonDocument::fromJson(file.readAll()).object();
 }
+
+bool waitUntil(const std::function<bool()> &predicate, int timeoutMs = 3000)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!predicate() && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QTest::qWait(10);
+    }
+    return predicate();
+}
+
+class ScopedDirectoryPermissions
+{
+public:
+    explicit ScopedDirectoryPermissions(const QString &path)
+        : path_(path), original_(QFile::permissions(path))
+    {
+    }
+
+    bool makeReadOnly()
+    {
+        changed_ = QFile::setPermissions(
+            path_, QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+        return changed_;
+    }
+
+    ~ScopedDirectoryPermissions()
+    {
+        if (changed_)
+            QFile::setPermissions(path_, original_);
+    }
+
+private:
+    QString path_;
+    QFileDevice::Permissions original_;
+    bool changed_ = false;
+};
+
+class ManagedProcess : public QProcess
+{
+public:
+    ~ManagedProcess() override
+    {
+        if (state() == QProcess::NotRunning)
+            return;
+        kill();
+        waitForFinished(1000);
+    }
+};
 
 class LoopbackStatusServer : public QObject
 {
@@ -138,6 +194,58 @@ SimulatorConfig makeConfig(quint16 port)
     return config;
 }
 
+int runWriterFailureProbe(const QString &path, bool blockRevocation)
+{
+    LoopbackStatusServer server;
+    if (!server.listen())
+        return 10;
+
+    TelemetryEngine engine = makeEngine();
+    SimulatorClient client(makeConfig(server.port()), &engine);
+    RuntimeStatusWriter writer(path, &client);
+    QString startError;
+    if (!writer.start(&startError))
+        return 11;
+    client.start();
+    if (!waitUntil([&]() {
+            return readStatus(path).value(QStringLiteral("sessionState")).toString()
+                == QLatin1String("ready");
+        })) {
+        return 12;
+    }
+
+    QString failureMessage;
+    QObject::connect(&writer, &RuntimeStatusWriter::writeFailed,
+                     &writer, [&](const QString &message) {
+        failureMessage = message;
+    });
+
+    if (blockRevocation) {
+        ScopedDirectoryPermissions permissions(QFileInfo(path).absolutePath());
+        if (!permissions.makeReadOnly())
+            return 13;
+        client.refresh();
+        if (!waitUntil([&]() { return !failureMessage.isEmpty(); }))
+            return 14;
+        if (!QFile::exists(path))
+            return 15;
+        return failureMessage.contains(QStringLiteral("撤销失败")) ? 0 : 16;
+    }
+
+    struct rlimit limit;
+    if (getrlimit(RLIMIT_FSIZE, &limit) != 0)
+        return 17;
+    limit.rlim_cur = 0;
+    std::signal(SIGXFSZ, SIG_IGN);
+    if (setrlimit(RLIMIT_FSIZE, &limit) != 0)
+        return 18;
+
+    client.refresh();
+    if (!waitUntil([&]() { return !failureMessage.isEmpty(); }))
+        return 19;
+    return QFile::exists(path) ? 20 : 0;
+}
+
 } // namespace
 
 class RuntimeStatusTest : public QObject
@@ -150,6 +258,10 @@ private slots:
     void authenticationFailureIsObservable();
     void stopIsObservable();
     void reportsWriteFailure();
+    void failedInitialWritePreservesExternalFile();
+    void runtimeWriteFailureRevokesPublishedReady();
+    void revokeFailureIsExplicitlyReported();
+    void productionRuntimeWriteFailureExitsNonZeroAndRevokesReady();
     void emptyStatusPathDoesNotWrite();
     void commandLineTokenOverridesEnvironment();
     void environmentTokenIsFallback();
@@ -291,6 +403,105 @@ void RuntimeStatusTest::reportsWriteFailure()
     QVERIFY(!QFile::exists(path));
 }
 
+void RuntimeStatusTest::failedInitialWritePreservesExternalFile()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("runtime.json"));
+    QFile external(path);
+    QVERIFY(external.open(QIODevice::WriteOnly));
+    QCOMPARE(external.write("external-ready"), 14);
+    external.close();
+
+    ScopedDirectoryPermissions permissions(dir.path());
+    QVERIFY(permissions.makeReadOnly());
+    TelemetryEngine engine = makeEngine();
+    SimulatorConfig config;
+    SimulatorClient client(config, &engine);
+    RuntimeStatusWriter writer(path, &client);
+
+    QString error;
+    QVERIFY(!writer.start(&error));
+    QVERIFY(!error.isEmpty());
+    QVERIFY(external.open(QIODevice::ReadOnly));
+    QCOMPARE(external.readAll(), QByteArray("external-ready"));
+}
+
+void RuntimeStatusTest::runtimeWriteFailureRevokesPublishedReady()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("runtime.json"));
+    ManagedProcess probe;
+    probe.start(QCoreApplication::applicationFilePath(),
+                {QStringLiteral("--writer-runtime-failure-probe"), path});
+    QVERIFY2(probe.waitForFinished(5000), qPrintable(probe.errorString()));
+    QCOMPARE(probe.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(probe.exitCode(), 0);
+    QVERIFY(!QFile::exists(path));
+}
+
+void RuntimeStatusTest::revokeFailureIsExplicitlyReported()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("runtime.json"));
+    ManagedProcess probe;
+    probe.start(QCoreApplication::applicationFilePath(),
+                {QStringLiteral("--writer-revoke-failure-probe"), path});
+    QVERIFY2(probe.waitForFinished(5000), qPrintable(probe.errorString()));
+    QCOMPARE(probe.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(probe.exitCode(), 0);
+    QCOMPARE(readStatus(path).value(QStringLiteral("sessionState")).toString(),
+             QStringLiteral("ready"));
+}
+
+void RuntimeStatusTest::productionRuntimeWriteFailureExitsNonZeroAndRevokesReady()
+{
+    QTemporaryDir dir;
+    LoopbackStatusServer server;
+    QVERIFY(dir.isValid());
+    QVERIFY(server.listen());
+    const QString path = dir.filePath(QStringLiteral("runtime.json"));
+    const QString executable = QCoreApplication::applicationDirPath()
+        + QStringLiteral("/ev_charger_simulator");
+    QVERIFY(QFileInfo::exists(executable));
+
+    ManagedProcess simulator;
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("offscreen"));
+    environment.insert(QStringLiteral("EV_SIMULATOR_STATUS_FILE"), path);
+    simulator.setProcessEnvironment(environment);
+    simulator.start(
+        QStringLiteral("/bin/sh"),
+        {QStringLiteral("-c"),
+         QStringLiteral("trap '' XFSZ; exec \"$@\""),
+         QStringLiteral("runtime-status-test"), executable,
+         QStringLiteral("--host"), QStringLiteral("127.0.0.1"),
+         QStringLiteral("--port"), QString::number(server.port()),
+         QStringLiteral("--interval-ms"), QStringLiteral("10000"),
+         QStringLiteral("--token"), QStringLiteral("test-token")});
+    QVERIFY2(simulator.waitForStarted(3000), qPrintable(simulator.errorString()));
+    QTRY_COMPARE_WITH_TIMEOUT(
+        readStatus(path).value(QStringLiteral("sessionState")).toString(),
+        QStringLiteral("ready"), 3000);
+
+    QProcess limiter;
+    limiter.start(QStringLiteral("/usr/bin/prlimit"),
+                  {QStringLiteral("--pid"), QString::number(simulator.processId()),
+                   QStringLiteral("--fsize=0:0")});
+    QVERIFY2(limiter.waitForFinished(3000), qPrintable(limiter.errorString()));
+    QCOMPARE(limiter.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(limiter.exitCode(), 0);
+
+    server.disconnectClient();
+    QTRY_COMPARE_WITH_TIMEOUT(simulator.state(), QProcess::NotRunning, 3000);
+    QCOMPARE(simulator.exitStatus(), QProcess::NormalExit);
+    QCOMPARE(simulator.exitCode(), EXIT_FAILURE);
+    QVERIFY(!QFile::exists(path));
+    QVERIFY(simulator.readAllStandardError().contains("运行状态文件"));
+}
+
 void RuntimeStatusTest::emptyStatusPathDoesNotWrite()
 {
     QTemporaryDir dir;
@@ -350,6 +561,16 @@ void RuntimeStatusTest::emptyTokenRemainsCompatible()
 
 int main(int argc, char **argv)
 {
+    if (argc >= 3
+        && QByteArray(argv[1]) == QByteArrayLiteral("--writer-runtime-failure-probe")) {
+        QCoreApplication app(argc, argv);
+        return runWriterFailureProbe(QString::fromLocal8Bit(argv[2]), false);
+    }
+    if (argc >= 3
+        && QByteArray(argv[1]) == QByteArrayLiteral("--writer-revoke-failure-probe")) {
+        QCoreApplication app(argc, argv);
+        return runWriterFailureProbe(QString::fromLocal8Bit(argv[2]), true);
+    }
     if (argc >= 3 && QByteArray(argv[1]) == QByteArrayLiteral("--config-probe")) {
         const QString expected = QByteArray(argv[2]) == QByteArrayLiteral("__EMPTY__")
             ? QString() : QString::fromLocal8Bit(argv[2]);
