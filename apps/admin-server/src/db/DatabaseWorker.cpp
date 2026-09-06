@@ -50,10 +50,11 @@ Result DatabaseWorker::start(const QString &path, const QString &snapshot, const
     Q_ASSERT(QThread::currentThread() == thread());
     m_state = std::make_unique<State>();
     auto &s = *m_state;
+    const auto runtime=DatabaseManager::resolvePath(path);
     const auto golden=goldenPath.isEmpty() ? QDir(QStringLiteral(EV_PROJECT_SOURCE_DIR)).filePath("runtime/golden/core.db") : goldenPath;
-    if (sameFile(path,golden) || sameFile(snapshot,golden) || sameFile(snapshot,path))
+    if (sameFile(runtime,golden) || sameFile(snapshot,golden) || sameFile(snapshot,runtime))
         return Result::failure("INVALID_REQUEST","运行库、黄金库与快照输出必须使用不同文件");
-    const auto opened = s.database.open(path);
+    const auto opened = s.database.open(runtime);
     if (!opened.ok) return opened;
     s.auth = std::make_unique<AuthService>(s.database.database());
     s.admin = std::make_unique<AdminService>(s.database.database());

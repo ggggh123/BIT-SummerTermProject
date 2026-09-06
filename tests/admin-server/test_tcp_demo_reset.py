@@ -202,5 +202,40 @@ class DemoResetTcp(unittest.TestCase):
             self.assertEqual(self.sql("SELECT balance_fen FROM users WHERE id=1"),[(123,)])
             self.assertEqual(self.sql("SELECT COUNT(*) FROM demo_reset_receipts"),[(0,)])
 
+    def test_default_database_path_is_checked_before_open(self):
+        self.stop_server()
+        for db_args in [[], ["--db", " \t "]]:
+            for collision in ["golden", "snapshot"]:
+                for alias_kind in ["direct", "hardlink"]:
+                    with self.subTest(db_args=db_args, collision=collision, alias_kind=alias_kind):
+                        with tempfile.TemporaryDirectory(prefix="ev-reset-default-") as isolated:
+                            root=Path(isolated)
+                            default_db=root/"NeusoftTraining/ChargingPlatformServer/charging_platform_server_data_v1.db"
+                            default_db.parent.mkdir(parents=True)
+                            shutil.copyfile(GOLDEN,default_db)
+                            other_golden=root/"golden.db"
+                            shutil.copyfile(GOLDEN,other_golden)
+                            alias=default_db
+                            if alias_kind=="hardlink":
+                                alias=root/"alias.db"
+                                os.link(default_db,alias)
+                            golden=alias if collision=="golden" else other_golden
+                            snapshot=alias if collision=="snapshot" else root/"snapshot.json"
+                            proc=subprocess.Popen([harness.SERVER,"--server",*db_args,"--golden",str(golden),
+                                "--golden-hash",HASH,"--snapshot",str(snapshot),"--port","0"],
+                                env={**os.environ,"XDG_DATA_HOME":isolated},stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                            try:
+                                output,error=proc.communicate(timeout=1)
+                            except subprocess.TimeoutExpired:
+                                proc.terminate(); proc.communicate(timeout=5)
+                                self.fail("默认运行库与黄金/快照同文件必须在打开前拒绝")
+                            self.assertEqual(proc.returncode,1,error)
+                            self.assertNotIn(b"listening on",output)
+                            self.assertEqual(hashlib.sha256(default_db.read_bytes()).hexdigest(),HASH)
+                            self.assertEqual(hashlib.sha256(other_golden.read_bytes()).hexdigest(),HASH)
+                            for file in [default_db,alias,other_golden]:
+                                for suffix in ["-wal","-shm","-journal"]:
+                                    self.assertFalse(Path(str(file)+suffix).exists())
+
 
 if __name__ == "__main__": unittest.main()
