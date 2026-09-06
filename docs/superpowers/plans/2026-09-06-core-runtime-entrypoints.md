@@ -43,6 +43,8 @@ scripts/stop_demo.sh --run-id meeting-01
 
 **Interfaces:** 生产 main 若 EV_SIMULATOR_STATUS_FILE 非空则启用 RuntimeStatusWriter，原子覆盖启动器指定的本地文件。输出 `{"schemaVersion":1,"pid":123,"sessionState":"ready","updatedAt":"2026-09-06T10:00:00.000Z"}`。状态集合 starting / waiting_auth / ready / auth_failed / disconnected / stopped，只有 ISimulatorClient::sessionReady（已收到真实成功状态回包并更新 charger snapshot）才能 ready；每次 sessionReady 更新时刻。连接不是ready。文件无 token。写失败返回失败信息并使启用观测的进程启动/运行明确非零失败，不能留下看似新的 ready 证据。
 
+**运行期失败裁定（首次评审后细化）：** 状态文件是观测快照而非永久就绪凭证。写失败时应尽力撤销本 writer 已成功发布的文件，明确记录撤销失败并非零退出；首次写入尚未成功时不得删除已有外部文件。只读/故障文件系统可能同时禁止更新和删除，因此不能保证磁盘总能被改写。Task 2 必须将文件与同一活进程身份和新鲜时间联合校验，在 start/smoke 返回前再次检查所有进程；旧文件或单次采样均不证明进程持续健康。自动测试必须覆盖先 ready 再写失败的信号、撤销及实际生产入口非零退出。
+
 - [ ] **Step 1: 先补真实写入/状态转移测试，运行 RED。** 使用 QTemporaryDir 与 QObject 生命周期绑定，真实 RuntimeStatusWriter 消费客户端事件；测试初始状态、connected≠ready、ready→disconnected、auth_failed、stopped、合法UTC时戳/当前PID、失败路径、未配置不写文件。优先用现有真实 SimulatorClient + 回环 TCP 测试辅助，不重复协议解析；必要的信号源替身只替外部网络，断言真实写出文件。新环境token验证CLI优先、env回退、都空原行为。
 
 ```cpp
