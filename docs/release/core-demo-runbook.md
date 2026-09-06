@@ -22,9 +22,47 @@ Web/ML 的代码和成果保留，默认演示不启动它们。不宣称真实�
 
 当前有依据的交付方式是“完整源码 clone + 已安装全局依赖 + 在该 clone 重新构建”。仓库尚未提供经验证的二进制安装布局或 Qt/WebEngine 运行库部署规则；仅拷走三个可执行文件不构成独立运行包，部分资源路径仍关联编译时的源码根。换机运行是否通过必须记录实际结果，不能由静态检查代签。
 
-## 3. 当前可用的手动冷启动方法
+## 3. 当前可用的四个运行入口（2026-09-06）
 
-自动启动/停止/冷复位入口尚在收尾计划中。下列是已有程序的操作方式；未实现脚本不能写成已经可运行。
+`reset_demo.sh`、`start_demo.sh`、`smoke_test.sh`、`stop_demo.sh` 已实现。它们可从任意工作目录或脚本符号链接调用，始终使用脚本所属源码根；源码路径和build路径可含空格。环境前提仍是完整源码及已安装依赖，在该源码上生成的原生 CMake build，不能只复制三个裸二进制。入口不隐式构建或安装。
+
+先按下节手动方法中的命令完成构建。以下示例将`/path/to/source`、`/path/to/native-build`替换为实际路径；run ID 每轮必须新建。地图 Key 由本地 `config.local.ini` 的 `[tencent] mapKey` 或 `EV_TENCENT_MAP_KEY` 注入；环境变量即使为空也优先，空值会在启动任何进程前失败。不要在报告中回显 Key。
+
+```bash
+# 既有服务端接受的开发演示值；不要把自定义环境token当作服务端配置入口。
+export EV_SIMULATOR_TOKEN=demo-simulator-token
+/path/to/source/scripts/reset_demo.sh --run-id demo-01
+/path/to/source/scripts/start_demo.sh --run-id demo-01 --build-dir /path/to/native-build
+/path/to/source/scripts/smoke_test.sh --run-id demo-01
+# 人工演示完成后反序停止三端。
+/path/to/source/scripts/stop_demo.sh --run-id demo-01
+# 下一轮必须新run；旧目录、数据库和日志全部保留。
+/path/to/source/scripts/reset_demo.sh --run-id demo-02
+```
+
+start 默认启动三个GUI；`--headless`仅使服务端增加`--server`。自动化测试另外设置`QT_QPA_PLATFORM=offscreen`，不是人工界面验收。服务端固定本机`127.0.0.1`，并覆盖三端继承的`EV_SERVER_HOST/PORT`。管理员仍需人工登录；模拟器初始暂停，到计量演示时人工按Run；用户端仍需人工登录及地图/业务操作。`CLIENT_PROCESS_ALIVE`只表示用户端在至少500ms观察期内存活，不证明登录或地图通过。
+
+| 参数 | 适用入口 | 默认与允许值 |
+|---|---|---|
+| `--run-id` | 四入口 | 必填；1–64位ASCII，首位字母/数字，其余字母/数字/点/下划线/横线 |
+| `--build-dir` | start | 必填；CMakeCache源码根必须匹配当前仓库，三二进制必须可执行 |
+| `--port` | start | 9100；1–65535 |
+| `--seed` | start | 20260901；0–4294967295 |
+| `--interval-ms` | start | 3000；1000–10000 |
+| `--timeout-seconds` | start/smoke/stop | start每阶段及smoke总TCP时限默认15秒，stop每进程默认10秒；允许1–60秒 |
+| `--force` | stop | 默认不启用；TERM超时后再次核对身份，才对同一pidfd发KILL |
+
+四入口都支持`--help`，未知或错误参数非零退出。最后一行固定为JSON；失败至少含`ok:false/code/message`。同仓库四操作经flock串行。reset仅创建`runtime/demo-runs/<run-id>/core-runtime.db`新副本；已存在run、符号链接、坏hash/黄金sidecar、活跃或身份不明服务端记录均拒绝。脚本只能识别本仓库清单中的进程；启动脚本外的手动服务端须由操作人先确认停止。
+
+每轮`manifest.json`原子记录版本1、PREPARED→STARTING→RUNNING，以及失败FAILED和停止STOPPED；记录实际源码/build/run路径、源码提交、非矩阵工作树脏状态、三二进制SHA-256及PID/starttime/bootId/exe。源码SHA与二进制指纹分别记录，不自动证明二者完全对应。每端输出保存在`server.log`、`simulator.log`、`client.log`，模拟器状态在`simulator-status.json`，本轮隔离快照在`snapshot.json`。自动结果不记录Key/token。
+
+start先确认本次服务端的绑定成功输出及严格TCP health，再等模拟器同PID且fresh的ready，最后观察用户端。失败反序TERM本轮已记录且匹配的进程，保留运行库及日志；无法确认或未退出的记录保留。stop对每端核对Linux PID、starttime、boot ID和canonical exe，经pidfd发信号，不按名字杀进程。不匹配报告`WRONG_PID`并继续处理其他端；超时默认不KILL，失败不标STOPPED。系统不支持pidfd会明确失败。
+
+smoke只通过TCP查询既有黄金用户`13800138000`的登录、user.get、station.list、station.detail、order.current，不直连活动SQLite、不充值/建单/遥测/故障/结算。`smoke-report.json`记录动作/code/requestId摘要，不保存payload或会话token；失败也写报告（run不存在、路径不安全或文件系统不可写时只能返回失败JSON）。无active forecast且health=degraded/ok=true合法。`BASIC_SMOKE_PASS`同时保留腾讯导航、完整业务彩排、换机三个`NOT_RUN_SEPARATE_GATE`，不等于发布GO。测试记录见[四入口验证记录](../test/core-runtime-entrypoints-2026-09-06.md)。
+
+### 保留：原有手动冷启动方法
+
+下列是四入口之外仍可使用的原程序操作方法；保留作为历史和故障定位参考。
 
 先关闭本次三端进程，确认原管理/服务端已退出。保留旧运行库用于排查；不覆盖仍被 SQLite 打开的文件，也不直接运行封存原件。
 

@@ -4,7 +4,7 @@
 
 > **2026-09-06 共享集成基线：** [PR #10](https://github.com/ggggh123/BIT-SummerTermProject/pull/10) 已合入 `dev@97c6da1`。本机后续分支 `feat/core-delivery-20260906` 已实现 DB worker、在线 reset 和恢复加固；用户批准容量补充后，`6863b36` [限定评审](docs/review/server-delivery-review-2026-09-06.md)已关闭 I1/N1。`a867ca6` 继续落实[充电与结算竖屏 UI](docs/test/user-charge-ui-2026-09-06.md)，完整构建、CTest **29/29**、数据库 **15/15** 通过。这些后续提交仍是本机候选，尚未共享合入 dev。
 >
-> **距完整交付仍有：** 历史/账户/导航外观收尾、运行入口、换机验证、真实三端/腾讯地图联调与同 SHA 双彩排。按[交付路线](docs/management/project-plan.md)推进，尚未宣布 GO 或发布到 main；此前[综合审查中断记录](docs/review/core-fixes-review-2026-09-06.md)继续保留。
+> **本机运行交付增量（2026-09-06）：** 四个reset/start/smoke/stop入口已实现，真实三程序offscreen基础流程及坏模拟器token回滚已有[验证记录](docs/test/core-runtime-entrypoints-2026-09-06.md)。历史/账户/导航外观收尾、换机验证、人工三端/腾讯地图联调与同 SHA 双彩排仍待完成。按[交付路线](docs/management/project-plan.md)推进，尚未宣布 GO 或发布到 main；此前[综合审查中断记录](docs/review/core-fixes-review-2026-09-06.md)继续保留。
 
 ## 当前交付口径（2026-09-04 生效）
 
@@ -30,7 +30,8 @@
 - [充电/结算 UI 与实际 Qt 截图](docs/test/user-charge-ui-2026-09-06.md)（受控 UI 响应，不代替真实三端联调）
 - [接口合同](docs/design/interface-contract.md) 与 [当前实施计划索引](docs/superpowers/plans/README.md)
 - [核心验收清单](docs/release/core-acceptance-checklist.md)
-- [核心演示与交付操作手册](docs/release/core-demo-runbook.md)（当前手动启动方法、八分钟主线、数值核对和双彩排要求）
+- [核心演示与交付操作手册](docs/release/core-demo-runbook.md)（四运行入口、保留手动流程、八分钟主线、数值核对和双彩排要求）
+- [四入口与真实三程序基础验证](docs/test/core-runtime-entrypoints-2026-09-06.md)（独立运行副本、身份回收、TCP只读业务冒烟；不代替腾讯/人工/换机门禁）
 - [2026-09-01 历史五系统架构图](docs/design/five-system-architecture.html)（历史基线，不是当前唯一架构）
 
 ## 正式角色与当前职责
