@@ -29,6 +29,25 @@ QT_QPA_PLATFORM=offscreen timeout 5s build/debug/simulator/ev_charger_simulator 
 完整权威桩快照后才显示“已接入”；鉴权失败会显示“鉴权失败”，不会把 socket 连接误报成
 业务接入成功。
 
+也可通过 `EV_SIMULATOR_TOKEN` 提供 token；显式传入 `--token`（包括显式空值）时始终
+优先使用命令行值，未传该选项时才回退到环境变量。两者均为空时仍保持上述原有行为。
+
+## 启动器运行状态文件
+
+设置非空的 `EV_SIMULATOR_STATUS_FILE` 后，模拟器会用原子覆盖方式写入启动器指定的
+本地 JSON 文件，例如：
+
+```json
+{"schemaVersion":1,"pid":123,"sessionState":"ready","updatedAt":"2026-09-06T10:00:00.000Z"}
+```
+
+`sessionState` 依次反映 `starting`、`waiting_auth`、`ready`、`auth_failed`、
+`disconnected` 或 `stopped`。TCP 连接本身只会进入 `waiting_auth`；只有成功收到
+`simulator.status` 回包并更新权威桩快照后才会写 `ready`，此后的每次成功状态刷新也会
+更新时间。正常 Qt 退出会写 `stopped`；收到 `SIGTERM` 时最终文件可能停留在旧状态，
+消费者还应独立核对 `pid` 对应的进程身份和存活状态。状态文件不会写入 token；启用状态
+观测后若启动或运行期间写入失败，模拟器会明确以非零状态退出。
+
 ## 权威状态与断线语义
 
 - 连接成功、Run/Pause 切换、手动刷新时都会发送 `simulator.status`；此外按遥测间隔在
