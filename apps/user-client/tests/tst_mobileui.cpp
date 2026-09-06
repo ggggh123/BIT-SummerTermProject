@@ -5,6 +5,7 @@
 #include "protocol/FrameCodec.h"
 #include "protocol/JsonEnvelope.h"
 #include "ui/ChargePage.h"
+#include "ui/HistoryPage.h"
 #include "ui/LoginPage.h"
 #include "ui/MainWindow.h"
 #include "ui/NearbyPage.h"
@@ -18,6 +19,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
@@ -147,6 +149,12 @@ bool intersectsViewport(QWidget *widget, QScrollArea *viewport)
     return viewport->viewport()->rect().intersects(widgetRect);
 }
 
+bool fullyInsideViewport(QWidget *widget, QScrollArea *viewport)
+{
+    return viewport->viewport()->rect().contains(
+        QRect(widget->mapTo(viewport->viewport(), QPoint()), widget->size()));
+}
+
 int renderedPixelsNearColor(const QPixmap &pixmap, const QRect &logicalArea,
                             const QColor &expected, int tolerance = 6)
 {
@@ -270,11 +278,157 @@ private slots:
     void authenticatedNearbyClearsExpiredSessionCopy();
     void restoredChargeMetricsAndActionsFitPortrait_data();
     void restoredChargeMetricsAndActionsFitPortrait();
+    void accountAndHistoryPresentation_data();
+    void accountAndHistoryPresentation();
 };
 
 void MobileUiTest::initTestCase()
 {
     UiTheme::apply(*qApp);
+}
+
+void MobileUiTest::accountAndHistoryPresentation_data()
+{
+    QTest::addColumn<int>("height");
+    QTest::addColumn<bool>("longText");
+    QTest::newRow("720") << 720 << false;
+    QTest::newRow("844") << 844 << false;
+    QTest::newRow("long-720") << 720 << true;
+}
+
+void MobileUiTest::accountAndHistoryPresentation()
+{
+    QFETCH(int, height);
+    QFETCH(bool, longText);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.resize(390, height);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer);
+    completeLoginWithoutOrder(window, peer.data());
+    auto *pages = required<QStackedWidget>(&window, "mainPages");
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+    auto *viewport = required<QScrollArea>(&window, "contentViewport");
+    QVERIFY(viewport);
+    required<QPushButton>(&window, "profileNavigationButton")->click();
+    auto request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("user.get"));
+    auto user = userObject();
+    if (longText) user.insert("nickname", QStringLiteral("北京理工大学充电项目测试用户昵称"));
+    reply(peer.data(), request.requestId, QJsonObject{{"user", user}});
+    auto *recharge = required<QPushButton>(&window, "rechargeButton");
+    QTRY_VERIFY(recharge->isEnabled());
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("profilePage"));
+    auto *balance = required<QLabel>(&window, "profileBalance");
+    auto *error = required<QLabel>(&window, "profileError");
+    // A successful account render must not reserve an empty error row.
+    QVERIFY(error->isHidden());
+    QVERIFY(balance->text().contains("123.45"));
+    QCOMPARE(required<QLineEdit>(&window, "profileMobile")->accessibleName(), QStringLiteral("手机号"));
+    viewport->verticalScrollBar()->setValue(0);
+    saveScreenshotIfRequested(&window, QStringLiteral("account-%1-390x%2.png")
+        .arg(longText ? "long" : "standard").arg(height));
+    auto *input = required<QLineEdit>(&window, "rechargeEdit");
+    input->setText("12.34");
+    viewport->ensureWidgetVisible(recharge, 0, 8);
+    QTRY_VERIFY(intersectsViewport(recharge, viewport));
+    QVERIFY(horizontallyInsideViewport(recharge, viewport));
+    recharge->click();
+    request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("wallet.recharge"));
+    QCOMPARE(request.payload.value("amountFen").toInt(), 1234);
+    QVERIFY(!recharge->isEnabled());
+    recharge->click();
+    QTest::qWait(20);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+    reply(peer.data(), request.requestId, QJsonObject{{"userId", 42}, {"balanceFen", 13579}});
+    QTRY_VERIFY(balance->text().contains("135.79"));
+    QTRY_VERIFY(recharge->isEnabled());
+    input->setText("0");
+    recharge->click();
+    QTRY_VERIFY(error->isVisible());
+    QVERIFY(!error->text().isEmpty());
+    QTRY_VERIFY(([&] {
+        viewport->ensureWidgetVisible(error, 0, 8);
+        QCoreApplication::processEvents();
+        return fullyInsideViewport(error, viewport);
+    })());
+    QVERIFY(horizontallyInsideViewport(error, viewport));
+    saveScreenshotIfRequested(&window, QStringLiteral("account-error-390x%1.png").arg(height));
+
+    required<QPushButton>(&window, "historyNavigationButton")->click();
+    request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("order.list"));
+    reply(peer.data(), request.requestId, QJsonObject{{"items", QJsonArray{}}, {"total", 0}});
+    QTRY_VERIFY(required<QPushButton>(&window, "historyRetryButton")->isEnabled());
+    auto *empty = required<QLabel>(&window, "historyEmptyTitle");
+    QVERIFY2(empty, "Empty history needs an explicit state rather than a blank list frame");
+    QTRY_VERIFY(empty->isVisible());
+    auto *list = required<QListWidget>(&window, "historyList");
+    QVERIFY(list->isHidden());
+    viewport->verticalScrollBar()->setValue(0);
+    saveScreenshotIfRequested(&window, QStringLiteral("history-empty-390x%1.png").arg(height));
+
+    required<QPushButton>(&window, "historyRetryButton")->click();
+    request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("order.list"));
+    QJsonArray orders;
+    for (int i = 0; i < 4; ++i) {
+        orders.append(QJsonObject{{"orderId", 1028 + i}, {"userId", 42},
+            {"stationId", 1}, {"chargerId", 1001},
+            {"stationName", longText ? QStringLiteral("北京中关村科技园超长站点名称东区地下停车场充电服务站") : QStringLiteral("中关村示例充电站")},
+            {"chargerCode", longText ? QStringLiteral("BEIJING-ZHONGGUANCUN-UNDERGROUND-CHARGER-0001") : QStringLiteral("A-01")},
+            {"status", i == 1 ? "cancelled" : "completed"},
+            {"reservedAt", "2026-09-05T09:58:00+08:00"},
+            {"startedAt", i == 1 ? QJsonValue(QJsonValue::Null) : QJsonValue("2026-09-05T10:00:00+08:00")},
+            {"endedAt", "2026-09-05T10:26:40+08:00"},
+            {"energyKwh", i == 1 ? 0.0 : 12.48}, {"amountFen", i == 1 ? 0 : 1685},
+            {"elapsedSec", i == 1 ? 0 : 1600}});
+    }
+    reply(peer.data(), request.requestId, QJsonObject{{"items", orders}, {"total", 4}});
+    QTRY_COMPARE(list->count(), 4);
+    QVERIFY(!empty->isVisible());
+    QVERIFY(list->isVisible());
+    auto *firstCard = list->itemWidget(list->item(0));
+    QVERIFY2(firstCard, "History needs individually laid out order cards");
+    auto *amount = required<QLabel>(firstCard, "historyOrderAmount");
+    QVERIFY(amount);
+    QCOMPARE(amount->text(), QStringLiteral("¥16.85"));
+    list->setFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(list->hasFocus());
+    QVERIFY2(renderedPixelsNearColor(list->grab(), list->rect(), QColor("#006F59")) > 40,
+             "Keyboard focus must be visibly outlined on the scrollable order list");
+    list->clearFocus();
+    const auto times = firstCard->findChildren<QLabel *>("historyOrderTime");
+    QCOMPARE(times.size(), 3);
+    QVERIFY(times.first()->text().contains(QStringLiteral("2026-09-05 09:58:00")));
+    QCOMPARE(times.first()->toolTip(), QStringLiteral("2026-09-05T09:58:00+08:00"));
+    // A previously tall account page must not stretch history behind the fixed tabs.
+    QTRY_VERIFY2(fullyInsideViewport(required<QPushButton>(&window, "historyRetryButton"), viewport),
+                 "The history pager must remain fully visible above the bottom navigation");
+    QTRY_COMPARE(list->horizontalScrollBar()->maximum(), 0);
+    list->scrollToTop();
+    saveScreenshotIfRequested(&window, QStringLiteral("history-%1-390x%2.png")
+        .arg(longText ? "long" : "populated").arg(height));
+    list->scrollToBottom();
+    auto *lastCard = list->itemWidget(list->item(3));
+    QVERIFY(lastCard);
+    QTRY_VERIFY(list->viewport()->rect().intersects(
+        QRect(lastCard->mapTo(list->viewport(), QPoint()), lastCard->size())));
+    for (auto *label : lastCard->findChildren<QLabel *>()) {
+        const QRect rect(label->mapTo(lastCard, QPoint()), label->size());
+        QVERIFY2(lastCard->rect().contains(rect), qPrintable(label->objectName()));
+        if (label->wordWrap()) QVERIFY(label->height() >= label->heightForWidth(label->width()));
+    }
+    peer->abort();
+    auto *banner = required<QLabel>(&window, "historyConnectionBanner");
+    QTRY_VERIFY(banner->isVisible());
+    QVERIFY(banner->text().contains(QStringLiteral("缓存")));
+    QCOMPARE(list->count(), 4);
+    list->scrollToTop();
+    saveScreenshotIfRequested(&window, QStringLiteral("history-offline-390x%1.png").arg(height));
 }
 
 void MobileUiTest::initialWindowSizeUsesPortraitWidthAndAvailableHeight()

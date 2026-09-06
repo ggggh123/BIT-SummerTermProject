@@ -74,6 +74,7 @@ private:
     void pollOperation(const QString &operationId, OperationKind kind, int attemptsRemaining = 300);
     void finishOperation(const QString &operationId, OperationKind kind, const QString &state);
     void showFailure(const QString &reason);
+    void setStatus(const QString &text, bool failed = false);
     void updateLastSuccessLabel();
     void invalidateRouteAttempt();
 
@@ -86,6 +87,7 @@ private:
     class QWebEngineView *view_;
     class QLabel *statusLabel_;
     class QLabel *cacheLabel_;
+    class QLabel *destinationLabel_;
     class QPushButton *retryButton_;
     class QComboBox *modeBox_;
     bool pageLoaded_ = false;

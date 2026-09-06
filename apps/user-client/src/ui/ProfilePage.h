@@ -30,6 +30,7 @@ private:
 
     UserApi *api_;
     QLabel *avatar_;
+    QLabel *displayName_;
     QLineEdit *nicknameEdit_;
     QPushButton *nicknameSaveButton_;
     QLineEdit *mobile_;

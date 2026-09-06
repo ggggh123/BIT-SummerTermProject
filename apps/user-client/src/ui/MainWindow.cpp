@@ -49,6 +49,18 @@ public:
         hint.setWidth(qMin(390, hint.width()));
         return hint;
     }
+
+    [[nodiscard]] bool hasHeightForWidth() const override
+    {
+        return currentWidget() != nullptr && currentWidget()->hasHeightForWidth();
+    }
+
+    [[nodiscard]] int heightForWidth(int width) const override
+    {
+        // QStackedLayout otherwise measures hidden pages too. A long account
+        // form must not leave the history pager below the fixed bottom tabs.
+        return currentWidget() == nullptr ? -1 : currentWidget()->heightForWidth(width);
+    }
 };
 
 class MobileTabButton final : public QPushButton

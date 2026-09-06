@@ -748,6 +748,24 @@ void RecommendationTest::historyRendersOnlyReceivedPageWithExactPagination()
     QTRY_COMPARE(list->count(), 2);
     QVERIFY(required<QPushButton>(&page, "historyPrevButton")->isEnabled());
     QVERIFY(!required<QPushButton>(&page, "historyNextButton")->isEnabled());
+    // A later-page refresh can legitimately become empty after records change.
+    // Keep a route back to the first page instead of trapping the user here.
+    page.show();
+    page.refresh();
+    const auto emptyRefresh = takeRequest(peer.data());
+    QCOMPARE(emptyRefresh.payload.value(QStringLiteral("offset")).toInt(), 20);
+    reply(peer.data(), emptyRefresh.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), QJsonArray{}}, {QStringLiteral("total"), 20}});
+    QTRY_COMPARE(list->count(), 0);
+    auto *previous = required<QPushButton>(&page, "historyPrevButton");
+    QVERIFY(previous->isEnabled());
+    QVERIFY(previous->isVisible());
+    previous->click();
+    const auto backToFirst = takeRequest(peer.data());
+    QCOMPARE(backToFirst.payload.value(QStringLiteral("offset")).toInt(), 0);
+    reply(peer.data(), backToFirst.requestId, true, QStringLiteral("OK"), QString(),
+          QJsonObject{{QStringLiteral("items"), items}, {QStringLiteral("total"), 4}});
+    QTRY_COMPARE(list->count(), 4);
 }
 
 void RecommendationTest::historyDropsSupersededAndSessionForeignResponses()

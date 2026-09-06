@@ -7,9 +7,11 @@
 #include "ui/MainWindow.h"
 #include "ui/NavigationPage.h"
 #include "ui/NearbyPage.h"
+#include "ui/UiTheme.h"
 
 #include <QApplication>
 #include <QComboBox>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QEvent>
@@ -22,6 +24,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QSet>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStackedWidget>
 #include <QTcpServer>
@@ -406,6 +409,7 @@ private slots:
     void navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState();
     void routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess();
     void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
+    void navigationFailureControlsFitPortrait();
     void navigationPageDestructionIgnoresPendingWebCallbacks();
     void mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess();
     void sessionExpiryClearsNavigationCacheBeforeRelogin_data();
@@ -879,6 +883,61 @@ void TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOfflin
         view->page(), QStringLiteral("JSON.stringify(window.__qtOperations)"), &completed).toString();
     QVERIFY(completed);
     QVERIFY(!completionState.contains(QStringLiteral("offline map test value")));
+}
+
+void TencentMapClientTest::navigationFailureControlsFitPortrait()
+{
+    const auto previousStyle = qApp->styleSheet();
+    const auto previousFont = qApp->font();
+    const auto restoreTheme = qScopeGuard([&] {
+        qApp->setStyleSheet(previousStyle);
+        qApp->setFont(previousFont);
+    });
+    UiTheme::apply(*qApp);
+    // Empty key fails locally; this test never loads the Tencent SDK or uses a real key.
+    NavigationPage page(QString{}, nullptr);
+    page.resize(390, 720);
+    page.show();
+    auto *retry = page.findChild<QPushButton *>("navigationRetryButton");
+    QTRY_VERIFY_WITH_TIMEOUT(retry->isVisible(), 5000);
+    page.showFailure(QStringLiteral("地图暂时无法加载，请检查网络连接与地图配置后重试。原有订单不受影响，可返回站点继续查看充电桩。"));
+    QTest::qWait(30);
+    QCOMPARE(page.width(), 390);
+    for (const char *name : {"navigationBackButton", "routeModeBox", "navigationRetryButton", "navigationStatus"}) {
+        auto *control = page.findChild<QWidget *>(QString::fromLatin1(name));
+        QVERIFY(control);
+        QVERIFY2(page.rect().contains(QRect(control->mapTo(&page, QPoint()), control->size())), name);
+    }
+    auto *status = page.findChild<QLabel *>("navigationStatus");
+    QVERIFY(status->wordWrap());
+    QVERIFY(status->height() >= status->heightForWidth(status->width()));
+    auto *view = page.findChild<QWebEngineView *>("navigationWebView");
+    QVERIFY(view->height() >= 240);
+    auto *backButton = page.findChild<QPushButton *>("navigationBackButton");
+    backButton->setFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(backButton->hasFocus());
+    const QImage focused = backButton->grab().toImage();
+    int focusPixels = 0;
+    for (int y = 0; y < focused.height(); ++y) {
+        for (int x = 0; x < focused.width(); ++x) {
+            const auto color = focused.pixelColor(x, y);
+            if (qAbs(color.red()) <= 6 && qAbs(color.green() - 111) <= 6
+                && qAbs(color.blue() - 89) <= 6) ++focusPixels;
+        }
+    }
+    QVERIFY2(focusPixels > 40, "The icon-only back button needs a visible keyboard focus ring");
+    backButton->clearFocus();
+    const QString dir = qEnvironmentVariable("EV_UI_SCREENSHOT_DIR");
+    if (!dir.isEmpty()) {
+        QDir().mkpath(dir);
+        QVERIFY(page.grab().save(QDir(dir).filePath("navigation-error-390x720.png")));
+        page.resize(390, 844);
+        QTest::qWait(30);
+        QVERIFY(page.grab().save(QDir(dir).filePath("navigation-error-390x844.png")));
+    }
+    QSignalSpy back(&page, &NavigationPage::backRequested);
+    page.findChild<QPushButton *>("navigationBackButton")->click();
+    QCOMPARE(back.count(), 1);
 }
 
 void TencentMapClientTest::navigationPageDestructionIgnoresPendingWebCallbacks()
