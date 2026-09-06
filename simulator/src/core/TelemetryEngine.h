@@ -6,6 +6,8 @@
 #include <QRandomGenerator>
 #include <QString>
 
+#include <functional>
+
 namespace ev::simulator {
 
 struct ChargerSnapshot
@@ -35,7 +37,10 @@ struct FaultIntent
 class TelemetryEngine
 {
 public:
-    TelemetryEngine(quint32 seed, const QDateTime &initialTime, int intervalMs);
+    using Clock = std::function<QDateTime()>;
+
+    TelemetryEngine(quint32 seed, const QDateTime &initialTime, int intervalMs,
+                    Clock wallClock = {});
 
     void replaceChargers(const QList<ChargerSnapshot> &chargers);
     QList<ChargerSnapshot> chargers() const;
@@ -63,6 +68,7 @@ private:
     QDateTime currentTime_;
     QDateTime lastEventAt_;
     int intervalMs_;
+    Clock wallClock_;
     QMap<int, ChargerSnapshot> chargers_;
     QList<FaultIntent> pendingIntents_;
 };

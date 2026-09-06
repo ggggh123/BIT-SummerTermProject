@@ -10,7 +10,9 @@
 2. [`2026-09-01-data-simulator.md`](2026-09-01-data-simulator.md) — Data/Simulator：SQLite schema、seed、黄金库与设备模拟器。
 3. [`2026-09-01-admin-server.md`](2026-09-01-admin-server.md) — Admin/Server：Qt 管理/服务端、串行事务和唯一运行期 SQLite writer。
 4. [`2026-09-01-user-client.md`](2026-09-01-user-client.md) — User：Qt 用户端、腾讯地图导航、预约、充电与结算。
-5. [`2026-09-04-core-integration-demo-release.md`](2026-09-04-core-integration-demo-release.md) — Core Integration：核心 reset/start/smoke/rehearsal/release 目标与待实现的运维入口。
+5. [`2026-09-04-core-integration-demo-release.md`](2026-09-04-core-integration-demo-release.md) — Core Integration：reset/start/stop/smoke四入口已在2026-09-06本机候选实现；rehearsal/release两入口及其人工门禁仍未完成，见[四入口验证](../../test/core-runtime-entrypoints-2026-09-06.md)。
+6. [`2026-09-06-core-integration-next.md`](2026-09-06-core-integration-next.md) — 已执行修复与真实 Qt 组合联调的证据、尚未完成的人工/地图/UI/彩排边界。
+7. [`2026-09-06-server-delivery-closeout.md`](2026-09-06-server-delivery-closeout.md) — 基于 PR #10 合并后的 dev，实施线程隔离、管理/网络统一调度和合同在线复位。
 
 ## 可选参考计划
 
@@ -41,4 +43,4 @@ ML Forecasting ────── optional profile：离线训练/发布/pytest�
 
 - core 不要求在线 ML 生产者、Web HTTP 服务、Web snapshot 或 active forecast；无 active forecast 是合法降级状态。
 - 如果启用 optional profile，仍须遵守冻结的 [v1 接口合同](../../design/interface-contract.md)，并按各自计划执行独立验证；通过 optional 验证不替代 core 集成验收。
-- 现有旧计划中的 checkbox、命令与测试记录是历史或可选证据，不得据此推断尚未实现的运维脚本已经可用。当前真实实现/联调状态应查阅 [2026-09-04 仓库进展审计](../../review/repository-progress-audit-2026-09-04.md)。
+- 现有旧计划中的 checkbox、命令与测试记录是历史或可选证据，不得据此推断尚未实现的运维脚本已经可用。当前真实实现/联调状态查阅 [2026-09-06 团队交接状态](../../management/core-integration-handoff-2026-09-06.md)；[2026-09-04 仓库进展审计](../../review/repository-progress-audit-2026-09-04.md)保留为历史检查。

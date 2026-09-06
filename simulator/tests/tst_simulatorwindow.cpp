@@ -1,5 +1,7 @@
 #include <QtTest>
 
+#include <QLabel>
+
 #include "core/TelemetryEngine.h"
 #include "net/SimulatorClient.h"
 #include "ui/SimulatorWindow.h"
@@ -39,6 +41,7 @@ class SimulatorWindowTest : public QObject
 private slots:
     void runPauseTickAndLog();
     void faultDisabledWithoutSelection();
+    void distinguishesTransportFromAuthenticatedSession();
 };
 
 static QDateTime t0()
@@ -86,6 +89,31 @@ void SimulatorWindowTest::faultDisabledWithoutSelection()
 
     QVERIFY(!window.faultEnabled());
     QVERIFY(!window.recoverEnabled());
+}
+
+void SimulatorWindowTest::distinguishesTransportFromAuthenticatedSession()
+{
+    TelemetryEngine engine(20260901, t0(), 3000);
+    FakeClient client;
+    SimulatorWindow window(&client, &engine);
+
+    auto hasBadge = [&window](const QString &text) {
+        const QList<QLabel *> labels = window.findChildren<QLabel *>();
+        for (const QLabel *label : labels) {
+            if (label->text() == text)
+                return true;
+        }
+        return false;
+    };
+
+    emit client.connected();
+    QVERIFY(hasBadge(QStringLiteral("等待鉴权")));
+
+    emit client.authenticationFailed(QStringLiteral("AUTH_REQUIRED"));
+    QVERIFY(hasBadge(QStringLiteral("鉴权失败")));
+
+    emit client.sessionReady();
+    QVERIFY(hasBadge(QStringLiteral("已接入")));
 }
 
 QTEST_MAIN(SimulatorWindowTest)

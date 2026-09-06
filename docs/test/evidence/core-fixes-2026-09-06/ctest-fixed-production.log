@@ -1,0 +1,1067 @@
+Start testing: Sep 06 04:29 CST
+----------------------------------------------------------
+2/24 Testing: user_webengine_runtime
+2/24 Test: user_webengine_runtime
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client/tst_user_webengine_runtime"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client
+"user_webengine_runtime" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of WebEngineRuntimeTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : WebEngineRuntimeTest::initTestCase()
+PASS   : WebEngineRuntimeTest::vmwareAppendsRequiredTokenAndPreservesExistingFlags()
+PASS   : WebEngineRuntimeTest::exactTokenIsNotDuplicated()
+PASS   : WebEngineRuntimeTest::similarPrefixDoesNotCountAsTheRequiredToken()
+PASS   : WebEngineRuntimeTest::nonVmwareVendorIsUnchanged()
+PASS   : WebEngineRuntimeTest::similarVendorNameIsUnchanged()
+PASS   : WebEngineRuntimeTest::spaceDelimitedVmwareLookalikeIsUnchanged()
+PASS   : WebEngineRuntimeTest::commaDelimitedVmwareLookalikeIsUnchanged()
+PASS   : WebEngineRuntimeTest::applyReadsVendorAndUpdatesTheEnvironment()
+PASS   : WebEngineRuntimeTest::unreadableVendorHasNoSideEffect()
+PASS   : WebEngineRuntimeTest::cleanupTestCase()
+Totals: 11 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+********* Finished testing of WebEngineRuntimeTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"user_webengine_runtime" end time: Sep 06 04:29 CST
+"user_webengine_runtime" time elapsed: 00:00:00
+----------------------------------------------------------
+
+1/24 Testing: user_formatters
+1/24 Test: user_formatters
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client/tst_user_formatters"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client
+"user_formatters" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of FormattersTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : FormattersTest::initTestCase()
+PASS   : FormattersTest::phoneAndMoney()
+PASS   : FormattersTest::moneyUsesCheckedSafeIntegerArithmetic()
+PASS   : FormattersTest::moneyRejectsNonCanonicalOrNonAsciiText()
+PASS   : FormattersTest::moneyRejectsTrailingLineBreaks()
+PASS   : FormattersTest::distanceIsStable()
+PASS   : FormattersTest::environmentOverridesLocalIni()
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/location.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/location.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/battery-charging.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/battery-charging.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/history.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/history.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/person.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/person.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/back.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() qt.svg: Cannot open file ':/ui/back.svg', because: No such file or directory
+QWARN  : FormattersTest::missingConfigurationIsVisibleInChinese() QPixmap::scaled: Pixmap is a null pixmap
+PASS   : FormattersTest::missingConfigurationIsVisibleInChinese()
+PASS   : FormattersTest::cleanupTestCase()
+Totals: 9 passed, 0 failed, 0 skipped, 0 blacklisted, 27ms
+********* Finished testing of FormattersTest *********
+<end of output>
+Test time =   0.24 sec
+----------------------------------------------------------
+Test Passed.
+"user_formatters" end time: Sep 06 04:29 CST
+"user_formatters" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/24 Testing: user_tencentmap
+5/24 Test: user_tencentmap
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client/tst_user_tencentmap"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client
+"user_tencentmap" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of TencentMapClientTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : TencentMapClientTest::initTestCase()
+PASS   : TencentMapClientTest::requestBuilderUsesOfficialEndpointAndEncodedQueryOnly()
+PASS   : TencentMapClientTest::asyncGeocoderHandlesSuccessTencentNetworkMalformedAndTimeoutOnce()
+PASS   : TencentMapClientTest::destructionCancelsExternalManagerReplyWithoutLateSignals()
+PASS   : TencentMapClientTest::destructionSurvivesManagerDeletingAllRepliesDuringFirstAbort()
+PASS   : TencentMapClientTest::terminalSignalReceiverMayDestroyClientAndExternalManager(success)
+PASS   : TencentMapClientTest::terminalSignalReceiverMayDestroyClientAndExternalManager(network-error)
+PASS   : TencentMapClientTest::timeoutSignalIsQueuedOutsideTimerEvent()
+PASS   : TencentMapClientTest::navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState()
+QINFO  : TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess() Sandboxing disabled by user.
+QWARN  : TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess() This plugin does not support createPlatformVulkanInstance
+QWARN  : TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess() QVulkanInstance: Failed to initialize Vulkan
+QWARN  : TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess() Unable to detect GPU vendor.
+[122943:122943:0906/042907.764733:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764761:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764782:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764784:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764795:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764797:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764807:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764809:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764863:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764866:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764875:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764878:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764890:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764892:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764903:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764905:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764918:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764920:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764932:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764934:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764944:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764946:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764955:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764973:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764983:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764985:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.764994:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.764996:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.765005:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.765007:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.765017:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.765019:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.765030:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.765032:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.765041:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.765044:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.765054:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.765056:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.765068:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.765070:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+[122943:122943:0906/042907.765081:ERROR:gbm_wrapper.cc(76)] Failed to get fd for plane.: No such file or directory (2)
+[122943:122943:0906/042907.765094:ERROR:gbm_wrapper.cc(259)] Failed to export buffer to dma_buf: No such file or directory (2)
+PASS   : TencentMapClientTest::routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess()
+QWARN  : TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOffline() This plugin does not support propagateSizeHints()
+QDEBUG : TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOffline() Compositor returned null texture
+QWARN  : TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOffline() This plugin does not support propagateSizeHints()
+QWARN  : TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOffline() This plugin does not support propagateSizeHints()
+PASS   : TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOffline()
+QWARN  : TencentMapClientTest::navigationPageDestructionIgnoresPendingWebCallbacks() This plugin does not support propagateSizeHints()
+QWARN  : TencentMapClientTest::navigationPageDestructionIgnoresPendingWebCallbacks() This plugin does not support propagateSizeHints()
+QDEBUG : TencentMapClientTest::navigationPageDestructionIgnoresPendingWebCallbacks() Compositor returned null texture
+PASS   : TencentMapClientTest::navigationPageDestructionIgnoresPendingWebCallbacks()
+QWARN  : TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess() This plugin does not support propagateSizeHints()
+QWARN  : TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess() This plugin does not support propagateSizeHints()
+QDEBUG : TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess() Compositor returned null texture
+QDEBUG : TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess() Compositor returned null texture
+QDEBUG : TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess() Compositor returned null texture
+QDEBUG : TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess() Compositor returned null texture
+PASS   : TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess()
+QWARN  : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin) This plugin does not support propagateSizeHints()
+QWARN  : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin) This plugin does not support propagateSizeHints()
+QDEBUG : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin) Compositor returned null texture
+QDEBUG : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin) Compositor returned null texture
+QDEBUG : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin) Compositor returned null texture
+QDEBUG : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin) Compositor returned null texture
+QDEBUG : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin) Compositor returned null texture
+QWARN  : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin) This plugin does not support propagateSizeHints()
+QWARN  : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin) This plugin does not support propagateSizeHints()
+PASS   : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(auth-required-then-relogin)
+QWARN  : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(relogin-without-auth-error) This plugin does not support propagateSizeHints()
+QWARN  : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(relogin-without-auth-error) This plugin does not support propagateSizeHints()
+QDEBUG : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(relogin-without-auth-error) Compositor returned null texture
+QDEBUG : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(relogin-without-auth-error) Compositor returned null texture
+QDEBUG : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(relogin-without-auth-error) Compositor returned null texture
+QDEBUG : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(relogin-without-auth-error) Compositor returned null texture
+QWARN  : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(relogin-without-auth-error) This plugin does not support propagateSizeHints()
+QWARN  : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(relogin-without-auth-error) This plugin does not support propagateSizeHints()
+PASS   : TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin(relogin-without-auth-error)
+PASS   : TencentMapClientTest::resourceAndPageContractsRemainFixedAndDisplayPredictionStates()
+PASS   : TencentMapClientTest::nearbyChargerButtonsLocalizeEveryWireStatus()
+PASS   : TencentMapClientTest::nearbySelectionCarriesOriginStationAndChargerWithoutMutation()
+PASS   : TencentMapClientTest::cleanupTestCase()
+Totals: 19 passed, 0 failed, 0 skipped, 0 blacklisted, 3114ms
+********* Finished testing of TencentMapClientTest *********
+<end of output>
+Test time =   3.37 sec
+----------------------------------------------------------
+Test Passed.
+"user_tencentmap" end time: Sep 06 04:29 CST
+"user_tencentmap" time elapsed: 00:00:03
+----------------------------------------------------------
+
+3/24 Testing: user_tcpjsonclient
+3/24 Test: user_tcpjsonclient
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client/tst_user_tcpjsonclient"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client
+"user_tcpjsonclient" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of TcpJsonClientTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : TcpJsonClientTest::initTestCase()
+PASS   : TcpJsonClientTest::requestUsesBigEndianFrameAndV1Envelope()
+PASS   : TcpJsonClientTest::splitResponseEmitsOneResponse()
+PASS   : TcpJsonClientTest::coalescedResponsesEmitTwoResponses()
+PASS   : TcpJsonClientTest::disconnectMidFrameFailsMutationOnce()
+PASS   : TcpJsonClientTest::oversizedHeaderFailsPendingRequestAsProtocolError()
+PASS   : TcpJsonClientTest::safeReplayStopsOriginalDeadlineWhileReconnecting()
+PASS   : TcpJsonClientTest::shortWriteClosesThePoisonedConnection()
+PASS   : TcpJsonClientTest::disconnectedSendFailsAsynchronouslyWithCorrelationId()
+PASS   : TcpJsonClientTest::manualDisconnectSuppressesReconnect()
+PASS   : TcpJsonClientTest::safeReadReplaysAtMostOnce()
+PASS   : TcpJsonClientTest::reconnectBackoffCapsAndSuccessfulConnectionResetsIt()
+PASS   : TcpJsonClientTest::cleanupTestCase()
+Totals: 13 passed, 0 failed, 0 skipped, 0 blacklisted, 5672ms
+********* Finished testing of TcpJsonClientTest *********
+<end of output>
+Test time =   5.70 sec
+----------------------------------------------------------
+Test Passed.
+"user_tcpjsonclient" end time: Sep 06 04:29 CST
+"user_tcpjsonclient" time elapsed: 00:00:05
+----------------------------------------------------------
+
+8/24 Testing: user_mobileui
+8/24 Test: user_mobileui
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client/tst_user_mobileui"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client
+"user_mobileui" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of MobileUiTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : MobileUiTest::initTestCase()
+PASS   : MobileUiTest::initialWindowSizeUsesPortraitWidthAndAvailableHeight()
+QWARN  : MobileUiTest::loginActionsStayReachableAndPendingBlocksDuplicateSubmission() This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::loginActionsStayReachableAndPendingBlocksDuplicateSubmission()
+QWARN  : MobileUiTest::loginKeyboardSubmissionEmitsExactlyOnce() This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::loginKeyboardSubmissionEmitsExactlyOnce()
+QWARN  : MobileUiTest::loginErrorCanBeScrolledIntoViewAtSmallHeight() This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::loginErrorCanBeScrolledIntoViewAtSmallHeight()
+PASS   : MobileUiTest::loginIllustrationResourceIsAvailable()
+QWARN  : MobileUiTest::authenticatedShellStaysPortraitWithBottomNavigation() This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::authenticatedShellStaysPortraitWithBottomNavigation() This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::authenticatedShellStaysPortraitWithBottomNavigation() This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::authenticatedShellStaysPortraitWithBottomNavigation() This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::authenticatedShellStaysPortraitWithBottomNavigation()
+QWARN  : MobileUiTest::invalidConfigurationRemainsVisibleInPortraitShell() This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::invalidConfigurationRemainsVisibleInPortraitShell()
+PASS   : MobileUiTest::unavailableChargerMetadataRemainsReadableAcrossConnectionChanges()
+PASS   : MobileUiTest::detailBackResetAndNewSearchReturnToList()
+PASS   : MobileUiTest::zeroIdleStationOpensDetailAndBackIgnoresLateResponse()
+QWARN  : MobileUiTest::detailFailureIsReadableInCurrentView() This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::detailFailureIsReadableInCurrentView() This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::detailFailureIsReadableInCurrentView()
+QWARN  : MobileUiTest::nearbyLongContentRemainsReachable(720) This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::nearbyLongContentRemainsReachable(720) This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::nearbyLongContentRemainsReachable(720)
+QWARN  : MobileUiTest::nearbyLongContentRemainsReachable(844) This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::nearbyLongContentRemainsReachable(844) This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::nearbyLongContentRemainsReachable(844)
+QWARN  : MobileUiTest::authenticatedNearbyClearsExpiredSessionCopy() This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::authenticatedNearbyClearsExpiredSessionCopy() This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::authenticatedNearbyClearsExpiredSessionCopy()
+PASS   : MobileUiTest::cleanupTestCase()
+Totals: 16 passed, 0 failed, 0 skipped, 0 blacklisted, 990ms
+********* Finished testing of MobileUiTest *********
+<end of output>
+Test time =   1.14 sec
+----------------------------------------------------------
+Test Passed.
+"user_mobileui" end time: Sep 06 04:29 CST
+"user_mobileui" time elapsed: 00:00:01
+----------------------------------------------------------
+
+9/24 Testing: simulator_engine
+9/24 Test: simulator_engine
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/simulator/tst_simulator_engine"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/simulator
+"simulator_engine" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of TelemetryEngineTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : TelemetryEngineTest::initTestCase()
+PASS   : TelemetryEngineTest::determinismAndTimeAdvance()
+PASS   : TelemetryEngineTest::zeroEnergyForNonCharging()
+PASS   : TelemetryEngineTest::faultAndRecoveryIntents()
+PASS   : TelemetryEngineTest::intentTimestampsStrictlyIncreasing()
+PASS   : TelemetryEngineTest::defaultStartTimeAnchorsToCurrentPlus08()
+PASS   : TelemetryEngineTest::explicitStartTimeRemainsDeterministic()
+PASS   : TelemetryEngineTest::realtimeClockPreventsFaultBeforeLaterOrder()
+PASS   : TelemetryEngineTest::cleanupTestCase()
+Totals: 9 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+********* Finished testing of TelemetryEngineTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"simulator_engine" end time: Sep 06 04:29 CST
+"simulator_engine" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/24 Testing: simulator_client
+10/24 Test: simulator_client
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/simulator/tst_simulator_client"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/simulator
+"simulator_client" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of SimulatorClientTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : SimulatorClientTest::initTestCase()
+PASS   : SimulatorClientTest::reconnectDelaySequence()
+PASS   : SimulatorClientTest::requestIdIsStableForSample()
+PASS   : SimulatorClientTest::sendsStatusAndTelemetryToFakeServer()
+PASS   : SimulatorClientTest::queuesTelemetryWhileDisconnected()
+PASS   : SimulatorClientTest::statusReportsActualRunState()
+PASS   : SimulatorClientTest::encodedEventTimestampsKeepMilliseconds()
+PASS   : SimulatorClientTest::queuedEventsFlushAfterConnecting()
+PASS   : SimulatorClientTest::unacknowledgedEventResendsWithSameRequestId()
+PASS   : SimulatorClientTest::periodicallyRefreshesAuthoritativeSnapshot()
+PASS   : SimulatorClientTest::statusRefreshIsSingleFlight()
+PASS   : SimulatorClientTest::conflictTriggersImmediateAuthoritativeRefresh()
+PASS   : SimulatorClientTest::emptyTokenReportsAuthenticationFailureWithoutReadySession()
+PASS   : SimulatorClientTest::doesNotFlushEventsBeforeAuthenticatedSnapshot()
+PASS   : SimulatorClientTest::statusRequestIdsDifferAcrossClientInstances()
+PASS   : SimulatorClientTest::malformedStatusSnapshotDoesNotReadyOrFlushEvents()
+PASS   : SimulatorClientTest::cleanupTestCase()
+Totals: 17 passed, 0 failed, 0 skipped, 0 blacklisted, 3463ms
+********* Finished testing of SimulatorClientTest *********
+<end of output>
+Test time =   3.48 sec
+----------------------------------------------------------
+Test Passed.
+"simulator_client" end time: Sep 06 04:29 CST
+"simulator_client" time elapsed: 00:00:03
+----------------------------------------------------------
+
+11/24 Testing: simulator_window
+11/24 Test: simulator_window
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/simulator/tst_simulator_window"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/simulator
+"simulator_window" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of SimulatorWindowTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : SimulatorWindowTest::initTestCase()
+PASS   : SimulatorWindowTest::runPauseTickAndLog()
+PASS   : SimulatorWindowTest::faultDisabledWithoutSelection()
+PASS   : SimulatorWindowTest::distinguishesTransportFromAuthenticatedSession()
+PASS   : SimulatorWindowTest::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 11ms
+********* Finished testing of SimulatorWindowTest *********
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"simulator_window" end time: Sep 06 04:29 CST
+"simulator_window" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/24 Testing: admin_auth
+12/24 Test: admin_auth
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server/tst_admin_auth"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server
+"admin_auth" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of AdminAuthTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : AdminAuthTest::initTestCase()
+PASS   : AdminAuthTest::validCredentialsIssueReusableToken()
+PASS   : AdminAuthTest::invalidCredentialsUseContractFailureCode()
+PASS   : AdminAuthTest::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 2ms
+********* Finished testing of AdminAuthTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"admin_auth" end time: Sep 06 04:29 CST
+"admin_auth" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/24 Testing: request_log
+13/24 Test: request_log
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server/tst_request_log"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server
+"request_log" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of RequestLogTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : RequestLogTest::initTestCase()
+PASS   : RequestLogTest::recordsActionCodeAndResponseWithoutToken()
+PASS   : RequestLogTest::listsNewestFirstAndFiltersByRequestId()
+PASS   : RequestLogTest::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 2ms
+********* Finished testing of RequestLogTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"request_log" end time: Sep 06 04:29 CST
+"request_log" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/24 Testing: user_flow
+14/24 Test: user_flow
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server/tst_user_flow"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server
+"user_flow" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of UserFlowTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : UserFlowTest::initTestCase()
+PASS   : UserFlowTest::userLoginCreatesTokenAndMainChargeFlowSettles()
+PASS   : UserFlowTest::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 2ms
+********* Finished testing of UserFlowTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"user_flow" end time: Sep 06 04:29 CST
+"user_flow" time elapsed: 00:00:00
+----------------------------------------------------------
+
+15/24 Testing: admin_service
+15/24 Test: admin_service
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server/tst_admin_service"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server
+"admin_service" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of AdminServiceTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : AdminServiceTest::initTestCase()
+PASS   : AdminServiceTest::stationCreateBuildsStationAndIdleChargers()
+PASS   : AdminServiceTest::chargerRestartRequiresFaultAndRecordsEvent()
+PASS   : AdminServiceTest::userListAndSetStatusFollowContract()
+PASS   : AdminServiceTest::restartCompletionRollsBackWhenEventInsertFails()
+PASS   : AdminServiceTest::cleanupTestCase()
+Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 1705ms
+********* Finished testing of AdminServiceTest *********
+<end of output>
+Test time =   1.71 sec
+----------------------------------------------------------
+Test Passed.
+"admin_service" end time: Sep 06 04:29 CST
+"admin_service" time elapsed: 00:00:01
+----------------------------------------------------------
+
+16/24 Testing: dashboard_service
+16/24 Test: dashboard_service
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server/tst_dashboard_service"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server
+"dashboard_service" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of DashboardServiceTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : DashboardServiceTest::initTestCase()
+PASS   : DashboardServiceTest::summaryUsesFrozenAdminDashboardSchema()
+PASS   : DashboardServiceTest::revenueUsesShanghaiNaturalDayAndMonthAndCompletedOrdersOnly()
+PASS   : DashboardServiceTest::alertsUseActiveForecastAndContractFilterOrder()
+PASS   : DashboardServiceTest::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 5ms
+********* Finished testing of DashboardServiceTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"dashboard_service" end time: Sep 06 04:29 CST
+"dashboard_service" time elapsed: 00:00:00
+----------------------------------------------------------
+
+17/24 Testing: telemetry_service
+17/24 Test: telemetry_service
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server/tst_telemetry_service"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server
+"telemetry_service" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of TelemetryServiceTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : TelemetryServiceTest::initTestCase()
+PASS   : TelemetryServiceTest::telemetryPushAccumulatesActiveOrderAmount()
+PASS   : TelemetryServiceTest::faultSetStopsChargingWithoutCompletingOrder()
+PASS   : TelemetryServiceTest::simulatorStatusReturnsAuthoritativeChargers()
+PASS   : TelemetryServiceTest::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 4ms
+********* Finished testing of TelemetryServiceTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"telemetry_service" end time: Sep 06 04:29 CST
+"telemetry_service" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/24 Testing: user_recommendation
+7/24 Test: user_recommendation
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client/tst_user_recommendation"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client
+"user_recommendation" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of RecommendationTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : RecommendationTest::initTestCase()
+PASS   : RecommendationTest::contractTimestampComparatorCoversLongFractionsAndZeroEquivalence()
+PASS   : RecommendationTest::orderListUsesExactPayloadAndCanonicalDecoder()
+PASS   : RecommendationTest::orderListRejectsInvalidRequestPagination(zero limit)
+PASS   : RecommendationTest::orderListRejectsInvalidRequestPagination(limit above 100)
+PASS   : RecommendationTest::orderListRejectsInvalidRequestPagination(negative offset)
+PASS   : RecommendationTest::orderListRejectsInvalidPages(extra top-level field)
+PASS   : RecommendationTest::orderListRejectsInvalidPages(negative total)
+PASS   : RecommendationTest::orderListRejectsInvalidPages(unsafe total)
+PASS   : RecommendationTest::orderListRejectsInvalidPages(too many items)
+PASS   : RecommendationTest::orderListRejectsInvalidPages(foreign user)
+PASS   : RecommendationTest::orderListRejectsInvalidPages(reservedAt ascending)
+PASS   : RecommendationTest::orderListRejectsInvalidPages(reservedAt within millisecond ascending)
+PASS   : RecommendationTest::orderListRejectsInvalidPages(reservedAt long fraction ascending)
+PASS   : RecommendationTest::orderListRejectsInvalidPages(malformed canonical order)
+PASS   : RecommendationTest::orderListAcceptsDescendingAndExactlyEqualFractions()
+PASS   : RecommendationTest::historyRendersOnlyReceivedPageWithExactPagination()
+PASS   : RecommendationTest::historyDropsSupersededAndSessionForeignResponses()
+PASS   : RecommendationTest::historyFailureAndDisconnectPreserveCommittedCache()
+PASS   : RecommendationTest::historyLabelsStoppedChargingFromEndedAt()
+PASS   : RecommendationTest::historyUsesFallbackKeysForEquivalentTimestampInstants()
+PASS   : RecommendationTest::historyOrdersExactEndedAtFractions()
+PASS   : RecommendationTest::historyOrdersExactReservedAtFractions()
+PASS   : RecommendationTest::historyFormatsLargeFenExactly()
+PASS   : RecommendationTest::historyNeverExposesRawFailureMessages()
+PASS   : RecommendationTest::forecastTimestampRelationsUseExactFractions()
+PASS   : RecommendationTest::freshForecastUsesRealTransportAndDeterministicRanking()
+PASS   : RecommendationTest::staleNullDisabledAndNoMatchLoseRecommendationPriority()
+PASS   : RecommendationTest::nearbyDisconnectKeepsSelectableCacheAndRedBanner()
+PASS   : RecommendationTest::chargeRefreshPreservesForecastUntilReplacement()
+PASS   : RecommendationTest::forecastCacheRequiresCompatibleStationFacts()
+PASS   : RecommendationTest::retryWaitsForRealConnectionAndEmitsOnlySafeReads()
+PASS   : RecommendationTest::globalCurrentSurvivesInactiveChargeSelectionInvalidation()
+PASS   : RecommendationTest::globalCurrentFailureRequiresVisibleRetryBeforeQueuedReads()
+PASS   : RecommendationTest::pendingGlobalCurrentReplaysOnceAcrossSecondReconnect()
+PASS   : RecommendationTest::mutationDisconnectNeverReplaysWritesAndRefreshesCurrentFirst()
+PASS   : RecommendationTest::historyNavigationObeysTask6MutationGate()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(history read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(history read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(history read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(history read) This plugin does not support propagateSizeHints()
+PASS   : RecommendationTest::authenticatedAuthRequiredExpiresSession(history read)
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(global current read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(global current read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(global current read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(global current read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(global current read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(global current read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(global current read) This plugin does not support propagateSizeHints()
+PASS   : RecommendationTest::authenticatedAuthRequiredExpiresSession(global current read)
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(profile read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(profile read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(profile read) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(profile read) This plugin does not support propagateSizeHints()
+PASS   : RecommendationTest::authenticatedAuthRequiredExpiresSession(profile read)
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(charge mutation) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(charge mutation) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(charge mutation) This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::authenticatedAuthRequiredExpiresSession(charge mutation) This plugin does not support propagateSizeHints()
+PASS   : RecommendationTest::authenticatedAuthRequiredExpiresSession(charge mutation)
+QWARN  : RecommendationTest::sessionExpiryCancelsConcurrentSafeReadsAndMutationExactlyOnce() This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::sessionExpiryCancelsConcurrentSafeReadsAndMutationExactlyOnce() This plugin does not support propagateSizeHints()
+QWARN  : RecommendationTest::sessionExpiryCancelsConcurrentSafeReadsAndMutationExactlyOnce() This plugin does not support propagateSizeHints()
+PASS   : RecommendationTest::sessionExpiryCancelsConcurrentSafeReadsAndMutationExactlyOnce()
+PASS   : RecommendationTest::cleanupTestCase()
+Totals: 43 passed, 0 failed, 0 skipped, 0 blacklisted, 10284ms
+********* Finished testing of RecommendationTest *********
+<end of output>
+Test time =  10.60 sec
+----------------------------------------------------------
+Test Passed.
+"user_recommendation" end time: Sep 06 04:29 CST
+"user_recommendation" time elapsed: 00:00:10
+----------------------------------------------------------
+
+18/24 Testing: server_tcp_p0_UTC
+18/24 Test: server_tcp_p0_UTC
+Command: "/usr/bin/python3" "/mnt/hgfs/Desktop/SummerTermProject/worktrees/core-integration/tests/admin-server/test_tcp_p0.py" "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/admin-server/ev_admin_server"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server
+"server_tcp_p0_UTC" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+test_active_order_guard_and_settle_preserves_recovery_state (__main__.TcpP0.test_active_order_guard_and_settle_preserves_recovery_state) ... ok
+test_atomic_sql_and_ack_failures (__main__.TcpP0.test_atomic_sql_and_ack_failures) ... ok
+test_busy_returns_contract_error_without_side_effects (__main__.TcpP0.test_busy_returns_contract_error_without_side_effects) ... ok
+test_commit_failure_rolls_back_business_and_ack (__main__.TcpP0.test_commit_failure_rolls_back_business_and_ack) ... ok
+test_cursor_compares_instants_and_fault_freezes_once (__main__.TcpP0.test_cursor_compares_instants_and_fault_freezes_once) ... ok
+test_cursor_preserves_arbitrary_fraction_across_telemetry_fault_and_restart (__main__.TcpP0.test_cursor_preserves_arbitrary_fraction_across_telemetry_fault_and_restart) ... ok
+test_cursor_selects_exact_maximum_with_mixed_whole_and_fraction_strings (__main__.TcpP0.test_cursor_selects_exact_maximum_with_mixed_whole_and_fraction_strings) ... ok
+test_forecast_publish_keeps_two_phase_and_stable_final_ack (__main__.TcpP0.test_forecast_publish_keeps_two_phase_and_stable_final_ack) ... ok
+test_new_business_times (__main__.TcpP0.test_new_business_times) ... ok
+test_order_mutations_replay_the_original_success_after_state_changes (__main__.TcpP0.test_order_mutations_replay_the_original_success_after_state_changes) ... ok
+test_recharge_replay_persists_across_restart_and_identity (__main__.TcpP0.test_recharge_replay_persists_across_restart_and_identity) ... ok
+test_small_energy_increment_is_not_rounded_before_billing (__main__.TcpP0.test_small_energy_increment_is_not_rounded_before_billing) ... ok
+test_stop_preserves_telemetry_and_actual_duration (__main__.TcpP0.test_stop_preserves_telemetry_and_actual_duration) ... ok
+test_telemetry_replay_before_cursor (__main__.TcpP0.test_telemetry_replay_before_cursor) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 3.610s
+
+OK
+<end of output>
+Test time =   3.66 sec
+----------------------------------------------------------
+Test Passed.
+"server_tcp_p0_UTC" end time: Sep 06 04:29 CST
+"server_tcp_p0_UTC" time elapsed: 00:00:03
+----------------------------------------------------------
+
+20/24 Testing: admin_runtime
+20/24 Test: admin_runtime
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-gui/tst_admin_runtime"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-gui
+"admin_runtime" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of AdminRuntimeTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : AdminRuntimeTest::initTestCase()
+PASS   : AdminRuntimeTest::configurationOptionsKeepGuiAndUseOneRuntimeDatabase()
+PASS   : AdminRuntimeTest::noGuiFlagRemainsExplicitlyHeadless()
+PASS   : AdminRuntimeTest::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 103ms
+********* Finished testing of AdminRuntimeTest *********
+<end of output>
+Test time =   0.12 sec
+----------------------------------------------------------
+Test Passed.
+"admin_runtime" end time: Sep 06 04:29 CST
+"admin_runtime" time elapsed: 00:00:00
+----------------------------------------------------------
+
+21/24 Testing: admin_window_refresh
+21/24 Test: admin_window_refresh
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-gui/tst_admin_window_refresh"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-gui
+"admin_window_refresh" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of AdminWindowRefreshTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : AdminWindowRefreshTest::initTestCase()
+QWARN  : AdminWindowRefreshTest::currentPageRefreshesWithoutRebuildAndPreservesSelectionAndFilters() This plugin does not support propagateSizeHints()
+PASS   : AdminWindowRefreshTest::currentPageRefreshesWithoutRebuildAndPreservesSelectionAndFilters()
+QWARN  : AdminWindowRefreshTest::removedStableKeyCannotRetargetUserAction() This plugin does not support propagateSizeHints()
+QWARN  : AdminWindowRefreshTest::removedStableKeyCannotRetargetUserAction() This plugin does not support propagateSizeHints()
+PASS   : AdminWindowRefreshTest::removedStableKeyCannotRetargetUserAction()
+PASS   : AdminWindowRefreshTest::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 1158ms
+********* Finished testing of AdminWindowRefreshTest *********
+<end of output>
+Test time =   1.19 sec
+----------------------------------------------------------
+Test Passed.
+"admin_window_refresh" end time: Sep 06 04:29 CST
+"admin_window_refresh" time elapsed: 00:00:01
+----------------------------------------------------------
+
+22/24 Testing: contracts
+22/24 Test: contracts
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/shared/tst_contracts"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/shared
+"contracts" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of ContractsTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : ContractsTest::initTestCase()
+PASS   : ContractsTest::actionsAreStable()
+PASS   : ContractsTest::statusesValidate()
+PASS   : ContractsTest::permissionsAreStable()
+PASS   : ContractsTest::businessFailuresFollowActionOrder()
+PASS   : ContractsTest::pendingResetReceiptResumesAfterCrash()
+PASS   : ContractsTest::cleanupTestCase()
+Totals: 7 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+********* Finished testing of ContractsTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"contracts" end time: Sep 06 04:29 CST
+"contracts" time elapsed: 00:00:00
+----------------------------------------------------------
+
+23/24 Testing: framecodec
+23/24 Test: framecodec
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/shared/tst_framecodec"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/shared
+"framecodec" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of FrameCodecTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : FrameCodecTest::initTestCase()
+PASS   : FrameCodecTest::decodesFragmentedAndCoalescedFrames()
+PASS   : FrameCodecTest::rejectsInvalidLengths()
+PASS   : FrameCodecTest::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 1ms
+********* Finished testing of FrameCodecTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"framecodec" end time: Sep 06 04:29 CST
+"framecodec" time elapsed: 00:00:00
+----------------------------------------------------------
+
+24/24 Testing: jsonenvelope
+24/24 Test: jsonenvelope
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/shared/tst_jsonenvelope"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/shared
+"jsonenvelope" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of JsonEnvelopeTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : JsonEnvelopeTest::initTestCase()
+PASS   : JsonEnvelopeTest::roundTripsRequest()
+PASS   : JsonEnvelopeTest::rejectsMissingAndWrongFields()
+PASS   : JsonEnvelopeTest::classifiesRequestVersionErrors()
+PASS   : JsonEnvelopeTest::validatesResponseStringFields(blank strings)
+PASS   : JsonEnvelopeTest::validatesResponseStringFields(missing request id)
+PASS   : JsonEnvelopeTest::validatesResponseStringFields(missing code)
+PASS   : JsonEnvelopeTest::validatesResponseStringFields(missing message)
+PASS   : JsonEnvelopeTest::validatesResponseStringFields(non-string request id)
+PASS   : JsonEnvelopeTest::validatesResponseStringFields(non-string code)
+PASS   : JsonEnvelopeTest::validatesResponseStringFields(non-string message)
+PASS   : JsonEnvelopeTest::roundTripsFixtures()
+PASS   : JsonEnvelopeTest::cleanupTestCase()
+Totals: 13 passed, 0 failed, 0 skipped, 0 blacklisted, 8ms
+********* Finished testing of JsonEnvelopeTest *********
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"jsonenvelope" end time: Sep 06 04:29 CST
+"jsonenvelope" time elapsed: 00:00:00
+----------------------------------------------------------
+
+19/24 Testing: server_tcp_p0_Asia_Shanghai
+19/24 Test: server_tcp_p0_Asia_Shanghai
+Command: "/usr/bin/python3" "/mnt/hgfs/Desktop/SummerTermProject/worktrees/core-integration/tests/admin-server/test_tcp_p0.py" "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/admin-server/ev_admin_server"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/tests/admin-server
+"server_tcp_p0_Asia_Shanghai" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+test_active_order_guard_and_settle_preserves_recovery_state (__main__.TcpP0.test_active_order_guard_and_settle_preserves_recovery_state) ... ok
+test_atomic_sql_and_ack_failures (__main__.TcpP0.test_atomic_sql_and_ack_failures) ... ok
+test_busy_returns_contract_error_without_side_effects (__main__.TcpP0.test_busy_returns_contract_error_without_side_effects) ... ok
+test_commit_failure_rolls_back_business_and_ack (__main__.TcpP0.test_commit_failure_rolls_back_business_and_ack) ... ok
+test_cursor_compares_instants_and_fault_freezes_once (__main__.TcpP0.test_cursor_compares_instants_and_fault_freezes_once) ... ok
+test_cursor_preserves_arbitrary_fraction_across_telemetry_fault_and_restart (__main__.TcpP0.test_cursor_preserves_arbitrary_fraction_across_telemetry_fault_and_restart) ... ok
+test_cursor_selects_exact_maximum_with_mixed_whole_and_fraction_strings (__main__.TcpP0.test_cursor_selects_exact_maximum_with_mixed_whole_and_fraction_strings) ... ok
+test_forecast_publish_keeps_two_phase_and_stable_final_ack (__main__.TcpP0.test_forecast_publish_keeps_two_phase_and_stable_final_ack) ... ok
+test_new_business_times (__main__.TcpP0.test_new_business_times) ... ok
+test_order_mutations_replay_the_original_success_after_state_changes (__main__.TcpP0.test_order_mutations_replay_the_original_success_after_state_changes) ... ok
+test_recharge_replay_persists_across_restart_and_identity (__main__.TcpP0.test_recharge_replay_persists_across_restart_and_identity) ... ok
+test_small_energy_increment_is_not_rounded_before_billing (__main__.TcpP0.test_small_energy_increment_is_not_rounded_before_billing) ... ok
+test_stop_preserves_telemetry_and_actual_duration (__main__.TcpP0.test_stop_preserves_telemetry_and_actual_duration) ... ok
+test_telemetry_replay_before_cursor (__main__.TcpP0.test_telemetry_replay_before_cursor) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 3.611s
+
+OK
+<end of output>
+Test time =   3.66 sec
+----------------------------------------------------------
+Test Passed.
+"server_tcp_p0_Asia_Shanghai" end time: Sep 06 04:29 CST
+"server_tcp_p0_Asia_Shanghai" time elapsed: 00:00:03
+----------------------------------------------------------
+
+6/24 Testing: user_chargepage
+6/24 Test: user_chargepage
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client/tst_user_chargepage"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client
+"user_chargepage" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of ChargePageTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : ChargePageTest::initTestCase()
+PASS   : ChargePageTest::exactStateTableUsesOnlyAuthoritativeFields()
+PASS   : ChargePageTest::lifecycleUsesExactPayloadsAndUpdatesBalanceByRevision()
+PASS   : ChargePageTest::canonicalDecoderRejectsBadTimestampNullAndExtraFields()
+PASS   : ChargePageTest::frozenUserCanCancelStopAndSettle()
+PASS   : ChargePageTest::pollIsTwoSecondsSingleFlightAndStopsOnTerminalOrLeave()
+PASS   : ChargePageTest::uncertainMutationNeverReplaysAndReconcilesCurrentFirst()
+PASS   : ChargePageTest::businessErrorsUseFixedChineseMappingsAndSafeRefresh()
+PASS   : ChargePageTest::stalePageMutationAppliesGloballyWithoutRepaintingAndOrdersUserRevision()
+PASS   : ChargePageTest::notConnectedBeforeWriteIsDefiniteAndMalformedMutationIsUncertain()
+PASS   : ChargePageTest::terminalMutationRejectsOlderOutstandingPoll()
+PASS   : ChargePageTest::ordinaryReconnectReconcilesCurrentAndFactsBeforeActions()
+PASS   : ChargePageTest::ordinaryReconnectRejectsOutstandingPollReplayAfterFreshCurrent()
+PASS   : ChargePageTest::offlineRetryReconnectsImmediatelyCurrentFirstWithoutMutationReplay()
+PASS   : ChargePageTest::factsFailureRetryReconcilesCurrentBeforeRestoringReservedActions()
+PASS   : ChargePageTest::nullReconciliationRetainsIdleSelectionUntilFactsRestoreReserve()
+PASS   : ChargePageTest::cleanupTestCase()
+Totals: 17 passed, 0 failed, 0 skipped, 0 blacklisted, 19089ms
+********* Finished testing of ChargePageTest *********
+<end of output>
+Test time =  19.27 sec
+----------------------------------------------------------
+Test Passed.
+"user_chargepage" end time: Sep 06 04:29 CST
+"user_chargepage" time elapsed: 00:00:19
+----------------------------------------------------------
+
+4/24 Testing: user_api
+4/24 Test: user_api
+Command: "/home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client/tst_user_api"
+Directory: /home/hushengyuan/.cache/ev-core-fixed-integration-build-SiLdj0/apps/user-client
+"user_api" start time: Sep 06 04:29 CST
+Output:
+----------------------------------------------------------
+********* Start testing of UserApiTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : UserApiTest::initTestCase()
+PASS   : UserApiTest::loginSendsOnlyPhoneAndDecodesCompleteSession()
+PASS   : UserApiTest::loginRejectsResponseForDifferentRequestedMobileAndRecovers()
+PASS   : UserApiTest::malformedLoginSuccessIsInvalidResponseAndServerErrorIsPreserved()
+PASS   : UserApiTest::staleLoginResponseCannotReplaceNewerSession()
+QWARN  : UserApiTest::reloginClearsPagesBeforeAuthenticationCompletes() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::reloginClearsPagesBeforeAuthenticationCompletes() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::reloginClearsPagesBeforeAuthenticationCompletes() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::reloginClearsPagesBeforeAuthenticationCompletes() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::reloginClearsPagesBeforeAuthenticationCompletes()
+QWARN  : UserApiTest::expiredSessionLateResponsesCannotAdvanceReloginGuard() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::expiredSessionLateResponsesCannotAdvanceReloginGuard() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::expiredSessionLateResponsesCannotAdvanceReloginGuard()
+PASS   : UserApiTest::currentOrderUsesOwnedTokenAndRequiresActiveOrderShape()
+PASS   : UserApiTest::decoderAcceptsMaxSafeIntegerAndRejectsTwoToThe53()
+PASS   : UserApiTest::nullableOrderTimestampsDecodeAsEmptyStrings()
+PASS   : UserApiTest::loginPageDisablesWhilePendingAndShowsConnectionFailure()
+QWARN  : UserApiTest::offlineLoginShowsStableChineseTransportError() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::offlineLoginShowsStableChineseTransportError()
+QWARN  : UserApiTest::currentOrderGuardRoutesChargingAndNullToStablePages() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::currentOrderGuardRoutesChargingAndNullToStablePages() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::currentOrderGuardRoutesChargingAndNullToStablePages() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::currentOrderGuardRoutesChargingAndNullToStablePages() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::currentOrderGuardRoutesChargingAndNullToStablePages()
+QWARN  : UserApiTest::activeOrderGuardSurvivesProfileNavigation() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::activeOrderGuardSurvivesProfileNavigation() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::activeOrderGuardSurvivesProfileNavigation()
+QWARN  : UserApiTest::noOrderNavigationKeepsNearbyAvailable() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::noOrderNavigationKeepsNearbyAvailable() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::noOrderNavigationKeepsNearbyAvailable()
+QWARN  : UserApiTest::chargeMutationDisablesAuthenticatedNavigationUntilOutcome() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::chargeMutationDisablesAuthenticatedNavigationUntilOutcome() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::chargeMutationDisablesAuthenticatedNavigationUntilOutcome()
+PASS   : UserApiTest::nearbyStationsUseOwnedSessionValidateDistanceAndSortTies()
+PASS   : UserApiTest::stationDetailDecodesCompleteAuthoritativeObjects()
+PASS   : UserApiTest::plannedHealthAndChargerListWrappersUseExactTypedContract()
+PASS   : UserApiTest::latestForecastDecodesCompleteRunAndExactNoPrediction()
+PASS   : UserApiTest::latestForecastRejectsRecordsOutsideMatchingStationSnapshot()
+PASS   : UserApiTest::task4ResultSignalsCarryIdsAcrossIdenticalArgumentRaces()
+PASS   : UserApiTest::nearbyPageRejectsReversedSameOriginAndStationResults()
+PASS   : UserApiTest::chargeRefreshRejectsStaleSelectionAndCannotOverwriteNewDetail()
+QWARN  : UserApiTest::nearbyReplacementInvalidatesRememberedChargeSelection() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::nearbyReplacementInvalidatesRememberedChargeSelection()
+QWARN  : UserApiTest::uncertainReserveKeepsGlobalGateUntilCurrentAndFacts() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::uncertainReserveKeepsGlobalGateUntilCurrentAndFacts() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::uncertainReserveKeepsGlobalGateUntilCurrentAndFacts() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::uncertainReserveKeepsGlobalGateUntilCurrentAndFacts()
+QWARN  : UserApiTest::activeOrderExistsCannotBeBypassedBeforeReconciliation() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::activeOrderExistsCannotBeBypassedBeforeReconciliation() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::activeOrderExistsCannotBeBypassedBeforeReconciliation() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::activeOrderExistsCannotBeBypassedBeforeReconciliation()
+QWARN  : UserApiTest::backgroundNearbyReplacementCannotInvalidatePendingReserve() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::backgroundNearbyReplacementCannotInvalidatePendingReserve() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::backgroundNearbyReplacementCannotInvalidatePendingReserve() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::backgroundNearbyReplacementCannotInvalidatePendingReserve()
+QWARN  : UserApiTest::chargeRefreshPreservesIdleSelectionInBothResponseOrders() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::chargeRefreshPreservesIdleSelectionInBothResponseOrders() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::chargeRefreshPreservesIdleSelectionInBothResponseOrders() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::chargeRefreshPreservesIdleSelectionInBothResponseOrders() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::chargeRefreshPreservesIdleSelectionInBothResponseOrders()
+QWARN  : UserApiTest::chargeRefreshSuccessCannotEraseFactsFailure() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::chargeRefreshSuccessCannotEraseFactsFailure() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::chargeRefreshSuccessCannotEraseFactsFailure()
+QWARN  : UserApiTest::disconnectIgnoresChargeListReplayBeforeFreshReconciliation() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::disconnectIgnoresChargeListReplayBeforeFreshReconciliation() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::disconnectIgnoresChargeListReplayBeforeFreshReconciliation()
+PASS   : UserApiTest::foregroundSearchRetainsCommittedCacheUntilListCommit(new-business)
+PASS   : UserApiTest::foregroundSearchRetainsCommittedCacheUntilListCommit(new-malformed)
+PASS   : UserApiTest::foregroundSearchRetainsCommittedCacheUntilListCommit(new-disconnect)
+PASS   : UserApiTest::foregroundSearchRetainsCommittedCacheUntilListCommit(same-business)
+PASS   : UserApiTest::foregroundSearchRetainsCommittedCacheUntilListCommit(same-malformed)
+PASS   : UserApiTest::foregroundSearchRetainsCommittedCacheUntilListCommit(same-disconnect)
+PASS   : UserApiTest::foregroundSearchOwnsGeocodePhaseAndRestoresCachedControls()
+PASS   : UserApiTest::offlineNearbyCacheRemainsBrowsableAndCannotStartSearch()
+QWARN  : UserApiTest::activeOrderExistsChargingStatesWaitForMatchingFacts() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::activeOrderExistsChargingStatesWaitForMatchingFacts() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::activeOrderExistsChargingStatesWaitForMatchingFacts() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::activeOrderExistsChargingStatesWaitForMatchingFacts() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::activeOrderExistsChargingStatesWaitForMatchingFacts() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::activeOrderExistsChargingStatesWaitForMatchingFacts() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::activeOrderExistsChargingStatesWaitForMatchingFacts()
+QWARN  : UserApiTest::terminalBackWaitsForNearbyFactsToCommit() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalBackWaitsForNearbyFactsToCommit() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalBackWaitsForNearbyFactsToCommit() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalBackWaitsForNearbyFactsToCommit() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::terminalBackWaitsForNearbyFactsToCommit()
+QWARN  : UserApiTest::terminalAndNullBackRemainReachableAcrossReconnect() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalAndNullBackRemainReachableAcrossReconnect() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalAndNullBackRemainReachableAcrossReconnect() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalAndNullBackRemainReachableAcrossReconnect() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalAndNullBackRemainReachableAcrossReconnect() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalAndNullBackRemainReachableAcrossReconnect() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::terminalAndNullBackRemainReachableAcrossReconnect()
+QWARN  : UserApiTest::terminalWithoutMatchingNearbyContextDoesNotStrandBack() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalWithoutMatchingNearbyContextDoesNotStrandBack() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalWithoutMatchingNearbyContextDoesNotStrandBack() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalWithoutMatchingNearbyContextDoesNotStrandBack() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::terminalWithoutMatchingNearbyContextDoesNotStrandBack() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::terminalWithoutMatchingNearbyContextDoesNotStrandBack()
+QWARN  : UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::exitRefreshResolvesOnceWhenContextChangesOrStationIsMissing()
+QWARN  : UserApiTest::chargeDerivedForecastIsNotReplayedAfterDisconnect() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::chargeDerivedForecastIsNotReplayedAfterDisconnect() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::chargeDerivedForecastIsNotReplayedAfterDisconnect()
+QWARN  : UserApiTest::differentAuthoritativeOrderClearsRememberedSelectionCopies() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::differentAuthoritativeOrderClearsRememberedSelectionCopies() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::differentAuthoritativeOrderClearsRememberedSelectionCopies() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::differentAuthoritativeOrderClearsRememberedSelectionCopies() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::differentAuthoritativeOrderClearsRememberedSelectionCopies() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::differentAuthoritativeOrderClearsRememberedSelectionCopies() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::differentAuthoritativeOrderClearsRememberedSelectionCopies() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::differentAuthoritativeOrderClearsRememberedSelectionCopies()
+QWARN  : UserApiTest::externalActiveOrderAuthorityInvalidatesVisibleSelection() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalActiveOrderAuthorityInvalidatesVisibleSelection() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalActiveOrderAuthorityInvalidatesVisibleSelection() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::externalActiveOrderAuthorityInvalidatesVisibleSelection()
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(detail-failure-then-late-list-success-and-retry) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(detail-failure-then-late-list-success-and-retry) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::exitRefreshFirstFailureWins(detail-failure-then-late-list-success-and-retry)
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(missing-charger-then-late-list-failure-and-geocode) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(missing-charger-then-late-list-failure-and-geocode) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::exitRefreshFirstFailureWins(missing-charger-then-late-list-failure-and-geocode)
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(list-failure-then-late-detail-success) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(list-failure-then-late-detail-success) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::exitRefreshFirstFailureWins(list-failure-then-late-detail-success)
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(list-failure-then-late-detail-failure) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(list-failure-then-late-detail-failure) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::exitRefreshFirstFailureWins(list-failure-then-late-detail-failure)
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(settle-detail-failure-then-late-list-success) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(settle-detail-failure-then-late-list-success) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::exitRefreshFirstFailureWins(settle-detail-failure-then-late-list-success)
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(settle-list-failure-then-late-detail-success) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::exitRefreshFirstFailureWins(settle-list-failure-then-late-detail-success) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::exitRefreshFirstFailureWins(settle-list-failure-then-late-detail-success)
+QWARN  : UserApiTest::externalActiveOrderSupersedesTerminalExit(cancel-exit-same-selection-active-reservation) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalActiveOrderSupersedesTerminalExit(cancel-exit-same-selection-active-reservation) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalActiveOrderSupersedesTerminalExit(cancel-exit-same-selection-active-reservation) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::externalActiveOrderSupersedesTerminalExit(cancel-exit-same-selection-active-reservation)
+QWARN  : UserApiTest::externalActiveOrderSupersedesTerminalExit(settle-exit-different-charger-active-charge) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalActiveOrderSupersedesTerminalExit(settle-exit-different-charger-active-charge) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalActiveOrderSupersedesTerminalExit(settle-exit-different-charger-active-charge) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::externalActiveOrderSupersedesTerminalExit(settle-exit-different-charger-active-charge)
+QWARN  : UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection(active-order-exists-reconciles-null) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection(active-order-exists-reconciles-null) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection(active-order-exists-reconciles-null)
+QWARN  : UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection(reserve-success-retains-order-not-selection) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection(reserve-success-retains-order-not-selection) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection(reserve-success-retains-order-not-selection) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection(reserve-success-retains-order-not-selection) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::deferredNearbyInvalidationPreventsSelectionResurrection(reserve-success-retains-order-not-selection)
+QWARN  : UserApiTest::externalNullPreservesActiveAuthorityUntilOwnerReconciles() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalNullPreservesActiveAuthorityUntilOwnerReconciles() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalNullPreservesActiveAuthorityUntilOwnerReconciles() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalNullPreservesActiveAuthorityUntilOwnerReconciles() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::externalNullPreservesActiveAuthorityUntilOwnerReconciles()
+QWARN  : UserApiTest::externalNullPreservesIdleSelection() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::externalNullPreservesIdleSelection() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::externalNullPreservesIdleSelection()
+QWARN  : UserApiTest::lateMutationCannotOverwriteNewerAuthority(cancel-b-facts-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::lateMutationCannotOverwriteNewerAuthority(cancel-b-facts-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::lateMutationCannotOverwriteNewerAuthority(cancel-b-facts-first)
+QWARN  : UserApiTest::lateMutationCannotOverwriteNewerAuthority(cancel-a-terminal-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::lateMutationCannotOverwriteNewerAuthority(cancel-a-terminal-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::lateMutationCannotOverwriteNewerAuthority(cancel-a-terminal-first)
+QWARN  : UserApiTest::lateMutationCannotOverwriteNewerAuthority(settle-b-facts-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::lateMutationCannotOverwriteNewerAuthority(settle-b-facts-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::lateMutationCannotOverwriteNewerAuthority(settle-b-facts-first)
+QWARN  : UserApiTest::lateMutationCannotOverwriteNewerAuthority(settle-a-terminal-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::lateMutationCannotOverwriteNewerAuthority(settle-a-terminal-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::lateMutationCannotOverwriteNewerAuthority(settle-a-terminal-first)
+QWARN  : UserApiTest::lateMutationFailureCannotDisruptNewerAuthority() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::lateMutationFailureCannotDisruptNewerAuthority() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::lateMutationFailureCannotDisruptNewerAuthority()
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(cancel-facts-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(cancel-facts-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(cancel-facts-first)
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(cancel-outcome-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(cancel-outcome-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(cancel-outcome-first)
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(settle-facts-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(settle-facts-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(settle-facts-first)
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(settle-outcome-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(settle-outcome-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(settle-outcome-first)
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(failure-facts-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(failure-facts-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(failure-facts-first)
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(failure-outcome-first) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(failure-outcome-first) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(failure-outcome-first)
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(cancel-invalidates-in-flight-poll) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(cancel-invalidates-in-flight-poll) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(cancel-invalidates-in-flight-poll)
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(failure-invalidates-in-flight-poll) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(failure-invalidates-in-flight-poll) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::supersededMutationKeepsChargingPollAndFactsLive(failure-invalidates-in-flight-poll)
+QWARN  : UserApiTest::reserveFactsFailureRemainsRetryable(detail-transport-failure) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::reserveFactsFailureRemainsRetryable(detail-transport-failure) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::reserveFactsFailureRemainsRetryable(detail-transport-failure) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::reserveFactsFailureRemainsRetryable(detail-transport-failure)
+QWARN  : UserApiTest::reserveFactsFailureRemainsRetryable(detail-missing-target) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::reserveFactsFailureRemainsRetryable(detail-missing-target) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::reserveFactsFailureRemainsRetryable(detail-missing-target) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::reserveFactsFailureRemainsRetryable(detail-missing-target)
+QWARN  : UserApiTest::reserveFactsFailureRemainsRetryable(detail-target-status-mismatch) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::reserveFactsFailureRemainsRetryable(detail-target-status-mismatch) This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::reserveFactsFailureRemainsRetryable(detail-target-status-mismatch) This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::reserveFactsFailureRemainsRetryable(detail-target-status-mismatch)
+PASS   : UserApiTest::nearbyPageScopesFailuresAndUsesChinesePendingEmptyStates()
+PASS   : UserApiTest::profileActionsUseOwnedSessionAndAuthoritativeResponses()
+PASS   : UserApiTest::profileValidationAndFailuresPreserveCachedUser()
+PASS   : UserApiTest::profileRejectsInvalidFailureCodesAndPreservesLegalCodes()
+PASS   : UserApiTest::profileCorrelationDropsUnknownResponseIds()
+PASS   : UserApiTest::uncertainRechargeReconcilesAfterReconnectWithoutReplay()
+QWARN  : UserApiTest::authenticatedProfilePageIsReachableWithStableControls() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::authenticatedProfilePageIsReachableWithStableControls() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::authenticatedProfilePageIsReachableWithStableControls()
+QWARN  : UserApiTest::profilePageKeepsUncertainStateUntilAuthoritativeReconciliation() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::profilePageKeepsUncertainStateUntilAuthoritativeReconciliation() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::profilePageKeepsUncertainStateUntilAuthoritativeReconciliation() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::profilePageKeepsUncertainStateUntilAuthoritativeReconciliation()
+QWARN  : UserApiTest::profilePageLocalizesProtocolAndUnknownErrors() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::profilePageLocalizesProtocolAndUnknownErrors() This plugin does not support propagateSizeHints()
+QWARN  : UserApiTest::profilePageLocalizesProtocolAndUnknownErrors() This plugin does not support propagateSizeHints()
+PASS   : UserApiTest::profilePageLocalizesProtocolAndUnknownErrors()
+PASS   : UserApiTest::cleanupTestCase()
+Totals: 85 passed, 0 failed, 0 skipped, 0 blacklisted, 38480ms
+********* Finished testing of UserApiTest *********
+<end of output>
+Test time =  38.72 sec
+----------------------------------------------------------
+Test Passed.
+"user_api" end time: Sep 06 04:29 CST
+"user_api" time elapsed: 00:00:38
+----------------------------------------------------------
+
+End testing: Sep 06 04:29 CST

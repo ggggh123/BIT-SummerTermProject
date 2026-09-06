@@ -64,6 +64,15 @@ def _row_counts(conn):
 def build_base(output_dir, seed=FIXED_SEED, cutoff=DEFAULT_CUTOFF, name="base.db"):
     target, out_dir = _resolve_output(output_dir, name)
     out_dir.mkdir(parents=True, exist_ok=True)
+    manifest_name = "core.manifest.json" if name == "core.db" else "manifest.json"
+    manifest_path = out_dir / manifest_name
+    checksum_path = out_dir / (name + ".sha256")
+    existing = [path for path in (target, manifest_path, checksum_path)
+                if path.exists()]
+    if existing:
+        raise FileExistsError(
+            "refusing to overwrite golden artifact(s): "
+            + ", ".join(str(path) for path in existing))
 
     fd, tmp = tempfile.mkstemp(dir=str(out_dir), prefix=".base-", suffix=".db")
     os.close(fd)
@@ -86,15 +95,17 @@ def build_base(output_dir, seed=FIXED_SEED, cutoff=DEFAULT_CUTOFF, name="base.db
 
         os.replace(tmp_path, target)
 
+        digest = _sha256(target)
+        checksum_path.write_text(digest + "\n", encoding="utf-8")
         manifest = {
             "name": name,
             "schema_version": 1,
             "seed": seed,
             "cutoff": cutoff,
             "row_counts": counts,
-            "sha256": _sha256(target),
+            "sha256": digest,
         }
-        _write_manifest(out_dir, manifest)
+        _write_manifest(out_dir, manifest, manifest_name)
         return summary
     finally:
         if conn is not None:
@@ -103,12 +114,12 @@ def build_base(output_dir, seed=FIXED_SEED, cutoff=DEFAULT_CUTOFF, name="base.db
             tmp_path.unlink(missing_ok=True)
 
 
-def _write_manifest(out_dir, manifest):
+def _write_manifest(out_dir, manifest, name="manifest.json"):
     fd, tmp = tempfile.mkstemp(dir=str(out_dir), prefix=".manifest-", suffix=".json")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
-    os.replace(tmp, out_dir / "manifest.json")
+    os.replace(tmp, out_dir / name)
 
 
 def main(argv=None):

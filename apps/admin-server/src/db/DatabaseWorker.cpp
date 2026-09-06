@@ -1,0 +1,167 @@
+#include "db/DatabaseWorker.h"
+#include "db/DatabaseManager.h"
+#include "services/RequestDispatcher.h"
+#include "protocol/JsonEnvelope.h"
+#include "contracts/Actions.h"
+#include <QJsonArray>
+#include <QThread>
+#include <QTimer>
+#include <QSqlQuery>
+#include <QDir>
+#include <QFileInfo>
+#include <QFile>
+#ifdef Q_OS_UNIX
+#include <sys/stat.h>
+#endif
+
+namespace {
+bool sameFile(const QString &first, const QString &second)
+{
+    if (first.isEmpty() || second.isEmpty()) return false;
+    const QFileInfo a(first),b(second);
+    if (a.absoluteFilePath()==b.absoluteFilePath()) return true;
+    if (a.exists() && b.exists() && a.canonicalFilePath()==b.canonicalFilePath()) return true;
+#ifdef Q_OS_UNIX
+    struct stat sa{},sb{};
+    if (::stat(QFile::encodeName(first).constData(),&sa)==0 && ::stat(QFile::encodeName(second).constData(),&sb)==0)
+        return sa.st_dev==sb.st_dev && sa.st_ino==sb.st_ino;
+#endif
+    return false;
+}
+}
+
+struct DatabaseWorker::State {
+    DatabaseManager database;
+    std::unique_ptr<AuthService> auth;
+    std::unique_ptr<AdminService> admin;
+    std::unique_ptr<DashboardService> dashboard;
+    std::unique_ptr<ForecastService> forecast;
+    std::unique_ptr<RequestLogService> log;
+    std::unique_ptr<TelemetryService> telemetry;
+    std::unique_ptr<UserService> user;
+    std::unique_ptr<DemoResetService> reset;
+    std::unique_ptr<RequestDispatcher> dispatcher;
+};
+DatabaseWorker::DatabaseWorker() = default;
+DatabaseWorker::~DatabaseWorker() = default;
+
+Result DatabaseWorker::start(const QString &path, const QString &snapshot, const QString &goldenPath, const QString &goldenHash)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    m_state = std::make_unique<State>();
+    auto &s = *m_state;
+    const auto runtime=DatabaseManager::resolvePath(path);
+    const auto golden=goldenPath.isEmpty() ? QDir(QStringLiteral(EV_PROJECT_SOURCE_DIR)).filePath("runtime/golden/core.db") : goldenPath;
+    if (sameFile(runtime,golden) || sameFile(snapshot,golden) || sameFile(snapshot,runtime))
+        return Result::failure("INVALID_REQUEST","运行库、黄金库与快照输出必须使用不同文件");
+    const auto opened = s.database.open(runtime);
+    if (!opened.ok) return opened;
+    s.auth = std::make_unique<AuthService>(s.database.database());
+    s.admin = std::make_unique<AdminService>(s.database.database());
+    s.dashboard = std::make_unique<DashboardService>(s.database.database());
+    s.forecast = std::make_unique<ForecastService>(s.database.database(), snapshot);
+    s.log = std::make_unique<RequestLogService>(s.database.database());
+    s.telemetry = std::make_unique<TelemetryService>(s.database.database());
+    s.user = std::make_unique<UserService>(s.database.database());
+    const auto schema = s.log->ensureSchema();
+    if (!schema.ok) return schema;
+    s.reset = std::make_unique<DemoResetService>(s.database.database(),
+        golden,
+        goldenHash.isEmpty() ? QStringLiteral("5dd13bef7990c8166949d836a6fd8eadcc0b1ef8b11dc1b91272c33bead3a0f7") : goldenHash,
+        snapshot,[this] { ++m_resetGeneration; m_restarts.clear(); });
+    const auto resetSchema=s.reset->ensureSchema();
+    if (!resetSchema.ok) return resetSchema;
+    s.dispatcher = std::make_unique<RequestDispatcher>(s.auth.get(), s.admin.get(), s.dashboard.get(),
+        s.forecast.get(), s.log.get(), s.telemetry.get(), s.user.get(), s.reset.get());
+    refreshHealth();
+    auto *timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, [this] {
+        QMetaObject::invokeMethod(this, [this] { if (!m_stopping) { m_state->reset->retrySnapshot(); refreshHealth(); } }, Qt::QueuedConnection);
+    });
+    timer->start(1000);
+    // 上次进程停止时已提交的重启，在新进程中继续确定性完成。
+    QSqlQuery pending(s.database.database());
+    if (pending.exec(QStringLiteral("SELECT id FROM chargers WHERE status='restarting'")))
+        while (pending.next()) scheduleRestart(pending.value(0).toInt());
+    return Result::success();
+}
+QString DatabaseWorker::databasePath() const { return m_state->database.databasePath(); }
+QJsonObject DatabaseWorker::health() const { return m_health; }
+void DatabaseWorker::refreshHealth()
+{
+    m_health = m_state->forecast->healthState();
+    emit healthChanged(m_health);
+}
+void DatabaseWorker::execute(quint64 sequence, const ev::protocol::RequestEnvelope &request)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    const auto bytes = m_state->dispatcher->dispatch(request);
+    // 同一 sender 的排队信号先于 completed，前台在发送登录 ACK 前已取得独立会话值副本。
+    if (request.action==ev::actions::AdminLogin || request.action==ev::actions::AuthUserLogin)
+        emit tokenRolesChanged(m_state->auth->tokenRoles());
+    if (request.action == ev::actions::AdminChargerRestart) {
+        const auto response = ev::protocol::parseResponse(bytes);
+        if (response.ok) scheduleRestart(request.payload.value(QStringLiteral("chargerId")).toInt());
+    }
+    refreshHealth();
+    emit completed(sequence, bytes);
+}
+void DatabaseWorker::query(quint64 sequence, AdminView view, const QString &token, const QJsonObject &p)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    auto &s = *m_state;
+    if (!s.auth->isTokenValid(token)) {
+        const bool known = s.auth->isUserTokenValid(token) || s.auth->isSimulatorTokenValid(token) || s.auth->isMlTokenValid(token);
+        emit completed(sequence, ev::protocol::toJson({{},false,known ? QStringLiteral("FORBIDDEN") : QStringLiteral("AUTH_REQUIRED"),
+            QStringLiteral("管理视图需要管理员身份"), QJsonObject{}}));
+        return;
+    }
+    QJsonObject data;
+    QList<QStringList> rows;
+    Result result = Result::success();
+    switch (view) {
+    case AdminView::Summary: data = s.dashboard->summary(p.value("rangeDays").toInt(7)); break;
+    case AdminView::Stations: rows = s.dashboard->stationRows(); break;
+    case AdminView::Chargers: rows = s.dashboard->chargerRows(p.value("stationId").toInt(), p.value("status").toString()); break;
+    case AdminView::Users: rows = s.dashboard->userRows(p.value("mobileLike").toString(), p.value("limit").toInt(20), p.value("offset").toInt()); break;
+    case AdminView::RequestLog: result = s.log->list({},50,0,&data); break;
+    default: result = Result::failure("INVALID_REQUEST", "未知管理视图"); break;
+    }
+    QJsonArray array;
+    for (const auto &row : rows) array.append(QJsonArray::fromStringList(row));
+    data.insert("rows", array);
+    emit completed(sequence, ev::protocol::toJson({{},result.ok,result.ok ? QStringLiteral("OK") : result.code,
+        result.message,result.ok ? data : QJsonObject{}}));
+}
+void DatabaseWorker::scheduleRestart(int id)
+{
+    if (m_restarts.contains(id)) return;
+    QSqlQuery state(m_state->database.database());
+    state.prepare(QStringLiteral("SELECT status FROM chargers WHERE id=?"));
+    state.addBindValue(id);
+    if (!state.exec() || !state.next() || state.value(0).toString() != QStringLiteral("restarting")) return;
+    m_restarts.insert(id);
+    const auto generation=m_resetGeneration;
+    QTimer::singleShot(1500, Qt::PreciseTimer, this, [this,id,generation] {
+        // Timer 只排队；完成事务仍由串行命令队列执行。
+        QMetaObject::invokeMethod(this, [this,id,generation] {
+            if (generation!=m_resetGeneration || !m_state) return;
+            const auto result = m_state->admin->finishRestart(id);
+            if (!result.ok) qWarning("charger restart completion failed: %s", qPrintable(result.code));
+            m_restarts.remove(id);
+            refreshHealth();
+            if (m_stopping && m_restarts.isEmpty()) finishStop();
+        }, Qt::QueuedConnection);
+    });
+}
+void DatabaseWorker::stop()
+{
+    m_stopping = true;
+    for (auto *timer : findChildren<QTimer *>()) timer->stop();
+    if (m_restarts.isEmpty()) finishStop();
+}
+void DatabaseWorker::finishStop()
+{
+    m_state.reset(); // 服务的所有 QSqlDatabase 副本先销毁，然后关闭并移除命名连接。
+    thread()->quit();
+}

@@ -1,0 +1,18 @@
+<!DOCTYPE RCC><RCC version="1.0">
+  <qresource prefix="/map">
+    <file alias="navigation.html">map/navigation.html</file>
+  </qresource>
+  <qresource prefix="/images">
+    <file alias="default-avatar.svg">images/default-avatar.svg</file>
+  </qresource>
+  <qresource prefix="/ui">
+    <file alias="login-illustration.png">ui/login-illustration.png</file>
+    <file alias="location.svg">ui/location.svg</file>
+    <file alias="battery-charging.svg">ui/battery-charging.svg</file>
+    <file alias="history.svg">ui/history.svg</file>
+    <file alias="person.svg">ui/person.svg</file>
+    <file alias="back.svg">ui/back.svg</file>
+    <file alias="charger.svg">ui/charger.svg</file>
+    <file alias="expand-more.svg">ui/expand-more.svg</file>
+  </qresource>
+</RCC>

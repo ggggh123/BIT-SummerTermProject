@@ -6,6 +6,13 @@
 
 namespace ev::simulator {
 
+QDateTime resolvedStartTime(const SimulatorConfig &config, const QDateTime &now)
+{
+    if (config.startTime.trimmed().isEmpty())
+        return now.toOffsetFromUtc(8 * 3600);
+    return QDateTime::fromString(config.startTime, Qt::ISODate);
+}
+
 SimulatorConfig configFromCommandLine(const QCoreApplication &app)
 {
     QCommandLineParser parser;
@@ -45,7 +52,9 @@ SimulatorConfig configFromCommandLine(const QCoreApplication &app)
     config.port = static_cast<quint16>(parser.value(portOpt).toUShort());
     config.seed = parser.value(seedOpt).toUInt();
     config.intervalMs = parser.value(intervalOpt).toInt();
-    config.token = parser.value(tokenOpt);
+    config.token = parser.isSet(tokenOpt)
+        ? parser.value(tokenOpt)
+        : qEnvironmentVariable("EV_SIMULATOR_TOKEN");
     return config;
 }
 
