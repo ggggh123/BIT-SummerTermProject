@@ -74,6 +74,8 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir /home/hushengyuan/.cache/ev-core-fixe
 
 纯基础参数检查与身份副本解决了 I1 的已复现认证/格式分支；依赖权威数据库的业务检查和仍在 worker 内的 forecast 整批语义尚未获得满队列前判定，因此 **29/29 不代表该合同 Important 已关闭**。容量合同建议尚未获用户批准。
 
+最后[限定复审](../review/server-delivery-final-rereview-2026-09-06.md)关闭 M1–M3，保留 I1，并新发现 N1：forecast 的 `horizonH=-1` 被预检改为 `INVALID_REQUEST`，而合同的有效整数业务越界应是 `FORECAST_INVALID`。现有 29 项测试没有覆盖该符号边界；N1 尚未修复，不能以全量 GREEN 或 Web/ML 可选掩盖该兼容回归。本批最终剩余为 I1、N1。
+
 本批服务端修改之外，执行以下不调用腾讯网络服务的检查：
 
 ```bash

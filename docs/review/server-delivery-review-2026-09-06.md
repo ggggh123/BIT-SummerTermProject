@@ -4,7 +4,7 @@
 
 本次只审查 `feat/core-delivery-20260906` 相对 `dev@97c6da1` 的新增服务端线程、在线复位、测试和交付文档；不是对全部历史源码的重新认证，也不接续[此前中止的综合审查](core-fixes-review-2026-09-06.md)。
 
-初轮整分支审查范围为 `97c6da1..604c8c2`，5 个提交、40 个文件；结论 **With fixes**，1 项 Important、0 项 Critical。最终有限修复以 `76ff1de` 提交，完整证据见[修复波次报告](../test/evidence/server-delivery-2026-09-06/final-fix-report.md)。限定复审尚在进行，I1 仍有未关闭合同边界，当前不能宣布本批整体 Ready to merge。
+初轮整分支审查范围为 `97c6da1..604c8c2`，5 个提交、40 个文件；结论 **With fixes**，1 项 Important、0 项 Critical。最终有限修复以 `76ff1de` 提交，完整证据见[修复波次报告](../test/evidence/server-delivery-2026-09-06/final-fix-report.md)。[限定复审已完成](server-delivery-final-rereview-2026-09-06.md)：M1–M3 关闭，I1 部分修复但仍开放，另发现 N1（Important）。当前剩余 **I1、N1**，不能宣布本批整体 Ready to merge。
 
 ## 已完成的任务级门禁
 
@@ -19,10 +19,11 @@
 
 ## 最终审查发现与处理
 
-- **I1（Important，部分修复）：容量与校验优先级。** 初版 `AppContext::executeLocal` 在超过 256 个 pending 后直接返回 `SERVER_BUSY`，覆盖匿名 `demo.reset` 的 `AUTH_REQUIRED`、错误角色的 `FORBIDDEN` 及错误 confirmation 的 `INVALID_REQUEST`。修复采用 worker 发布会话角色值副本与共享基础参数检查，并保持 16 个业务连接、256 个待处理命令、唯一 DB worker 和缓存 health。相关确定性测试通过；涉及权威数据库业务状态及尚未前移的 forecast 整批语义仍可能被容量分支覆盖，不能把 I1 整项关闭。最终判定待限定复审。
-- **M1（已补修，待限定复审）：测试 timer 局部引用。** `tst_database_worker` 两个 singleShot 改以局部 QObject 为上下文，它先于捕获对象销毁并取消回调；原锁等待测试通过。这仅是本次测试维护，不等同于历史未证实生产异常。
-- **M2（已补覆盖，待限定复审）：重启组合。** 成功 ACK 后立即关闭验证 idle、唯一完成事件和原 ACK；首次 ACK 事务失败后一次等待验证 fault、无启动/完成事件、无版本变更。都是普通单次功能验证。
-- **M3（已补覆盖，待限定复审）：复位组合。** 旧 pending 穿过新 reset、新充值和进程重启后恢复，验证新业务、版本与快照不倒退；GUI ACK 失败后重试复用 ID、仅成功后清除。两个有限状态用例均通过。
+- **I1（Important，部分修复）：容量与校验优先级。** 初版 `AppContext::executeLocal` 在超过 256 个 pending 后直接返回 `SERVER_BUSY`，覆盖匿名 `demo.reset` 的 `AUTH_REQUIRED`、错误角色的 `FORBIDDEN` 及错误 confirmation 的 `INVALID_REQUEST`。修复采用 worker 发布会话角色值副本与共享基础参数检查，并保持 16 个业务连接、256 个待处理命令、唯一 DB worker 和缓存 health。相关确定性测试通过；涉及权威数据库业务状态及尚未前移的 forecast 整批语义仍可能被容量分支覆盖。限定复审确认部分修复，整项仍为 NOT ADDRESSED。
+- **M1（ADDRESSED）：测试 timer 局部引用。** `tst_database_worker` 两个 singleShot 改以局部 QObject 为上下文，它先于捕获对象销毁并取消回调；原锁等待测试通过。这仅是本次测试维护，不等同于历史未证实生产异常。
+- **M2（ADDRESSED）：重启组合。** 成功 ACK 后立即关闭验证 idle、唯一完成事件和原 ACK；首次 ACK 事务失败后一次等待验证 fault、无启动/完成事件、无版本变更。都是普通单次功能验证，限定复审核对断言通过。
+- **M3（ADDRESSED）：复位组合。** 旧 pending 穿过新 reset、新充值和进程重启后恢复，验证新业务、版本与快照不倒退；GUI ACK 失败后重试复用 ID、仅成功后清除。两个有限状态用例均通过，并获限定复审确认。
+- **N1（Important，新发现，未修复）：forecast horizon 错误域。** 新预检对 `horizonH` 的整数校验默认下界为 0，导致有效类型 `-1` 在正常负载也提前返回 `INVALID_REQUEST`，而同类越界 `0/25` 由原服务返回 `FORECAST_INVALID`。应让完整 signed safe integer 通过纯类型检查，再由 forecast 语义检查判定 `1..24`，并补 `-1/0/25` 有限回归。它独立于 I1，不能通过批准容量例外一并关闭，也不表示需要恢复 ML 为核心任务。
 - **环境告警文档建议已关闭。** 可选 XKB/Cups 与 offscreen 告警已如实保留；关闭的是文档建议，不表示告警已消失。
 
 ## 尚需用户决定的合同边界
@@ -36,6 +37,7 @@
 1. 以 9/4 已确认 core 范围为准，允许无 active forecast，不恢复历史 Web/ML、ready/144 硬门槛。理由是避免重新加入取消范围；如果判断错误，代价是缺少可选展示内容，应重新确认范围。
 2. 指定运行库 GUI 测试用真实 `admin.login` 日志替代 health 写日志，保留 DB/端口/窗口与日志断言。理由是合同要求 health 不执行 SQL；若替代覆盖不足，会减少运行库选择的验证，需要保留独立锁等待 health 与数据库留痕断言。
 3. 最终修复波次只做共享身份/纯参数与有限恢复测试，不暗改容量合同或引入完整业务镜像。理由是完整业务优先级涉及架构和合同选择；若判断错误，代价是留下可修的过载错误码偏差、延后合并。未获用户决定前，该剩余 Important 不能标为关闭。
+4. 最后限定复审发现的 N1 作为真实未完成缺陷移交下一次最小修复，不隐去或降为“已关闭”。本轮采用的子代理开发流程在一次最终修复波次和一次限定复审后要求显式裁决残留；N1 不影响核心正常流程，但改变了保留接口合同。代价是当前分支仍含该错误码回归，修复前不应合并；即使 I1 容量例外获批准也仍需单独修复和验证 N1。
 
 ## 发布边界
 

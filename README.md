@@ -2,7 +2,7 @@
 
 充电桩管理与演示平台小学期项目。
 
-> **2026-09-06 共享集成基线：** [PR #10](https://github.com/ggggh123/BIT-SummerTermProject/pull/10) 已合入 `dev@97c6da1`，包含原始三个业务 P0、模拟器/数据工具、管理端运行修复和首批手机式 UI；合并基线重新构建成功、CTest **25/25**。当前本机后续分支 `feat/core-delivery-20260906` 已实现专属 DB worker 和在线 reset，正在完成独立审查及组合验证，见[服务端收尾证据](docs/test/server-delivery-closeout-2026-09-06.md)。第二批 UI、运行交付、换机验证及人工三端/地图双彩排仍未完成；此前[综合审查中断记录](docs/review/core-fixes-review-2026-09-06.md)继续保留。当前按[整项目交付路线](docs/management/project-plan.md)推进，尚未宣布 GO 或发布到 main。
+> **2026-09-06 共享集成基线：** [PR #10](https://github.com/ggggh123/BIT-SummerTermProject/pull/10) 已合入 `dev@97c6da1`，合并基线重新构建成功、CTest **25/25**。本机后续分支 `feat/core-delivery-20260906` 已实现专属 DB worker、在线 reset 和恢复加固，最终实现组合构建成功、CTest **29/29**，见[服务端收尾证据](docs/test/server-delivery-closeout-2026-09-06.md)。[最后限定复审](docs/review/server-delivery-review-2026-09-06.md)仍留下 I1 容量合同决策和 N1 可选预测错误码回归，当前不标为可合并。第二批 UI、运行交付、换机验证及人工三端/地图双彩排仍未完成；此前[综合审查中断记录](docs/review/core-fixes-review-2026-09-06.md)继续保留。当前按[整项目交付路线](docs/management/project-plan.md)推进，尚未宣布 GO 或发布到 main。
 
 ## 当前交付口径（2026-09-04 生效）
 
