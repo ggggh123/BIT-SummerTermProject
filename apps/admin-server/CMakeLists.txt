@@ -13,6 +13,8 @@ add_executable(ev_admin_server
     src/network/ConnectionWorker.h
     src/services/RequestDispatcher.cpp
     src/services/RequestDispatcher.h
+    src/services/DemoResetService.cpp
+    src/services/DemoResetService.h
     src/app/AppContext.cpp
     src/app/AppContext.h
     src/core/Result.h

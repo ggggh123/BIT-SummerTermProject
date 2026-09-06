@@ -20,6 +20,12 @@ QByteArray RequestDispatcher::dispatch(const ev::protocol::RequestEnvelope &requ
         return ev::protocol::toJson(fail(request.requestId, role.isEmpty() ? QStringLiteral("AUTH_REQUIRED") : QStringLiteral("FORBIDDEN"),
                                          QStringLiteral("当前身份无权调用此接口")));
     QString actor;
+    if (role=="admin") actor="admin:"+m_authService->adminIdentityForToken(request.token);
+    else if (role=="user") actor=QStringLiteral("user:%1").arg(m_authService->userIdForToken(request.token));
+    else actor=role;
+    if (action==ev::actions::DemoReset) return m_resetService->execute(request,actor);
+    const auto reserved=m_resetService->rejectReservedId(request,actor);
+    if (!reserved.isEmpty()) return reserved;
     bool mutation = false;
     if (action == ev::actions::UserUpdate || action == ev::actions::WalletRecharge
         || action == ev::actions::ChargeReserve || action == ev::actions::ChargeStart

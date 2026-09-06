@@ -23,6 +23,8 @@ add_executable(tst_admin_window_refresh
     ../../apps/admin-server/src/network/ConnectionWorker.h
     ../../apps/admin-server/src/services/RequestDispatcher.cpp
     ../../apps/admin-server/src/services/RequestDispatcher.h
+    ../../apps/admin-server/src/services/DemoResetService.cpp
+    ../../apps/admin-server/src/services/DemoResetService.h
     ../../apps/admin-server/src/app/AppContext.cpp
     ../../apps/admin-server/src/app/AppContext.h
     ../../apps/admin-server/src/dashboard/SnapshotWriter.cpp

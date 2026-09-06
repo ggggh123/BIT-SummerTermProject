@@ -435,6 +435,30 @@ QWidget *MainWindow::createHealthPage()
 {
     auto *page = new QWidget;
     auto *layout = new QVBoxLayout(page);
+    auto *reset = new QPushButton(QStringLiteral("恢复演示黄金数据"));
+    reset->setObjectName(QStringLiteral("demoResetButton"));
+    layout->addWidget(reset);
+    connect(reset,&QPushButton::clicked,this,[this,reset] {
+        if (QMessageBox::warning(this,QStringLiteral("确认复位演示数据"),
+            QStringLiteral("此操作将丢失当前演示业务状态（用户变更、订单、设备事件及旧请求日志），并恢复批准的黄金数据。是否继续？"),
+            QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
+        if (reset->property("requestId").toString().isEmpty())
+            reset->setProperty("requestId",QUuid::createUuid().toString(QUuid::WithoutBraces));
+        reset->setEnabled(false);
+        m_context->executeLocal({1,reset->property("requestId").toString(),"demo.reset",m_adminToken,{{"confirmation","RESET_DEMO"}}},
+            this,[this,reset](const QByteArray &bytes) {
+                reset->setEnabled(true);
+                const auto response=ev::protocol::parseResponse(bytes);
+                if (!response.ok) {
+                    QMessageBox::warning(this,QStringLiteral("复位未完成"),response.code+"："+response.message+
+                        QStringLiteral("\n再次确认将使用同一请求继续，已提交的复位不会重复执行。"));
+                    return;
+                }
+                reset->setProperty("requestId",QString{});
+                statusBar()->showMessage(response.message,15000);
+                refreshCurrentPage();
+            });
+    });
     auto *table = makeTable({QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")});
     table->setObjectName(QStringLiteral("healthTable"));
     auto refresh = [this, table]() {

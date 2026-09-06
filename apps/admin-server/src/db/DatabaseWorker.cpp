@@ -7,6 +7,28 @@
 #include <QThread>
 #include <QTimer>
 #include <QSqlQuery>
+#include <QDir>
+#include <QFileInfo>
+#include <QFile>
+#ifdef Q_OS_UNIX
+#include <sys/stat.h>
+#endif
+
+namespace {
+bool sameFile(const QString &first, const QString &second)
+{
+    if (first.isEmpty() || second.isEmpty()) return false;
+    const QFileInfo a(first),b(second);
+    if (a.absoluteFilePath()==b.absoluteFilePath()) return true;
+    if (a.exists() && b.exists() && a.canonicalFilePath()==b.canonicalFilePath()) return true;
+#ifdef Q_OS_UNIX
+    struct stat sa{},sb{};
+    if (::stat(QFile::encodeName(first).constData(),&sa)==0 && ::stat(QFile::encodeName(second).constData(),&sb)==0)
+        return sa.st_dev==sb.st_dev && sa.st_ino==sb.st_ino;
+#endif
+    return false;
+}
+}
 
 struct DatabaseWorker::State {
     DatabaseManager database;
@@ -17,16 +39,20 @@ struct DatabaseWorker::State {
     std::unique_ptr<RequestLogService> log;
     std::unique_ptr<TelemetryService> telemetry;
     std::unique_ptr<UserService> user;
+    std::unique_ptr<DemoResetService> reset;
     std::unique_ptr<RequestDispatcher> dispatcher;
 };
 DatabaseWorker::DatabaseWorker() = default;
 DatabaseWorker::~DatabaseWorker() = default;
 
-Result DatabaseWorker::start(const QString &path, const QString &snapshot)
+Result DatabaseWorker::start(const QString &path, const QString &snapshot, const QString &goldenPath, const QString &goldenHash)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     m_state = std::make_unique<State>();
     auto &s = *m_state;
+    const auto golden=goldenPath.isEmpty() ? QDir(QStringLiteral(EV_PROJECT_SOURCE_DIR)).filePath("runtime/golden/core.db") : goldenPath;
+    if (sameFile(path,golden) || sameFile(snapshot,golden) || sameFile(snapshot,path))
+        return Result::failure("INVALID_REQUEST","运行库、黄金库与快照输出必须使用不同文件");
     const auto opened = s.database.open(path);
     if (!opened.ok) return opened;
     s.auth = std::make_unique<AuthService>(s.database.database());
@@ -38,12 +64,18 @@ Result DatabaseWorker::start(const QString &path, const QString &snapshot)
     s.user = std::make_unique<UserService>(s.database.database());
     const auto schema = s.log->ensureSchema();
     if (!schema.ok) return schema;
+    s.reset = std::make_unique<DemoResetService>(s.database.database(),
+        golden,
+        goldenHash.isEmpty() ? QStringLiteral("5dd13bef7990c8166949d836a6fd8eadcc0b1ef8b11dc1b91272c33bead3a0f7") : goldenHash,
+        snapshot,[this] { ++m_resetGeneration; m_restarts.clear(); });
+    const auto resetSchema=s.reset->ensureSchema();
+    if (!resetSchema.ok) return resetSchema;
     s.dispatcher = std::make_unique<RequestDispatcher>(s.auth.get(), s.admin.get(), s.dashboard.get(),
-        s.forecast.get(), s.log.get(), s.telemetry.get(), s.user.get());
+        s.forecast.get(), s.log.get(), s.telemetry.get(), s.user.get(), s.reset.get());
     refreshHealth();
     auto *timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, [this] {
-        QMetaObject::invokeMethod(this, [this] { if (!m_stopping) refreshHealth(); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [this] { if (!m_stopping) { m_state->reset->retrySnapshot(); refreshHealth(); } }, Qt::QueuedConnection);
     });
     timer->start(1000);
     // 上次进程停止时已提交的重启，在新进程中继续确定性完成。
@@ -105,9 +137,11 @@ void DatabaseWorker::scheduleRestart(int id)
     state.addBindValue(id);
     if (!state.exec() || !state.next() || state.value(0).toString() != QStringLiteral("restarting")) return;
     m_restarts.insert(id);
-    QTimer::singleShot(1500, Qt::PreciseTimer, this, [this,id] {
+    const auto generation=m_resetGeneration;
+    QTimer::singleShot(1500, Qt::PreciseTimer, this, [this,id,generation] {
         // Timer 只排队；完成事务仍由串行命令队列执行。
-        QMetaObject::invokeMethod(this, [this,id] {
+        QMetaObject::invokeMethod(this, [this,id,generation] {
+            if (generation!=m_resetGeneration || !m_state) return;
             const auto result = m_state->admin->finishRestart(id);
             if (!result.ok) qWarning("charger restart completion failed: %s", qPrintable(result.code));
             m_restarts.remove(id);

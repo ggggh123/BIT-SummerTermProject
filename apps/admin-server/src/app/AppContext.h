@@ -18,6 +18,8 @@ public:
         QString host = QStringLiteral("127.0.0.1");
         quint16 port = 9100;
         QString snapshotPath;
+        QString goldenPath;
+        QString goldenHash;
     };
     explicit AppContext(QObject *parent = nullptr);
     ~AppContext() override;

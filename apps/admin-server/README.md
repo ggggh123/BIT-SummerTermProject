@@ -63,4 +63,23 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir /path/to/build --output-on-failure -j
 
 `database_worker` 用临时库锁复现原主线程阻塞，并核对健康响应、计时器、充值一次和逐字节重放；`server_threads` 覆盖帧、容量、权限、独立上下文、重启、断线重放和正常关闭；GUI 测试实际点击登录及管理按钮并检查管理员日志。原 UTC／上海 TCP P0 与程序化 `core_workflow` 继续作为兼容门禁。
 
-本次线程交付未实现运行期 `demo.reset`；该 action 的冻结合同仍保留，恢复黄金库的业务实现属于后续独立任务。
+## 在线演示复位
+
+管理窗口“系统健康”页提供“恢复演示黄金数据”按钮。确认框明确提示将丢失当前演示业务状态；默认选择取消。确认后异步调用同一管理员 `demo.reset` action，按钮在请求期间禁用，完成后刷新当前页。失败后再次确认会复用原 requestId，以便继续尚未完成的 ACK 保存阶段；成功或快照警告显示在状态栏。
+
+TCP 使用管理员 token 和 payload `{"confirmation":"RESET_DEMO"}`。confirmation 必须是逐字匹配的 string；未知字段忽略。默认黄金输入是构建时仓库的 `runtime/golden/core.db`，批准 SHA-256 固定为 `5dd13bef7990c8166949d836a6fd8eadcc0b1ef8b11dc1b91272c33bead3a0f7`。部署到其他位置时须显式配对指定：
+
+```bash
+/path/to/build/apps/admin-server/ev_admin_server --server \
+  --db /path/to/runtime/core.db --snapshot /path/to/runtime/dashboard_snapshot.json \
+  --golden /path/to/sealed/core.db \
+  --golden-hash 5dd13bef7990c8166949d836a6fd8eadcc0b1ef8b11dc1b91272c33bead3a0f7
+```
+
+运行库与黄金库同路径、符号链接到同文件或 Unix 硬链接到同 inode 时在打开数据库前拒绝。复位前还拒绝黄金输入旁的 WAL／SHM／journal 文件，并核验哈希、SQLite integrity、外键、schema 版本、业务表和索引结构。黄金输入仅以只读 immutable ATTACH 访问；运行中的 SQLite 文件不会被替换。
+
+核心事务只恢复 `admins, users, stations, chargers, orders, telemetry, station_hourly_history, forecast_runs, forecasts, events`，清理旧 request_log，并在运行库原版本上递增 snapshotVersion。schema_version 仅校验。事务同步保存内部 `demo_reset_receipts` 的 pending 凭证；后续复位保留所有旧凭证。actor 和有效 payload 身份必须一致，final 回执按原 ACK 字节重放；pending 只续快照和 ACK，进程重启也不会重复清库。旧设备重启任务在核心提交时失效。
+
+快照在核心提交后通过 QSaveFile 原子替换。文件失败仍返回 `ok=true,code=OK`，message 警告快照尚未刷新，旧文件保留；DB worker 每秒尝试仍对应运行库当前版本的未完成快照，旧版本不会覆盖新版本。最终 ACK、final 状态和本次 request_log 在第二笔事务中一起持久化。若第二笔事务失败，返回错误且凭证保持 pending；客户端应保留 requestId 重试。没有活动预测批次是正常 core 数据，复位仍成功。
+
+新增验证：`ctest --test-dir /path/to/build -R 'demo_reset|admin_window_refresh' --output-on-failure`。TCP 测试在临时副本上注入坏哈希、坏 schema／外键、SQL trigger 和不可写快照位置，并实际停止／重启服务验证 pending／final 恢复；这些程序化结果不代表正式人工彩排或腾讯在线验证通过。

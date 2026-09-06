@@ -13,7 +13,8 @@ class DatabaseWorker : public QObject {
 public:
     DatabaseWorker();
     ~DatabaseWorker() override;
-    Result start(const QString &databasePath, const QString &snapshotPath);
+    Result start(const QString &databasePath, const QString &snapshotPath,
+                 const QString &goldenPath = {}, const QString &goldenHash = {});
     QString databasePath() const;
     QJsonObject health() const;
     void execute(quint64 sequence, const ev::protocol::RequestEnvelope &request);
@@ -31,4 +32,5 @@ private:
     QSet<int> m_restarts;
     QJsonObject m_health;
     bool m_stopping = false;
+    quint64 m_resetGeneration = 0;
 };

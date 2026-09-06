@@ -14,6 +14,8 @@ Result AppContext::initialize() { return initialize(Options{}); }
 Result AppContext::initialize(const Options &options)
 {
     if (m_worker) return Result::failure("INTERNAL_ERROR","服务已经初始化");
+    if (options.goldenPath.isEmpty()!=options.goldenHash.isEmpty())
+        return Result::failure("INVALID_REQUEST","--golden 与 --golden-hash 必须配对提供");
     const QHostAddress address(options.host);
     if (address.isNull()) return Result::failure("NETWORK_ERROR","监听地址无效");
     m_worker = new DatabaseWorker;
@@ -29,7 +31,7 @@ Result AppContext::initialize(const Options &options)
         : options.snapshotPath;
     // 唯一同步屏障只用于启动；运行期本地请求全部排队。
     QMetaObject::invokeMethod(m_worker,[&] {
-        initialized = m_worker->start(options.databasePath,snapshot);
+        initialized = m_worker->start(options.databasePath,snapshot,options.goldenPath,options.goldenHash);
         if (initialized.ok) { m_databasePath = m_worker->databasePath(); m_health = m_worker->health(); }
     },Qt::BlockingQueuedConnection);
     if (!initialized.ok) { shutdown(); return initialized; }

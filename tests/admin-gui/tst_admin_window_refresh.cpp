@@ -167,6 +167,27 @@ private slots:
         QTRY_VERIFY(restart->isEnabled());
         QTRY_COMPARE_WITH_TIMEOUT(chargers->item(rowForFirstColumn(chargers,"10"),5)->text(),QString("idle"),4000);
         QCOMPARE(auditCount("admin.charger_restart"),1);
+        tabs->setCurrentIndex(7);
+        auto *reset=window.findChild<QPushButton *>("demoResetButton");
+        QVERIFY(reset);
+        QTimer::singleShot(0, &window, [] {
+            if (auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+                box->button(QMessageBox::No)->click();
+        });
+        reset->click();
+        QCOMPARE(auditCount("demo.reset"),0);
+        int versionBefore=0;
+        {
+            QSqlQuery version(db);
+            QVERIFY(version.exec("SELECT version FROM snapshot_meta WHERE id=1"));
+            QVERIFY(version.next()); versionBefore=version.value(0).toInt();
+        }
+        confirm(); reset->click();
+        QVERIFY(!reset->isEnabled());
+        QTRY_COMPARE(auditCount("demo.reset"),1);
+        QTRY_VERIFY(reset->isEnabled());
+        auto *health=window.findChild<QTableWidget *>("healthTable");
+        QTRY_COMPARE(health->item(2,2)->text(),QString::number(versionBefore+1));
         db.close(); db = {}; QSqlDatabase::removeDatabase("gui-audit");
     }
 

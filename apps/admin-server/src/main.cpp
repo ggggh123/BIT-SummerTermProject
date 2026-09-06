@@ -105,6 +105,8 @@ void configureParser(QCommandLineParser *parser)
     parser->addOption({QStringLiteral("host"), QStringLiteral("Listen host."), QStringLiteral("host"), QStringLiteral("127.0.0.1")});
     parser->addOption({QStringLiteral("port"), QStringLiteral("Listen port."), QStringLiteral("port"), QStringLiteral("9100")});
     parser->addOption({QStringLiteral("snapshot"), QStringLiteral("Dashboard snapshot output path."), QStringLiteral("path")});
+    parser->addOption({QStringLiteral("golden"), QStringLiteral("Approved golden SQLite input path (requires --golden-hash)."), QStringLiteral("path")});
+    parser->addOption({QStringLiteral("golden-hash"), QStringLiteral("Approved lowercase SHA-256 (requires --golden)."), QStringLiteral("sha256")});
 }
 
 AppContext::Options optionsFromParser(const QCommandLineParser &parser)
@@ -116,6 +118,8 @@ AppContext::Options optionsFromParser(const QCommandLineParser &parser)
     const int port = parser.value(QStringLiteral("port")).toInt(&portOk);
     options.port = portOk && port > 0 && port <= 65535 ? static_cast<quint16>(port) : 9100;
     options.snapshotPath = parser.value(QStringLiteral("snapshot"));
+    options.goldenPath = parser.value(QStringLiteral("golden"));
+    options.goldenHash = parser.value(QStringLiteral("golden-hash"));
     return options;
 }
 
