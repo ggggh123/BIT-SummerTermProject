@@ -781,3 +781,29 @@ def test_ready_malformed_fields_are_rejected_without_traceback(tmp_path, sleeper
     path.write_text(json.dumps(data))
     with pytest.raises(DemoError):
         ready_status(path, demo_processes.capture(sleeper.pid), time.time()-1, 1000)
+
+
+@pytest.mark.parametrize("record", [{}, None, [], ""], ids=["empty-object", "null", "empty-list", "empty-string"])
+@pytest.mark.parametrize("operation", ["reset", "start"])
+def test_empty_corrupt_server_record_blocks_new_reset_and_start(repo, build, sleeper, record, operation):
+    assert cli(repo, "reset", "--run-id", "old").returncode == 0
+    assert cli(repo, "reset", "--run-id", "a").returncode == 0
+    old_path = repo / "runtime/demo-runs/old/manifest.json"
+    old = json.loads(old_path.read_text())
+    old["processes"] = {"server": record}
+    old_path.write_text(json.dumps(old))
+    target = repo / "runtime/demo-runs/a"
+    try:
+        proc = cli(repo, "reset", "--run-id", "new-b") if operation == "reset" else start(repo, build)
+        assert proc.returncode != 0, proc.stdout + proc.stderr
+        assert result(proc)["code"] == "ACTIVE_SERVER"
+        assert not (repo / "runtime/demo-runs/new-b").exists()
+        manifest = json.loads((target / "manifest.json").read_text())
+        assert manifest["state"] == "PREPARED"
+        assert manifest["processes"] == {}
+        assert not list(target.glob("*.log"))
+        assert json.loads(old_path.read_text()) == old
+    finally:
+        # RED时旧实现可能启动a；仅通过该测试自己的清单回收。
+        assert cli(repo, "stop", "--run-id", "a", "--timeout-seconds", "1").returncode == 0
+        assert sleeper.poll() is None

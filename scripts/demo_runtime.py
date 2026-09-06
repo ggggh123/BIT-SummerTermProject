@@ -133,8 +133,7 @@ class Runtime:
             if not (path / "manifest.json").exists():
                 continue
             _, manifest = self.load(path.name)
-            server = manifest["processes"].get("server")
-            if server and processes.inspect(server) != "EXITED":
+            if "server" in manifest["processes"] and processes.inspect(manifest["processes"]["server"]) != "EXITED":
                 raise DemoError("ACTIVE_SERVER", "本仓库已有活跃或身份不明的服务端记录")
 
     def stop(self, args):

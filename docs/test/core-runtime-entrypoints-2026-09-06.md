@@ -42,7 +42,20 @@ python3 -m pytest database/tests -q
 
 首次完整回归为unit102 passed、真实live2 passed、CTest32/32（42.16秒）、数据库15 passed（1.13秒），构建退出0且`ninja: no work to do.`。自审补PREPARED立即记录源码指纹后，定向全unit103 passed（18.15秒）和live2 passed（8.23秒）。随后发现状态文件updatedAt为数字/空值会产生未捕获异常、schemaVersion=true被误收，先确认3个RED，再加入严格字段校验，4项GREEN。
 
-最终生产修订的全量CTest再次32/32通过（39.51秒）：其中`demo_runtime_unit`实际107 passed（18.73秒），`demo_runtime_live`实际2 passed（8.37秒）。这是最后源码修改之后的证据；其后只整理中文文档。首次CMake重配置有现有XKB/Cups可选依赖未找到提示，但配置及构建成功，未安装任何依赖。
+首轮提交`22c9163`的全量CTest再次32/32通过（39.51秒）：其中`demo_runtime_unit`实际107 passed（18.73秒），`demo_runtime_live`实际2 passed（8.37秒）。这份全量证据对应首轮提交，不包含下述I1评审修复。首次CMake重配置有现有XKB/Cups可选依赖未找到提示，但配置及构建成功，未安装任何依赖。
+
+### 首轮评审I1修复的定向复验
+
+评审发现旧manifest中`processes.server`为`{}`、`null`、`[]`或空字符串时，仓库级检查错误地把它当作无记录，允许新reset/start。修复仅把判定改为server键存在就调用身份检查；非EXITED全部拒绝，stop原有坏记录处理及继续回收其他角色的逻辑未改。
+
+新增`test_empty_corrupt_server_record_blocks_new_reset_and_start`覆盖四种空坏记录×真实CLI reset/start共8例。修复前`-k 'empty_corrupt_server_record'`为`8 failed, 107 deselected in 5.09s`：reset错误返回PREPARED，start错误返回RUNNING。RED产生的测试自有进程均经自己的清单stop回收，旁观测试进程始终存活。修复后运行：
+
+```bash
+python3 -m pytest tests/scripts/test_demo_runtime.py -q \
+  -k 'empty_corrupt_server_record or reset_refuses_active_or_unknown_server or stop_continues_other_correct_records or malformed_process_record or start_success_duplicate_and_stop or prepared_stop_is_idempotent'
+```
+
+结果`16 passed, 99 deselected in 3.91s`。新reset未创建轮次；被拒绝的start保持PREPARED、无进程记录、无任何端日志，旧坏manifest未变，旁观者不受影响。本次只做定向回归，未重跑全量CTest或真实live；上面的32/32不冒称I1修复后的全量证据。评审M1（合法失败响应code未进入请求摘要）按主控裁定保留为deferred minor，本轮未修改。
 
 ## 失败边界覆盖
 
