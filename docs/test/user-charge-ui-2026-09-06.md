@@ -53,4 +53,12 @@ Qt offscreen 仍有 `propagateSizeHints()` 提示，不称作“零警告”。�
 | 长站名/桩码，390×720 | [顶部](evidence/user-charge-ui-2026-09-06/settlement-long-390x720.png)、[操作位置](evidence/user-charge-ui-2026-09-06/settlement-long-action-390x720.png) | 自动换行，无横向越界，滚动后主按钮完整可点击 |
 | 长站名/桩码，390×844 | [顶部](evidence/user-charge-ui-2026-09-06/settlement-long-390x844.png)、[操作位置](evidence/user-charge-ui-2026-09-06/settlement-long-action-390x844.png) | 纵向内容保持可达，不遮挡底栏 |
 
-本批截图检查通过，不代表所有客户端页面视觉已完成，也不宣称已完成真服务器/腾讯导航联动、换机验证或同 SHA 双彩排。独立代码评审结论另行追加。
+本批截图检查通过，不代表所有客户端页面视觉已完成，也不宣称已完成真服务器/腾讯导航联动、换机验证或同 SHA 双彩排。
+
+## 独立代码评审
+
+只读子代理 `review_charge_ui` 固定检查 `6863b36..a867ca6`：16 个文件（含 8 张实际截图）、389 行新增、45 行删除。结论 **Ready to merge: Yes，仅针对本批 UI 改动**；Critical / Important / 需本批修复的 Minor 均无。
+
+评审核对同一订单的数据与状态来源、原 guard/回调和相关动作路径、非空错误更新到 render 的路径、累计分钟无 60 分钟回绕、原 8 行乱序场景的三指标检查、登录/恢复后的真实 mutation payload，以及全部八张窄屏/长文本截图。没有重跑整套测试，引用主控本次已执行证据；没有读工作簿、调用腾讯、修改工作区或另派评审。
+
+此批源码提交为 `a867ca65241c5fb8ffd0577eb38187b315591a02`，仍在本机候选分支，未据此推送、创建 PR、合并或宣布整项目 GO。
