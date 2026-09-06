@@ -55,7 +55,19 @@ python3 -m pytest tests/scripts/test_demo_runtime.py -q \
   -k 'empty_corrupt_server_record or reset_refuses_active_or_unknown_server or stop_continues_other_correct_records or malformed_process_record or start_success_duplicate_and_stop or prepared_stop_is_idempotent'
 ```
 
-结果`16 passed, 99 deselected in 3.91s`。新reset未创建轮次；被拒绝的start保持PREPARED、无进程记录、无任何端日志，旧坏manifest未变，旁观者不受影响。本次只做定向回归，未重跑全量CTest或真实live；上面的32/32不冒称I1修复后的全量证据。评审M1（合法失败响应code未进入请求摘要）按主控裁定保留为deferred minor，本轮未修改。
+结果`16 passed, 99 deselected in 3.91s`。新reset未创建轮次；被拒绝的start保持PREPARED、无进程记录、无任何端日志，旧坏manifest未变，旁观者不受影响。本次只做定向回归，未重跑全量CTest或真实live；上面的32/32不冒称I1修复后的全量证据。评审M1（合法失败响应code未进入请求摘要）在该轮按主控裁定保留为deferred minor，该轮未修改。
+
+### 最终单次修复波次：quoted空白Key与失败摘要code
+
+F-I1复现了`config.local.ini`中`mapKey="   "`在旧实现去引号后仍为纯空白、因而继续启动三端的问题。配置读取现改为去除外围引号后再次trim，`mapKey=""`与引号内空格都在任何进程启动前返回`CONFIG_MISSING`；manifest保持`PREPARED`、`processes`为空且不产生任一端日志。正常quoted key、环境变量优先及空环境变量不回退INI的既有语义保持不变。
+
+M1在完整响应envelope及requestId校验通过后、成功判断前，仅将1–64位、以大写ASCII字母开头且后续仅含大写ASCII字母、数字或下划线的实际code写入请求摘要。真实本地TCP合法`AUTH_REQUIRED`拒绝仍令smoke非零退出，摘要记录该code；服务端message、data与token不进入请求摘要，敏感值不进入报告。错requestId、坏envelope、含小写/连字符或超长code仍保留`PROTOCOL_ERROR`。
+
+定向回归命令如下，结果为`33 passed, 88 deselected in 4.32s`；本波未运行真实地图、真实三程序live或全量CTest，最终候选由主控统一验证。
+
+```bash
+python3 -m pytest tests/scripts/test_demo_runtime.py -q -k 'start_missing_or_blank_credentials_before_processes or start_blank_quoted_ini_key_fails_before_processes or config_file_fallback_and_blank_environment_priority or start_bad_ini_configuration_returns_json or protocol_rejects_wrong_id_and_bad_envelope or protocol_accepts_degraded_without_forecast_and_redacts_summary or protocol_rejected_response_does_not_record_unsupported_code or health_rejects_nonready_state or smoke_readonly_actions_and_summary or cli_smoke_reports_tcp_and_status_failures'
+```
 
 ## 失败边界覆盖
 
@@ -63,13 +75,13 @@ python3 -m pytest tests/scripts/test_demo_runtime.py -q \
 |---|---|
 | 任意CWD、空格路径、脚本符号链接、帮助/未知参数 | `test_shell_symlink_arbitrary_cwd`、`test_help_and_unknown_parameter` |
 | 重复run保留DB、越界/符号链接、坏hash、源sidecar、已有DB | `test_reset_new_copy_and_duplicate_preserves_db`、`test_reject_run_path_escape`、`test_reset_rejects_damaged_or_existing_targets`、`test_reset_target_file_symlink_and_golden_symlink_rejected` |
-| 缺/空Key和token、INI环境优先、非法数值/build | `test_start_missing_or_blank_credentials_before_processes`、`test_config_file_fallback_and_blank_environment_priority`、`test_start_invalid_numbers_before_processes`、`test_start_checks_native_build_and_targets` |
+| 缺/空Key和token、quoted空白INI Key、INI环境优先、非法数值/build | `test_start_missing_or_blank_credentials_before_processes`、`test_start_blank_quoted_ini_key_fails_before_processes`、`test_config_file_fallback_and_blank_environment_priority`、`test_start_invalid_numbers_before_processes`、`test_start_checks_native_build_and_targets` |
 | 启动重复/已有记录、默认GUI与host参数 | `test_start_success_duplicate_and_stop`、`test_start_rejects_prepared_with_existing_process_record`、`test_start_default_gui_host_port_seed_interval_and_redaction` |
 | 旁观监听、预检后抢占端口、服务端失败/health超时、sim拒绝、client即退 | `test_start_refuses_unrelated_port_listener`、`test_port_race_external_healthy_listener_not_accepted`、`test_start_stage_failures_rollback_preserve_records` |
 | PID/starttime/bootId/exe不匹配不杀旁观者，并继续其他端 | `test_identity_mismatch_never_signals_bystander`、`test_stop_continues_other_correct_records_after_wrong_pid` |
 | TERM默认不KILL、force身份校验、回滚未退出记录保留 | `test_stop_timeout_no_kill_and_force_checked`、`test_start_failure_default_term_preserves_unexited_record`、`test_identity_capture_failure_preserves_unknown_child_record` |
 | 同仓库互斥、pidfd不支持明确失败、PREPARED停服不复用 | `test_commands_hold_same_repository_flock`、`test_stop_pidfd_unsupported_explicitly_no_unsafe_fallback`、`test_prepared_stop_is_idempotent_but_not_reusable` |
-| 错requestId/坏envelope/长度上限/总超时/非ready health | `test_protocol_rejects_wrong_id_and_bad_envelope`、`test_protocol_total_timeout_on_slow_fragmented_response`、`test_health_rejects_nonready_state` |
+| 错requestId/坏envelope/长度上限/合法拒绝code摘要/不受支持code/总超时/非ready health | `test_protocol_rejects_wrong_id_and_bad_envelope`、`test_protocol_rejected_response_does_not_record_unsupported_code`、`test_cli_smoke_reports_tcp_and_status_failures`、`test_protocol_total_timeout_on_slow_fragmented_response`、`test_health_rejects_nonready_state` |
 | ready过期/旧PID/非ready、smoke失败报告、只读动作与业务归属 | `test_ready_rejects_stale_wrong_process_and_nonready`、`test_smoke_old_process_cannot_be_rescued_by_fresh_ready`、`test_cli_smoke_reports_tcp_and_status_failures`、`test_business_smoke_validates_shape_and_ownership`、`test_smoke_readonly_actions_and_summary` |
 | 坏manifest/INI不回显内容，归属错误smoke仍报告 | `test_malformed_manifest_returns_json_failure`、`test_start_bad_ini_configuration_returns_json`、`test_smoke_manifest_owner_mismatch_writes_failure_report` |
 | PREPARED源码指纹、状态JSON严格类型 | `test_reset_records_source_fingerprint_already_when_prepared`、`test_ready_malformed_fields_are_rejected_without_traceback` |

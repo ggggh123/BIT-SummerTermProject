@@ -157,7 +157,7 @@ class Runtime:
                 config.read(self.root / "config.local.ini", encoding="utf-8")
             except configparser.Error as exc:
                 raise DemoError("CONFIG_INVALID", "本地INI配置格式无效") from exc
-            key = config.get("tencent", "mapKey", fallback="").strip().strip('"')
+            key = config.get("tencent", "mapKey", fallback="").strip().strip('"').strip()
         if not key or not token:
             raise DemoError("CONFIG_MISSING", "必须提供非空腾讯地图Key及EV_SIMULATOR_TOKEN")
         return key, token

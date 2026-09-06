@@ -216,6 +216,20 @@ def test_protocol_accepts_degraded_without_forecast_and_redacts_summary():
         assert set(client.events[0]) == {"action", "code", "requestId"}
 
 
+@pytest.mark.parametrize("code", ["auth_required", "BAD-CODE", "A" * 65])
+def test_protocol_rejected_response_does_not_record_unsupported_code(code):
+    import demo_protocol
+    with responder(lambda request: packet(envelope(
+            request, ok=False, code=code, message="PRIVATE_MESSAGE_TEST",
+            data={"token": "PRIVATE_SESSION_TEST"}))) as port:
+        client = demo_protocol.Connection(port, 1)
+        with pytest.raises(demo_protocol.ProtocolError):
+            client.health()
+        assert client.events[0]["code"] == "PROTOCOL_ERROR"
+        assert set(client.events[0]) == {"action", "code", "requestId"}
+        assert "PRIVATE_" not in json.dumps(client.events)
+
+
 @pytest.mark.parametrize("status", ["starting", "waiting", "error", None])
 def test_health_rejects_nonready_state(status):
     import demo_protocol
@@ -304,6 +318,22 @@ def test_start_missing_or_blank_credentials_before_processes(repo, build, key, v
     manifest = json.loads((repo / "runtime/demo-runs/a/manifest.json").read_text())
     assert manifest["processes"] == {}
     assert result(proc)["code"] == "CONFIG_MISSING"
+
+
+@pytest.mark.parametrize("ini_value", ['""', '"   "'])
+def test_start_blank_quoted_ini_key_fails_before_processes(repo, build, ini_value):
+    (repo / "config.local.ini").write_text(f"[tencent]\nmapKey={ini_value}\n")
+    assert cli(repo, "reset", "--run-id", "a").returncode == 0
+    env = fake_env()
+    env.pop("EV_TENCENT_MAP_KEY")
+    proc = start(repo, build, env=env)
+    assert proc.returncode != 0
+    assert result(proc)["code"] == "CONFIG_MISSING"
+    path = repo / "runtime/demo-runs/a"
+    manifest = json.loads((path / "manifest.json").read_text())
+    assert manifest["state"] == "PREPARED"
+    assert manifest["processes"] == {}
+    assert not list(path.glob("*.log"))
 
 
 @pytest.mark.parametrize("option,value", [("--port", "0"), ("--port", "65536"), ("--seed", "-1"), ("--seed", "4294967296"), ("--interval-ms", "999"), ("--interval-ms", "10001"), ("--timeout-seconds", "0")])
@@ -439,6 +469,10 @@ def business_server(damage=""):
                         response["ok"] = "true"
                     elif damage == "health":
                         response["data"]["status"] = "waiting"
+                    elif damage == "rejected":
+                        response.update(ok=False, code="AUTH_REQUIRED",
+                                        message="PRIVATE_MESSAGE_TEST",
+                                        data={"token": "PRIVATE_SESSION_TEST"})
                     conn.sendall(packet(response))
         thread = threading.Thread(target=serve, daemon=True)
         thread.start()
@@ -716,7 +750,7 @@ def test_reset_target_file_symlink_and_golden_symlink_rejected(repo):
     assert result(cli(repo, "reset", "--run-id", "b"))["code"] == "UNSAFE_PATH"
 
 
-@pytest.mark.parametrize("damage", ["request_id", "envelope", "health", "stale", "waiting_auth", "success"])
+@pytest.mark.parametrize("damage", ["request_id", "envelope", "health", "rejected", "stale", "waiting_auth", "success"])
 def test_cli_smoke_reports_tcp_and_status_failures(repo, damage):
     import demo_processes
     from datetime import datetime, timezone
@@ -744,6 +778,11 @@ def test_cli_smoke_reports_tcp_and_status_failures(repo, damage):
                 assert report["otherMachine"] == "NOT_RUN_SEPARATE_GATE"
             else:
                 assert "BASIC_SMOKE_PASS" not in json.dumps(report)
+            if damage == "rejected":
+                assert proc.returncode != 0
+                assert report["requests"][0]["code"] == "AUTH_REQUIRED"
+                assert set(report["requests"][0]) == {"action", "code", "requestId"}
+                assert "PRIVATE_" not in json.dumps(report)
     finally:
         assert all(value == "EXITED" for value in demo_processes.stop_all(records, 1, True).values())
         for child in children:

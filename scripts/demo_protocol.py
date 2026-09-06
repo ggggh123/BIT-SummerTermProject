@@ -1,5 +1,6 @@
 """既有v1大端长度JSON协议；报告只包含动作/代码/请求标识。"""
 import json
+import re
 import socket
 import struct
 import time
@@ -56,9 +57,10 @@ class Connection:
                     or not isinstance(response.get("message"), str)
                     or not isinstance(response.get("data"), dict)):
                 raise ProtocolError("INVALID_ENVELOPE")
+            if re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", response["code"], flags=re.ASCII):
+                event["code"] = response["code"]
             if response["ok"] is not True or response["code"] != "OK":
                 raise ProtocolError("RESPONSE_REJECTED")
-            event["code"] = "OK"
             return response["data"]
         except (OSError, ValueError, UnicodeError) as exc:
             raise ProtocolError("TCP_OR_JSON_ERROR") from exc
