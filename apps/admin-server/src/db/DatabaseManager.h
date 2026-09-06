@@ -8,6 +8,10 @@
 class DatabaseManager
 {
 public:
+    DatabaseManager();
+    ~DatabaseManager();
+    DatabaseManager(const DatabaseManager &) = delete;
+    DatabaseManager &operator=(const DatabaseManager &) = delete;
     Result open(const QString &databasePath = QString());
     QSqlDatabase database() const;
     QString databasePath() const;
@@ -17,7 +21,6 @@ private:
     Result seed();
     bool execSql(const QString &sql, QString *errorMessage = nullptr);
 
-    QString m_connectionName = QStringLiteral("management");
+    QString m_connectionName;
     QString m_databasePath;
 };
-

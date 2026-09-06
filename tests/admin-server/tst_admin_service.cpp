@@ -106,7 +106,7 @@ private slots:
         QVERIFY(query.next());
         QCOMPARE(query.value(0).toInt(), 1);
 
-        QTest::qWait(1700);
+        QVERIFY(service.finishRestart(1).ok);
         QVERIFY(query.exec(QStringLiteral("SELECT status FROM chargers WHERE id=1")));
         QVERIFY(query.next());
         QCOMPARE(query.value(0).toString(), QStringLiteral("idle"));

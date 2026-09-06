@@ -15,6 +15,14 @@ set_tests_properties(admin_runtime PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offsc
 
 add_executable(tst_admin_window_refresh
     tst_admin_window_refresh.cpp
+    ../../apps/admin-server/src/ui/LoginDialog.cpp
+    ../../apps/admin-server/src/ui/LoginDialog.h
+    ../../apps/admin-server/src/db/DatabaseWorker.cpp
+    ../../apps/admin-server/src/db/DatabaseWorker.h
+    ../../apps/admin-server/src/network/ConnectionWorker.cpp
+    ../../apps/admin-server/src/network/ConnectionWorker.h
+    ../../apps/admin-server/src/services/RequestDispatcher.cpp
+    ../../apps/admin-server/src/services/RequestDispatcher.h
     ../../apps/admin-server/src/app/AppContext.cpp
     ../../apps/admin-server/src/app/AppContext.h
     ../../apps/admin-server/src/dashboard/SnapshotWriter.cpp

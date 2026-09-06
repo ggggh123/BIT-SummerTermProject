@@ -14,6 +14,7 @@
 #include <QStandardPaths>
 #include <QStringList>
 #include <QVariant>
+#include <QUuid>
 
 namespace {
 
@@ -110,6 +111,17 @@ int scalarInt(QSqlDatabase database, const QString &sql)
 }
 
 } // namespace
+
+DatabaseManager::DatabaseManager()
+    : m_connectionName(QStringLiteral("management-") + QUuid::createUuid().toString(QUuid::WithoutBraces)) {}
+
+DatabaseManager::~DatabaseManager()
+{
+    if (QSqlDatabase::contains(m_connectionName)) {
+        { auto db = QSqlDatabase::database(m_connectionName, false); db.close(); }
+        QSqlDatabase::removeDatabase(m_connectionName);
+    }
+}
 
 Result DatabaseManager::open(const QString &databasePath)
 {

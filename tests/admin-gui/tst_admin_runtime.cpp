@@ -107,9 +107,10 @@ private slots:
         const ev::protocol::RequestEnvelope request{
             1,
             requestId,
-            QStringLiteral("system.health"),
+            QStringLiteral("admin.login"),
             QString(),
-            QJsonObject{}};
+            QJsonObject{{QStringLiteral("username"),QStringLiteral("admin")},
+                        {QStringLiteral("password"),QStringLiteral("123456")}}};
         const QByteArray payload = ev::protocol::toJson(request);
         socket.write(ev::protocol::encodeFrame(QByteArrayView(payload.constData(), payload.size())));
         QVERIFY(socket.waitForBytesWritten(3000));
@@ -138,6 +139,8 @@ private slots:
 
         socket.disconnectFromHost();
         stopProcess(&guiProcess);
+        QCOMPARE(guiProcess.exitStatus(),QProcess::NormalExit);
+        QCOMPARE(guiProcess.exitCode(),0);
 
         const QString connectionName = QStringLiteral("admin-runtime-db-%1").arg(
             QUuid::createUuid().toString(QUuid::WithoutBraces));

@@ -7,6 +7,12 @@ endif()
 
 add_executable(ev_admin_server
     src/main.cpp
+    src/db/DatabaseWorker.cpp
+    src/db/DatabaseWorker.h
+    src/network/ConnectionWorker.cpp
+    src/network/ConnectionWorker.h
+    src/services/RequestDispatcher.cpp
+    src/services/RequestDispatcher.h
     src/app/AppContext.cpp
     src/app/AppContext.h
     src/core/Result.h

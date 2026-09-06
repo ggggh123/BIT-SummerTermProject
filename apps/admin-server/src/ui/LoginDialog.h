@@ -1,6 +1,6 @@
 #pragma once
 
-#include "services/AuthService.h"
+#include "app/AppContext.h"
 
 #include <QDialog>
 #include <QString>
@@ -12,16 +12,16 @@ class LoginDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit LoginDialog(AuthService *authService, QWidget *parent = nullptr);
+    explicit LoginDialog(AppContext *context, QWidget *parent = nullptr);
     QString adminToken() const;
 
 private slots:
     void tryLogin();
 
 private:
-    AuthService *m_authService = nullptr;
+    AppContext *m_context = nullptr;
+    bool m_busy = false;
     QLineEdit *m_usernameEdit = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
     QString m_adminToken;
 };
-

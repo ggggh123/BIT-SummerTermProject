@@ -1,53 +1,49 @@
 #pragma once
-
-#include "db/DatabaseManager.h"
+#include "core/Result.h"
+#include "db/DatabaseWorker.h"
 #include "network/ApiServer.h"
-#include "services/AdminService.h"
-#include "services/AuthService.h"
-#include "services/DashboardService.h"
-#include "services/ForecastService.h"
-#include "services/RequestLogService.h"
-#include "services/TelemetryService.h"
-#include "services/UserService.h"
-
+#include <QObject>
+#include <QThread>
+#include <QPointer>
+#include <QHash>
+#include <functional>
 #include <memory>
+#include <atomic>
 
-class AppContext
-{
+class AppContext : public QObject {
+    Q_OBJECT
 public:
-    struct Options
-    {
+    struct Options {
         QString databasePath;
         QString host = QStringLiteral("127.0.0.1");
         quint16 port = 9100;
         QString snapshotPath;
     };
-
+    explicit AppContext(QObject *parent = nullptr);
+    ~AppContext() override;
     Result initialize();
     Result initialize(const Options &options);
-
-    AuthService *authService() const;
-    AdminService *adminService() const;
-    DashboardService *dashboardService() const;
-    ForecastService *forecastService() const;
-    RequestLogService *requestLogService() const;
-    TelemetryService *telemetryService() const;
-    UserService *userService() const;
+    void shutdown();
+    void executeLocal(ev::protocol::RequestEnvelope request, QObject *receiver, std::function<void(QByteArray)> callback);
+    void queryAdmin(AdminView view, const QString &token, const QJsonObject &parameters,
+                    QObject *receiver, std::function<void(QByteArray)> callback);
+    QJsonObject healthSnapshot() const;
     ApiServer *apiServer() const;
     QString databasePath() const;
     QString host() const;
     quint16 port() const;
-
 private:
-    DatabaseManager m_databaseManager;
-    std::unique_ptr<AuthService> m_authService;
-    std::unique_ptr<AdminService> m_adminService;
-    std::unique_ptr<DashboardService> m_dashboardService;
-    std::unique_ptr<ForecastService> m_forecastService;
-    std::unique_ptr<RequestLogService> m_requestLogService;
-    std::unique_ptr<TelemetryService> m_telemetryService;
-    std::unique_ptr<UserService> m_userService;
+    struct Pending { QPointer<QObject> receiver; std::function<void(QByteArray)> callback; };
+    quint64 enqueue(QObject *receiver, std::function<void(QByteArray)> callback);
+    void deliver(quint64 sequence, const QByteArray &bytes);
+    QThread m_databaseThread;
+    DatabaseWorker *m_worker = nullptr;
     std::unique_ptr<ApiServer> m_apiServer;
-    QString m_host = QStringLiteral("127.0.0.1");
-    quint16 m_port = 9100;
+    QHash<quint64, Pending> m_pending;
+    quint64 m_sequence = 0;
+    QJsonObject m_health;
+    QString m_databasePath;
+    QString m_host;
+    quint16 m_port = 0;
+    std::shared_ptr<std::atomic_bool> m_accepting = std::make_shared<std::atomic_bool>(false);
 };

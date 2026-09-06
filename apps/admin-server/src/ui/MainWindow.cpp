@@ -1,4 +1,7 @@
 #include "ui/MainWindow.h"
+#include "protocol/JsonEnvelope.h"
+#include <QUuid>
+#include <QStatusBar>
 
 #include <QAbstractItemView>
 #include <QHeaderView>
@@ -79,9 +82,10 @@ int selectedId(QTableWidget *table)
 
 } // namespace
 
-MainWindow::MainWindow(AppContext *context, QWidget *parent)
+MainWindow::MainWindow(AppContext *context, const QString &adminToken, QWidget *parent)
     : QMainWindow(parent)
     , m_context(context)
+    , m_adminToken(adminToken)
 {
     setWindowTitle(QStringLiteral("东软电动汽车充电桩应用管理平台 - 管理端"));
     resize(1180, 720);
@@ -150,34 +154,35 @@ QWidget *MainWindow::createDashboardPage()
                     , series, axisX, axisY
 #endif
                    ]() {
-        const QJsonObject summary = m_context->dashboardService()->summary(rangeBox->currentData().toInt());
-        const QJsonObject revenue = summary.value(QStringLiteral("revenue")).toObject();
-        today->setText(QStringLiteral("今日营收：") + moneyText(static_cast<qint64>(revenue.value(QStringLiteral("todayRevenueFen")).toDouble())));
-        month->setText(QStringLiteral("本月营收：") + moneyText(static_cast<qint64>(revenue.value(QStringLiteral("monthRevenueFen")).toDouble())));
-        total->setText(QStringLiteral("总营收：") + moneyText(static_cast<qint64>(revenue.value(QStringLiteral("totalRevenueFen")).toDouble())));
-        QList<QStringList> rows;
-        const QJsonArray points = summary.value(QStringLiteral("trend")).toArray();
-        double maxRevenueYuan = 0.0;
+        queryView(AdminView::Summary, {{"rangeDays",rangeBox->currentData().toInt()}}, trend, [=](const QJsonObject &summary) {
+            const QJsonObject revenue = summary.value(QStringLiteral("revenue")).toObject();
+            today->setText(QStringLiteral("今日营收：") + moneyText(static_cast<qint64>(revenue.value(QStringLiteral("todayRevenueFen")).toDouble())));
+            month->setText(QStringLiteral("本月营收：") + moneyText(static_cast<qint64>(revenue.value(QStringLiteral("monthRevenueFen")).toDouble())));
+            total->setText(QStringLiteral("总营收：") + moneyText(static_cast<qint64>(revenue.value(QStringLiteral("totalRevenueFen")).toDouble())));
+            QList<QStringList> rows;
+            const QJsonArray points = summary.value(QStringLiteral("trend")).toArray();
+            double maxRevenueYuan = 0.0;
 #ifdef EV_HAS_QT_CHARTS
-        series->clear();
+            series->clear();
 #endif
-        int dayIndex = 1;
-        for (const QJsonValue &pointValue : points) {
-            const QJsonObject point = pointValue.toObject();
-            const qint64 revenueFen = static_cast<qint64>(point.value(QStringLiteral("revenueFen")).toDouble());
-            const double revenueYuan = revenueFen / 100.0;
-            maxRevenueYuan = qMax(maxRevenueYuan, revenueYuan);
-            rows.append({point.value(QStringLiteral("date")).toString(), moneyText(revenueFen)});
+            int dayIndex = 1;
+            for (const QJsonValue &pointValue : points) {
+                const QJsonObject point = pointValue.toObject();
+                const qint64 revenueFen = static_cast<qint64>(point.value(QStringLiteral("revenueFen")).toDouble());
+                const double revenueYuan = revenueFen / 100.0;
+                maxRevenueYuan = qMax(maxRevenueYuan, revenueYuan);
+                rows.append({point.value(QStringLiteral("date")).toString(), moneyText(revenueFen)});
 #ifdef EV_HAS_QT_CHARTS
-            series->append(dayIndex, revenueYuan);
+                series->append(dayIndex, revenueYuan);
 #endif
-            ++dayIndex;
-        }
+                ++dayIndex;
+            }
 #ifdef EV_HAS_QT_CHARTS
-        axisX->setRange(1, qMax(1, points.size()));
-        axisY->setRange(0, qMax(1.0, maxRevenueYuan));
+            axisX->setRange(1, qMax(1, points.size()));
+            axisY->setRange(0, qMax(1.0, maxRevenueYuan));
 #endif
-        fillTable(trend, rows);
+            fillTable(trend, rows);
+        });
     };
 
     connect(rangeBox, &QComboBox::currentIndexChanged, this, refresh);
@@ -210,24 +215,25 @@ QWidget *MainWindow::createPileStatusPage()
         {QStringLiteral("restarting"), QStringLiteral("重启中")}
     };
     auto refresh = [this, summaryTable, detailTable, states]() {
-        const QJsonObject summary = m_context->dashboardService()->summary();
-        const QJsonObject status = summary.value(QStringLiteral("statusCounts")).toObject();
-        QList<QStringList> rows;
-        const int total = status.value(QStringLiteral("total")).toInt();
-        for (const auto &state : states) {
-            const int count = status.value(state.first).toInt();
-            rows.append({state.second, QString::number(count),
-                         total == 0 ? QStringLiteral("0%") : QStringLiteral("%1%").arg(qRound(count * 100.0 / total))});
-        }
-        fillTable(summaryTable, rows);
-        const int selectedState = summaryTable->currentRow();
-        const QString statusFilter = selectedState >= 0 && selectedState < states.size()
-            ? states.at(selectedState).first : QString();
-        fillTable(detailTable, m_context->dashboardService()->chargerRows(0, statusFilter));
+        queryView(AdminView::Summary, {}, summaryTable, [=](const QJsonObject &summary) {
+            const QJsonObject status = summary.value(QStringLiteral("statusCounts")).toObject();
+            QList<QStringList> rows;
+            const int total = status.value(QStringLiteral("total")).toInt();
+            for (const auto &state : states) {
+                const int count = status.value(state.first).toInt();
+                rows.append({state.second, QString::number(count),
+                             total == 0 ? QStringLiteral("0%") : QStringLiteral("%1%").arg(qRound(count * 100.0 / total))});
+            }
+            fillTable(summaryTable, rows);
+            const int selectedState = summaryTable->currentRow();
+            const QString statusFilter = selectedState >= 0 && selectedState < states.size()
+                ? states.at(selectedState).first : QString();
+            queryRows(AdminView::Chargers, {{"status",statusFilter}}, detailTable);
+        });
     };
     connect(summaryTable, &QTableWidget::cellClicked, this, [this, detailTable, states](int row, int) {
         if (row >= 0 && row < states.size()) {
-            fillTable(detailTable, m_context->dashboardService()->chargerRows(0, states.at(row).first));
+            queryRows(AdminView::Chargers, {{"status",states.at(row).first}}, detailTable);
         }
     });
     layout->addWidget(summaryTable);
@@ -249,20 +255,23 @@ QWidget *MainWindow::createChargerManagementPage()
     auto *table = makeTable({QStringLiteral("桩ID"), QStringLiteral("编号"), QStringLiteral("所属电站"), QStringLiteral("类型"), QStringLiteral("功率(kW)"), QStringLiteral("状态"), QStringLiteral("累计次数"), QStringLiteral("累计时长(s)")});
     table->setObjectName(QStringLiteral("chargerManagementTable"));
     auto refresh = [this, stationBox, table]() {
-        const int selectedStationId = stationBox->currentData().toInt();
-        const QSignalBlocker blocker(stationBox);
-        stationBox->clear();
-        stationBox->addItem(QStringLiteral("全部电站"), 0);
-        for (const QStringList &row : m_context->dashboardService()->stationRows()) {
-            stationBox->addItem(row.value(1), row.value(0).toInt());
-        }
-        const int restoredIndex = stationBox->findData(selectedStationId);
-        stationBox->setCurrentIndex(restoredIndex >= 0 ? restoredIndex : 0);
-        fillTable(table, m_context->dashboardService()->chargerRows(stationBox->currentData().toInt()));
+        queryView(AdminView::Stations, {}, stationBox, [=](const QJsonObject &data) {
+            const int selectedStationId = stationBox->currentData().toInt();
+            const QSignalBlocker blocker(stationBox);
+            stationBox->clear();
+            stationBox->addItem(QStringLiteral("全部电站"), 0);
+            for (const auto &value : data.value("rows").toArray()) {
+                const auto row = value.toArray();
+                stationBox->addItem(row.at(1).toString(), row.at(0).toString().toInt());
+            }
+            const int restoredIndex = stationBox->findData(selectedStationId);
+            stationBox->setCurrentIndex(restoredIndex >= 0 ? restoredIndex : 0);
+            queryRows(AdminView::Chargers, {{"stationId",stationBox->currentData().toInt()}}, table);
+        });
     };
     connect(stationBox, &QComboBox::currentIndexChanged, this, refresh);
     connect(refreshButton, &QPushButton::clicked, this, refresh);
-    connect(restartButton, &QPushButton::clicked, this, [this, table, refresh]() {
+    connect(restartButton, &QPushButton::clicked, this, [this, table, refresh, restartButton]() {
         const int chargerId = selectedId(table);
         if (chargerId <= 0) {
             QMessageBox::information(this, QStringLiteral("请选择电桩"), QStringLiteral("请先选中一个故障电桩。"));
@@ -271,14 +280,10 @@ QWidget *MainWindow::createChargerManagementPage()
         if (QMessageBox::question(this, QStringLiteral("确认重启"), QStringLiteral("确认远程重启选中的故障电桩？")) != QMessageBox::Yes) {
             return;
         }
-        QJsonObject data;
-        const Result result = m_context->adminService()->chargerRestart(QJsonObject{{QStringLiteral("chargerId"), chargerId}}, &data);
-        if (!result.ok) {
-            QMessageBox::warning(this, QStringLiteral("重启失败"), result.message);
-            return;
-        }
-        refresh();
-        QTimer::singleShot(1700, this, refresh);
+        mutate("admin.charger_restart", {{"chargerId",chargerId}}, {restartButton}, [this,refresh] {
+            refresh();
+            QTimer::singleShot(1700,this,refresh);
+        });
     });
     toolbar->addWidget(stationBox);
     toolbar->addWidget(refreshButton);
@@ -323,23 +328,17 @@ QWidget *MainWindow::createStationManagementPage()
     form->addRow(QStringLiteral("慢桩数"), slowSpin);
     form->addRow(createButton);
     auto refresh = [this, table]() {
-        fillTable(table, m_context->dashboardService()->stationRows());
+        queryRows(AdminView::Stations, {}, table);
     };
     connect(createButton, &QPushButton::clicked, this, [=]() {
-        QJsonObject data;
-        const Result result = m_context->adminService()->stationCreate(QJsonObject{
+        mutate("admin.station_create", QJsonObject{
             {QStringLiteral("name"), nameEdit->text()},
             {QStringLiteral("address"), addressEdit->text()},
             {QStringLiteral("latitude"), latSpin->value()},
             {QStringLiteral("longitude"), lonSpin->value()},
             {QStringLiteral("priceFenPerKwh"), qRound(priceSpin->value() * 100.0)},
             {QStringLiteral("fastChargerCount"), fastSpin->value()},
-            {QStringLiteral("slowChargerCount"), slowSpin->value()}}, &data);
-        if (!result.ok) {
-            QMessageBox::warning(this, QStringLiteral("新增失败"), result.message);
-            return;
-        }
-        refresh();
+            {QStringLiteral("slowChargerCount"), slowSpin->value()}}, {createButton}, refresh);
     });
     layout->addWidget(table);
     layout->addWidget(formBox);
@@ -369,9 +368,9 @@ QWidget *MainWindow::createUserManagementPage()
     limitSpin->setValue(20);
     offsetSpin->setRange(0, 10000);
     auto refresh = [this, table, searchEdit, limitSpin, offsetSpin]() {
-        fillTable(table, m_context->dashboardService()->userRows(searchEdit->text().trimmed(), limitSpin->value(), offsetSpin->value()));
+        queryRows(AdminView::Users, {{"mobileLike",searchEdit->text().trimmed()},{"limit",limitSpin->value()},{"offset",offsetSpin->value()}}, table);
     };
-    auto setStatus = [this, table, refresh](const QString &status) {
+    auto setStatus = [this, table, refresh, freezeButton, activeButton](const QString &status) {
         const int userId = selectedId(table);
         if (userId <= 0) {
             QMessageBox::information(this, QStringLiteral("请选择用户"), QStringLiteral("请先选中一个用户。"));
@@ -381,13 +380,7 @@ QWidget *MainWindow::createUserManagementPage()
         if (QMessageBox::question(this, QStringLiteral("确认") + actionText, QStringLiteral("确认") + actionText + QStringLiteral("选中的用户？")) != QMessageBox::Yes) {
             return;
         }
-        QJsonObject data;
-        const Result result = m_context->adminService()->userSetStatus(QJsonObject{{QStringLiteral("userId"), userId}, {QStringLiteral("status"), status}}, &data);
-        if (!result.ok) {
-            QMessageBox::warning(this, actionText + QStringLiteral("失败"), result.message);
-            return;
-        }
-        refresh();
+        mutate("admin.user_set_status", {{"userId",userId},{"status",status}}, {freezeButton,activeButton}, refresh);
     };
     connect(refreshButton, &QPushButton::clicked, this, refresh);
     connect(freezeButton, &QPushButton::clicked, this, [setStatus]() { setStatus(QStringLiteral("frozen")); });
@@ -415,24 +408,22 @@ QWidget *MainWindow::createRequestLogPage()
         {QStringLiteral("请求ID"), QStringLiteral("动作"), QStringLiteral("响应码"), QStringLiteral("时间")});
     table->setObjectName(QStringLiteral("requestLogTable"));
     auto refresh = [this, table]() {
-        QJsonObject data;
-        const Result result = m_context->requestLogService()->list(QString(), 50, 0, &data);
-        QList<QStringList> rows;
-        if (result.ok) {
-            const QJsonArray items = data.value(QStringLiteral("items")).toArray();
-            for (const QJsonValue &itemValue : items) {
-                const QJsonObject item = itemValue.toObject();
-                rows.append({
-                    item.value(QStringLiteral("requestId")).toString(),
-                    item.value(QStringLiteral("action")).toString(),
-                    item.value(QStringLiteral("code")).toString(),
-                    item.value(QStringLiteral("createdAt")).toString()
-                });
+        queryView(AdminView::RequestLog, {}, table, [table](const QJsonObject &data) {
+            QList<QStringList> rows;
+            {
+                const QJsonArray items = data.value(QStringLiteral("items")).toArray();
+                for (const QJsonValue &itemValue : items) {
+                    const QJsonObject item = itemValue.toObject();
+                    rows.append({
+                        item.value(QStringLiteral("requestId")).toString(),
+                        item.value(QStringLiteral("action")).toString(),
+                        item.value(QStringLiteral("code")).toString(),
+                        item.value(QStringLiteral("createdAt")).toString()
+                    });
+                }
             }
-        } else {
-            rows.append({QStringLiteral("-"), QStringLiteral("-"), result.code, result.message});
-        }
-        fillTable(table, rows);
+            fillTable(table, rows);
+        });
     };
     layout->addWidget(table);
     registerPageRefresh(page, refresh);
@@ -447,7 +438,7 @@ QWidget *MainWindow::createHealthPage()
     auto *table = makeTable({QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")});
     table->setObjectName(QStringLiteral("healthTable"));
     auto refresh = [this, table]() {
-        const QJsonObject health = m_context->forecastService()->healthState();
+        const QJsonObject health = m_context->healthSnapshot();
         const QString forecastState = health.value(QStringLiteral("forecastRunId")).isNull()
             ? QStringLiteral("无活动预测批次")
             : QStringLiteral("活动批次：") + health.value(QStringLiteral("forecastRunId")).toString();
@@ -509,4 +500,41 @@ void MainWindow::refreshCurrentPage()
     if (refresh != m_pageRefreshers.constEnd()) {
         refresh.value()();
     }
+}
+void MainWindow::queryView(AdminView view, const QJsonObject &parameters, QObject *receiver,
+                           std::function<void(QJsonObject)> callback)
+{
+    const auto revision = receiver->property("refreshRevision").toULongLong() + 1;
+    receiver->setProperty("refreshRevision",revision);
+    m_context->queryAdmin(view,m_adminToken,parameters,receiver,[this,receiver,revision,callback](const QByteArray &bytes) {
+        if (receiver->property("refreshRevision").toULongLong() != revision) return;
+        const auto response = ev::protocol::parseResponse(bytes);
+        if (!response.ok) { statusBar()->showMessage(response.code + "：" + response.message,5000); return; }
+        callback(response.data.toObject());
+    });
+}
+void MainWindow::queryRows(AdminView view, const QJsonObject &parameters, QTableWidget *table)
+{
+    queryView(view,parameters,table,[table](const QJsonObject &data) {
+        QList<QStringList> rows;
+        for (const auto &value : data.value("rows").toArray()) {
+            QStringList row;
+            for (const auto &cell : value.toArray()) row.append(cell.toString());
+            rows.append(row);
+        }
+        fillTable(table,rows);
+    });
+}
+void MainWindow::mutate(const QString &action, const QJsonObject &payload, const QList<QWidget *> &controls,
+                        std::function<void()> callback)
+{
+    for (auto *control : controls) if (!control->isEnabled()) return;
+    for (auto *control : controls) control->setEnabled(false);
+    m_context->executeLocal({1,QUuid::createUuid().toString(QUuid::WithoutBraces),action,m_adminToken,payload},
+        this,[this,controls,callback](const QByteArray &bytes) {
+            for (auto *control : controls) control->setEnabled(true);
+            const auto response = ev::protocol::parseResponse(bytes);
+            if (!response.ok) { QMessageBox::warning(this,QStringLiteral("操作失败"),response.code + "：" + response.message); return; }
+            callback();
+        });
 }

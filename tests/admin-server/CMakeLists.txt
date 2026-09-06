@@ -1,4 +1,19 @@
-find_package(Qt6 6.2 REQUIRED COMPONENTS Test Sql)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Test Sql Network)
+get_target_property(server_sources ev_admin_server SOURCES)
+list(FILTER server_sources EXCLUDE REGEX "src/(main.cpp|ui/)")
+list(TRANSFORM server_sources PREPEND "${CMAKE_SOURCE_DIR}/apps/admin-server/")
+add_executable(tst_database_worker tst_database_worker.cpp ${server_sources})
+target_include_directories(tst_database_worker PRIVATE ../../apps/admin-server/src)
+target_compile_definitions(tst_database_worker PRIVATE EV_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(tst_database_worker PRIVATE Qt6::Test Qt6::Network Qt6::Sql ev_protocol)
+add_test(NAME database_worker COMMAND tst_database_worker)
+add_executable(tst_server_threads tst_server_threads.cpp ${server_sources})
+target_include_directories(tst_server_threads PRIVATE ../../apps/admin-server/src)
+target_compile_definitions(tst_server_threads PRIVATE EV_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(tst_server_threads PRIVATE EV_ADMIN_SERVER_PATH="$<TARGET_FILE:ev_admin_server>")
+add_dependencies(tst_server_threads ev_admin_server)
+target_link_libraries(tst_server_threads PRIVATE Qt6::Test Qt6::Network Qt6::Sql ev_protocol)
+add_test(NAME server_threads COMMAND tst_server_threads)
 
 add_executable(tst_admin_auth
     tst_admin_auth.cpp

@@ -1,4 +1,6 @@
 #include "ui/LoginDialog.h"
+#include "protocol/JsonEnvelope.h"
+#include <QUuid>
 
 #include <QFormLayout>
 #include <QLabel>
@@ -7,9 +9,9 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-LoginDialog::LoginDialog(AuthService *authService, QWidget *parent)
+LoginDialog::LoginDialog(AppContext *context, QWidget *parent)
     : QDialog(parent)
-    , m_authService(authService)
+    , m_context(context)
 {
     setWindowTitle(QStringLiteral("管理员登录"));
     setMinimumWidth(360);
@@ -46,12 +48,19 @@ QString LoginDialog::adminToken() const
 
 void LoginDialog::tryLogin()
 {
-    const LoginResult result = m_authService->login(m_usernameEdit->text(), m_passwordEdit->text());
-    if (!result.ok) {
-        QMessageBox::warning(this, QStringLiteral("登录失败"), result.message);
-        return;
-    }
-    m_adminToken = result.token;
-    accept();
+    if (m_busy) return;
+    m_busy = true;
+    setEnabled(false);
+    m_context->executeLocal({1,QUuid::createUuid().toString(QUuid::WithoutBraces),"admin.login",{},
+        {{"username",m_usernameEdit->text()},{"password",m_passwordEdit->text()}}},this,[this](const QByteArray &bytes) {
+        m_busy = false;
+        setEnabled(true);
+        const auto result = ev::protocol::parseResponse(bytes);
+        if (!result.ok) {
+            QMessageBox::warning(this,QStringLiteral("登录失败"),result.message);
+            return;
+        }
+        m_adminToken = result.data.toObject().value("token").toString();
+        accept();
+    });
 }
-
