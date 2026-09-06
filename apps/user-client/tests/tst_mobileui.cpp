@@ -102,7 +102,8 @@ QTcpSocket *waitForPeer(QTcpServer &server, int timeoutMs = 5'000)
     return server.nextPendingConnection();
 }
 
-void completeLoginWithoutOrder(MainWindow &window, QTcpSocket *peer)
+void completeLoginWithoutOrder(MainWindow &window, QTcpSocket *peer,
+                              QJsonValue currentOrder = QJsonValue(QJsonValue::Null))
 {
     auto *phone = required<QLineEdit>(&window, "phoneEdit");
     auto *button = required<QPushButton>(&window, "loginButton");
@@ -118,7 +119,7 @@ void completeLoginWithoutOrder(MainWindow &window, QTcpSocket *peer)
     request = takeRequest(peer);
     QCOMPARE(request.action, QStringLiteral("order.current"));
     reply(peer, request.requestId,
-          QJsonObject{{QStringLiteral("order"), QJsonValue(QJsonValue::Null)}});
+          QJsonObject{{QStringLiteral("order"), currentOrder}});
 }
 
 void saveScreenshotIfRequested(QWidget *widget, const QString &fileName)
@@ -267,6 +268,8 @@ private slots:
     void nearbyLongContentRemainsReachable_data();
     void nearbyLongContentRemainsReachable();
     void authenticatedNearbyClearsExpiredSessionCopy();
+    void restoredChargeMetricsAndActionsFitPortrait_data();
+    void restoredChargeMetricsAndActionsFitPortrait();
 };
 
 void MobileUiTest::initTestCase()
@@ -502,14 +505,11 @@ void MobileUiTest::authenticatedShellStaysPortraitWithBottomNavigation()
     emit nearbyPage->chargerSelected({{39.95, 116.31}, station, charger, 1});
     QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("chargePage"));
     auto *reserve = required<QPushButton>(&window, "chargeReserveButton");
-    auto *back = required<QPushButton>(&window, "chargeBackButton");
     QVERIFY(reserve != nullptr);
-    QVERIFY(back != nullptr);
     QVERIFY(horizontallyInsideViewport(reserve, contentViewport));
-    QVERIFY(horizontallyInsideViewport(back, contentViewport));
-    contentViewport->ensureWidgetVisible(back, 0, 8);
+    contentViewport->ensureWidgetVisible(reserve, 0, 8);
     QTest::qWait(20);
-    QVERIFY(intersectsViewport(back, contentViewport));
+    QVERIFY(intersectsViewport(reserve, contentViewport));
     saveScreenshotIfRequested(&window, QStringLiteral("charge-390x720.png"));
 }
 
@@ -789,6 +789,83 @@ void MobileUiTest::authenticatedNearbyClearsExpiredSessionCopy()
     const QString status = required<QLabel>(page, "nearbyStatus")->text();
     QVERIFY2(!status.contains(QStringLiteral("重新登录")), qPrintable(status));
     QVERIFY(status.contains(QStringLiteral("地址")));
+    QTest::qWait(30);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+}
+
+void MobileUiTest::restoredChargeMetricsAndActionsFitPortrait_data()
+{
+    QTest::addColumn<int>("height");
+    QTest::addColumn<bool>("ended");
+    QTest::addColumn<bool>("longText");
+    for (int height : {720, 844}) {
+        QTest::newRow(qPrintable(QStringLiteral("charging-%1").arg(height))) << height << false << false;
+        QTest::newRow(qPrintable(QStringLiteral("settlement-%1").arg(height))) << height << true << false;
+        QTest::newRow(qPrintable(QStringLiteral("long-receipt-%1").arg(height))) << height << true << true;
+    }
+}
+
+void MobileUiTest::restoredChargeMetricsAndActionsFitPortrait()
+{
+    QFETCH(int, height);
+    QFETCH(bool, ended);
+    QFETCH(bool, longText);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.resize(390, height);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer);
+    const auto detail = detailFixture(longText);
+    const QJsonObject order{{"orderId", 1028}, {"userId", 42}, {"chargerId", 1001}, {"stationId", 1},
+        {"stationName", detail.station.name}, {"chargerCode", detail.chargers.first().code},
+        {"status", "charging"}, {"reservedAt", "2026-09-05T09:58:00+08:00"},
+        {"startedAt", "2026-09-05T10:00:00+08:00"},
+        {"endedAt", ended ? QJsonValue("2026-09-05T10:26:40+08:00") : QJsonValue(QJsonValue::Null)},
+        {"energyKwh", 12.480}, {"amountFen", 1685}, {"elapsedSec", 1600}};
+    completeLoginWithoutOrder(window, peer.data(), order);
+    const auto facts = takeRequest(peer.data());
+    QCOMPARE(facts.action, QStringLiteral("station.detail"));
+    reply(peer.data(), facts.requestId, detailObject(detail));
+    auto *page = required<ChargePage>(&window, "chargePage");
+    auto *viewport = required<QScrollArea>(&window, "contentViewport");
+    auto *action = required<QPushButton>(page, ended ? "chargeSettleButton" : "chargeStopButton");
+    QVERIFY(page && viewport && action);
+    QTRY_VERIFY(page->isVisible() && action->isEnabled());
+    QVERIFY(action->height() >= 48);
+    QCOMPARE(required<QLabel>(page, "chargeMeter")->text(), ended ? QStringLiteral("16.85") : QStringLiteral("12.480"));
+    QCOMPARE(required<QLabel>(page, "chargeDuration")->text(), QStringLiteral("26:40"));
+    QVERIFY(!required<QPushButton>(&window, "nearbyNavigationButton")->isEnabled());
+    QVERIFY(required<QPushButton>(&window, "currentOrderNavigationButton")->isVisible());
+    QTest::qWait(30);
+    QCOMPARE(viewport->horizontalScrollBar()->maximum(), 0);
+    auto *notice = required<QLabel>(page, "chargeNotice");
+    QVERIFY(notice);
+    const auto *card = notice->parentWidget();
+    const int actionGap = action->mapTo(page, QPoint()).y()
+        - card->mapTo(page, QPoint(0, card->height())).y();
+    QVERIFY2(actionGap <= 32, qPrintable(QStringLiteral("无错误时主要操作前不应保留空白错误块：%1 px").arg(actionGap)));
+    for (auto *label : page->findChildren<QLabel *>()) {
+        if (label->isVisible()) QVERIFY2(horizontallyInsideViewport(label, viewport), qPrintable(label->objectName()));
+    }
+    viewport->verticalScrollBar()->setValue(0);
+    saveScreenshotIfRequested(&window, QStringLiteral("%1-390x%2.png")
+        .arg(longText ? "settlement-long" : ended ? "settlement" : "charging").arg(height));
+    viewport->ensureWidgetVisible(action, 0, 8);
+    QTest::qWait(30);
+    const QRect actionRect(action->mapTo(viewport->viewport(), QPoint()), action->size());
+    QVERIFY(viewport->viewport()->rect().contains(actionRect));
+    if (longText) saveScreenshotIfRequested(&window, QStringLiteral("settlement-long-action-390x%1.png").arg(height));
+
+    // Real button dispatch, no optimistic success and no duplicate mutation while awaiting ACK.
+    action->click();
+    auto request = takeRequest(peer.data());
+    QCOMPARE(request.action, ended ? QStringLiteral("charge.settle") : QStringLiteral("charge.stop"));
+    QCOMPARE(request.payload.value("orderId").toInt(), 1028);
+    QVERIFY(!action->isEnabled());
+    action->click();
+    QVERIFY(!required<QLabel>(page, "chargeStatus")->text().contains(QStringLiteral("成功")));
     QTest::qWait(30);
     QCOMPARE(peer->bytesAvailable(), qint64{0});
 }

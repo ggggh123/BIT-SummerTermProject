@@ -52,6 +52,26 @@ void apply(QApplication &application)
             font-size: 26px;
             font-weight: 700;
         }
+        QLabel[role="chargeMetric"] {
+            color: #00856A;
+            font-size: 44px;
+            font-weight: 700;
+        }
+        QLabel[role="chargeSubMetric"] {
+            color: #172B3A;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        QLabel[role="chargeNotice"] {
+            color: #006F59;
+            background: #EAF6F2;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        QWidget#chargeMetrics {
+            background: transparent;
+        }
         QWidget[role="priceGroup"] {
             background: transparent;
         }

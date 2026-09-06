@@ -4795,6 +4795,9 @@ void UserApiTest::supersededMutationKeepsChargingPollAndFactsLive()
     auto *pages = window.findChild<QStackedWidget *>(QStringLiteral("mainPages"));
     auto *status = window.findChild<QLabel *>(QStringLiteral("chargeStatus"));
     auto *meter = window.findChild<QLabel *>(QStringLiteral("chargeMeter"));
+    auto *duration = window.findChild<QLabel *>(QStringLiteral("chargeDuration"));
+    auto *amount = window.findChild<QLabel *>(QStringLiteral("chargeSecondaryMetric"));
+    QVERIFY(duration && amount);
     auto *back = window.findChild<QPushButton *>(QStringLiteral("chargeBackButton"));
     auto *nearby = window.findChild<QPushButton *>(QStringLiteral("nearbyNavigationButton"));
     auto *current = window.findChild<QPushButton *>(QStringLiteral("currentOrderNavigationButton"));
@@ -4876,7 +4879,9 @@ void UserApiTest::supersededMutationKeepsChargingPollAndFactsLive()
 
     QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(chargePage));
     QTRY_COMPARE(status->text(), QStringLiteral("充电中"));
-    QCOMPARE(meter->text(), QStringLiteral("已充电 60 秒 · 电量 1.250 kWh · 金额 3.21 元"));
+    QCOMPARE(meter->text(), QStringLiteral("1.250"));
+    QCOMPARE(duration->text(), QStringLiteral("01:00"));
+    QCOMPARE(amount->text(), QStringLiteral("¥ 3.21"));
     QVERIFY(!back->isEnabled());
     QVERIFY(!nearby->isEnabled());
     QTRY_VERIFY(current->isVisible());
@@ -4909,8 +4914,9 @@ void UserApiTest::supersededMutationKeepsChargingPollAndFactsLive()
         reply(peer.data(), invalidatedPoll->requestId, true, QStringLiteral("OK"), QString(),
               QJsonObject{{QStringLiteral("order"), ignoredB}});
         QTest::qWait(30);
-        QCOMPARE(meter->text(),
-                 QStringLiteral("已充电 60 秒 · 电量 1.250 kWh · 金额 3.21 元"));
+        QCOMPARE(meter->text(), QStringLiteral("1.250"));
+        QCOMPARE(duration->text(), QStringLiteral("01:00"));
+        QCOMPARE(amount->text(), QStringLiteral("¥ 3.21"));
     }
 
     QTest::qWait(250);
@@ -4927,8 +4933,9 @@ void UserApiTest::supersededMutationKeepsChargingPollAndFactsLive()
     updatedB.insert(QStringLiteral("elapsedSec"), 300);
     reply(peer.data(), freshPoll.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), updatedB}});
-    QTRY_COMPARE(meter->text(),
-                 QStringLiteral("已充电 300 秒 · 电量 6.750 kWh · 金额 9.87 元"));
+    QTRY_COMPARE(meter->text(), QStringLiteral("6.750"));
+    QCOMPARE(duration->text(), QStringLiteral("05:00"));
+    QCOMPARE(amount->text(), QStringLiteral("¥ 9.87"));
     QTest::qWait(30);
     QCOMPARE(peer->bytesAvailable(), qint64{0});
 }

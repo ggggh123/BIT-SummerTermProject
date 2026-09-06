@@ -46,6 +46,8 @@ ctest --preset debug -R '^user_mobileui$' --output-on-failure
 
 本轮范围、截图与验证结果见 [竖屏 UI 验证记录](../../docs/test/user-mobile-ui-2026-09-05.md) 和 [视觉对照记录](../../design-qa.md)。
 
+2026-09-06 补充：[充电与结算 UI 收尾](../../docs/test/user-charge-ui-2026-09-06.md)落实大号电量/金额、状态相关操作与窄屏可达性。待结算仍是 `charging + endedAt`，只有服务端确认 `completed` 才显示结算成功。订单合同未提供成交单价，因此不将当前站点价冒充订单价；选择阶段的价格明确标为“站点挂牌价”。历史订单、账户和导航外观的后续精修不在此批完成范围。
+
 ## 错误、离线缓存与地图降级
 
 - `NOT_CONNECTED` / `TRANSPORT_ERROR` 表示服务端尚未连接或连接中断；`TIMEOUT` 表示请求在规定时间内没有收到响应；`INVALID_RESPONSE` 表示服务端响应不符合冻结协议。此类错误应先确认服务端和配置，再重试。
