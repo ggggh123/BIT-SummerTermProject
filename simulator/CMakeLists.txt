@@ -1,4 +1,4 @@
-find_package(Qt6 6.2 REQUIRED COMPONENTS Core Widgets Network Test)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Core Widgets Network)
 
 add_library(simulator_core STATIC
     src/core/TelemetryEngine.cpp
@@ -21,6 +21,8 @@ add_executable(ev_charger_simulator
 target_link_libraries(ev_charger_simulator PRIVATE simulator_core Qt6::Widgets)
 
 # --- tests ---
+if(BUILD_TESTING)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Test)
 add_executable(tst_simulator_engine tests/tst_telemetryengine.cpp)
 target_link_libraries(tst_simulator_engine PRIVATE simulator_core Qt6::Test)
 add_test(NAME simulator_engine COMMAND tst_simulator_engine)
@@ -42,3 +44,4 @@ target_link_libraries(tst_simulator_window PRIVATE simulator_core Qt6::Widgets Q
 add_test(NAME simulator_window COMMAND tst_simulator_window)
 set_tests_properties(simulator_window PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
