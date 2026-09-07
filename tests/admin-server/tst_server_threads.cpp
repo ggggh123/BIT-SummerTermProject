@@ -13,6 +13,25 @@
 #include <vector>
 
 namespace {
+class ScopedEnvironmentVariable
+{
+public:
+    explicit ScopedEnvironmentVariable(const QByteArray &name)
+        : m_name(name)
+        , m_wasSet(qEnvironmentVariableIsSet(name.constData()))
+        , m_value(qgetenv(name.constData()))
+    {
+    }
+    ~ScopedEnvironmentVariable()
+    {
+        if (m_wasSet) qputenv(m_name.constData(),m_value);
+        else qunsetenv(m_name.constData());
+    }
+private:
+    QByteArray m_name;
+    bool m_wasSet;
+    QByteArray m_value;
+};
 QByteArray framed(const QString &id, const QString &action, const QString &token = {}, const QJsonObject &payload = {})
 {
     return ev::protocol::encodeFrame(ev::protocol::toJson({1,id,action,token,payload}));
@@ -120,6 +139,26 @@ private slots:
             QVERIFY(ev::protocol::parseResponse(exchange(a,"own","user.get",user)).ok);
         }
         QCOMPARE(QSqlDatabase::connectionNames(),connectionsBefore);
+    }
+    void simulatorTokenIsBoundForAppContextLifetime()
+    {
+        ScopedEnvironmentVariable environment(QByteArrayLiteral("EV_SIMULATOR_TOKEN"));
+        const QString configuredToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QString replacementToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN",configuredToken.toUtf8()));
+        QTemporaryDir dir; AppContext context; QVERIFY(initialize(context,dir).ok);
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN",replacementToken.toUtf8()));
+        QTcpSocket socket; socket.connectToHost(QHostAddress::LocalHost,context.port()); QVERIFY(socket.waitForConnected());
+        QVERIFY(!login(socket).isEmpty()); // 动态用户角色发布后仍必须携带同一启动快照。
+        const QJsonObject payload{{"state","running"},{"eventCount",0},{"simulatedAt","2026-09-07T00:00:00+08:00"}};
+
+        QVERIFY(ev::protocol::parseResponse(exchange(socket,"configured-simulator","simulator.status",configuredToken,payload)).ok);
+        QCOMPARE(ev::protocol::parseResponse(exchange(socket,"replacement-simulator","simulator.status",replacementToken,payload)).code,
+                 QString("AUTH_REQUIRED"));
+        QVERIFY(qunsetenv("EV_SIMULATOR_TOKEN"));
+        for (const auto &legacy : {QString("sim-token"),QString("simulator-token"),QString("demo-simulator-token")})
+            QCOMPARE(ev::protocol::parseResponse(exchange(socket,"legacy-simulator-"+legacy,"simulator.status",legacy,payload)).code,
+                     QString("AUTH_REQUIRED"));
     }
     void restartIsCommittedOnceAndCompletesInWorker()
     {

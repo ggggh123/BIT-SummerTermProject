@@ -15,7 +15,8 @@ public:
     DatabaseWorker();
     ~DatabaseWorker() override;
     Result start(const QString &databasePath, const QString &snapshotPath,
-                 const QString &goldenPath = {}, const QString &goldenHash = {});
+                 const QString &goldenPath = {}, const QString &goldenHash = {},
+                 TokenRoles tokenRoles = TokenRoles::fromEnvironment());
     QString databasePath() const;
     QJsonObject health() const;
     void execute(quint64 sequence, const ev::protocol::RequestEnvelope &request);
