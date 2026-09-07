@@ -96,6 +96,12 @@ bool RuntimeStatusWriter::writeState(const QString &sessionState,
         file.cancelWriting();
         return failWrite(message);
     }
+    if (!file.flush()) {
+        const QString message = QStringLiteral("无法刷新运行状态文件 %1：%2")
+                                    .arg(filePath_, file.errorString());
+        file.cancelWriting();
+        return failWrite(message);
+    }
     if (!file.commit()) {
         const QString message = QStringLiteral("无法提交运行状态文件 %1：%2")
                                     .arg(filePath_, file.errorString());
