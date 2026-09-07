@@ -37,6 +37,7 @@ private slots:
     void distanceIsStable();
     void environmentOverridesLocalIni();
     void missingConfigurationIsVisibleInChinese();
+    void bundledMapKeyFallsBackWhenUnconfigured();
 };
 
 void FormattersTest::phoneAndMoney() {
@@ -123,7 +124,35 @@ void FormattersTest::missingConfigurationIsVisibleInChinese() {
     const auto *message = window.findChild<QLabel *>(QStringLiteral("configurationMessage"));
     QVERIFY(message != nullptr);
     QVERIFY(message->text().contains(QStringLiteral("缺少服务器地址")));
-    QVERIFY(message->text().contains(QStringLiteral("缺少腾讯地图密钥")));
+    // 地图 Key 已内置默认值兜底：缺失时不再产生"缺少腾讯地图密钥"错误。
+    QVERIFY(!message->text().contains(QStringLiteral("缺少腾讯地图密钥")));
+}
+
+void FormattersTest::bundledMapKeyFallsBackWhenUnconfigured() {
+    EnvironmentVariableGuard keyGuard("EV_TENCENT_MAP_KEY");
+    qunsetenv("EV_TENCENT_MAP_KEY");
+
+    // env 与 ini 均未配置时，回退到内置默认 Key（宿主/端口缺失不影响该兜底）。
+    const UserAppConfig fallback = UserAppConfig::load(QStringLiteral("/nonexistent/config.local.ini"));
+    QCOMPARE(fallback.tencentMapKey, UserAppConfig::bundledTencentMapKey());
+    for (const QString &error : fallback.validationErrors) {
+        QVERIFY2(!error.contains(QStringLiteral("腾讯地图密钥")),
+                 qUtf8Printable(error));
+    }
+
+    // ini 中显式配置的 Key 仍优先于内置默认值。
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString iniPath = temporaryDirectory.filePath(QStringLiteral("config.local.ini"));
+    QSettings settings(iniPath, QSettings::IniFormat);
+    settings.setValue(QStringLiteral("server/host"), QStringLiteral("ini.example"));
+    settings.setValue(QStringLiteral("server/port"), 9100);
+    settings.setValue(QStringLiteral("tencent/mapKey"), QStringLiteral("ini-key"));
+    settings.sync();
+
+    const UserAppConfig fromIni = UserAppConfig::load(iniPath);
+    QCOMPARE(fromIni.tencentMapKey, QStringLiteral("ini-key"));
+    QVERIFY(fromIni.isValid());
 }
 
 QTEST_MAIN(FormattersTest)

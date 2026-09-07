@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-core_packages='git cmake ninja-build pkg-config qt6-base-dev qt6-base-dev-tools qt6-webengine-dev qt6-charts-dev python3-pytest'
+core_packages='git cmake ninja-build pkg-config qt6-base-dev qt6-base-dev-tools qt6-webengine-dev libqt6webenginecore6-bin libqt6svg6 qt6-charts-dev python3-pytest'
 web_optional_packages='nodejs npm'
 ml_optional_packages='python3-numpy python3-pandas python3-sklearn python3-joblib'
 

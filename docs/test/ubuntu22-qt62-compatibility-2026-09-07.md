@@ -19,6 +19,8 @@
 | E8 | Qt 6.2 `QTimeZone` 偏移构造函数不兼容 | 模拟器编译 | 高（编译阻断） | 代码修复 `34efa38` | ✅ 已解决 |
 | E9 | 慢速虚拟机上 ctest 默认超时不足 | `demo_runtime_unit`（121 用例） | 中 | 超时 90s→240s `5f886dc` | ✅ 已解决 |
 | E10 | 测试套件上下文探针 SIGABRT | `simulator_runtime_status` 单用例 | 低（不阻塞评审） | 调查报告移交 #3 PRL | ⏳ 调查中 |
+| E11 | bootstrap/check_env 不检测 WebEngine 运行时完整性，队友虚拟机普遍复现 E1 | 全体成员环境准备 | 高（复现 E1 阻断） | 脚本补齐 + 新增检测 | ✅ 已解决 |
+| E12 | 腾讯地图 Key 依赖每人手动配置，零配置成员地图不可用 | 用户端导航/附近页 | 中 | 代码内置默认 Key 兜底 | ✅ 已解决 |
 
 ## 1. E1：缺少 QtWebEngineProcess 辅助进程（阻断）
 
@@ -136,7 +138,47 @@ sudo apt install libqt6svg6
 
 **影响评估**：不阻塞评审；仅此一个用例受影响，产品代码已由其余 15 个用例验证。
 
-## 11. 参考虚拟机环境清单（经验证的依赖）
+## 11. E11：环境脚本不保障 WebEngine 运行时完整性（已修复）
+
+**现象**：按 `scripts/bootstrap.sh` 装好的环境（含 `qt6-webengine-dev`）在其他成员虚拟机上同样出现 E1"地图空白"——说明这不是个别机器问题，而是**环境准备脚本本身的缺口**，全组人人可复现。
+
+**根因**：
+1. `bootstrap.sh` 的 core 包清单缺 `libqt6webenginecore6-bin`（QtWebEngineProcess 辅助进程）与 `libqt6svg6`（SVG 图标插件，E4）；
+2. `check_env.sh` 仅用 pkg-config 检查 `Qt6WebEngineWidgets`——**装了 `-dev` 包但缺辅助进程二进制时 pkg-config 照常通过**，检查绿灯、运行时挂，正是 E1 的隐蔽之处。
+
+**修复**（2026-09-07 补充提交）：
+1. `scripts/bootstrap.sh`：core_packages 补上 `libqt6webenginecore6-bin`、`libqt6svg6`；
+2. `scripts/check_env.sh`：新增 QtWebEngineProcess **存在性检测**——优先用 `qtpaths6 --query QT_INSTALL_LIBEXECS` 定位，回退常见路径（`/usr/lib/qt6/libexec/`、multiarch 路径），缺失时输出 `MISSING qtwebengine-process (install libqt6webenginecore6-bin)`；
+3. `tests/scripts/test_check_env.sh`：补对应用例（已配置环境静默通过；未配置环境必须输出专用 MISSING 行）。
+
+**给全组的操作指引**：已有环境的虚拟机只需补装两个包，无需重装：
+
+```bash
+sudo apt install -y libqt6webenginecore6-bin libqt6svg6
+```
+
+## 12. E12：腾讯地图 Key 从"人人手动配置"改为"代码内置默认值"（已解决）
+
+**原设计**：Key 解析链为 环境变量 `EV_TENCENT_MAP_KEY` > `config.local.ini` 的 `tencent/mapKey`，两者均缺时追加"缺少腾讯地图密钥"校验错误——每个成员克隆仓库后都必须手动搞到并配置 Key 才能看到地图。
+
+**新设计**（2026-09-07 补充提交）：解析链扩展为三级——
+
+```
+环境变量 EV_TENCENT_MAP_KEY  >  config.local.ini tencent/mapKey  >  代码内置默认值
+```
+
+- `UserAppConfig::load()` 在 env/ini 均未配置时回退到内置默认 Key（`UserAppConfig::bundledTencentMapKey()`，团队申请的 Key：`II3BZ-TK5C7-NXRXH-PCEX2-XZ365-HYFIV`）；
+- 成员**零配置**即可使用地图；env/ini 仍可覆盖（测试注入假 Key、换 Key 都不受影响）；
+- **不改动 `navigation.html`**——HTML 中的"占位符"是运行时经 `configureMap({key})` 注入的接口，并非硬编码点；直接改 HTML 会破坏依赖假 Key 注入的测试套件；
+- 受影响测试已同步更新：`tst_formatters.cpp` 原"缺少腾讯地图密钥"断言改为断言该错误**不再出现**，并新增兜底回退与 ini 覆盖优先级测试；`user_map_online_smoke` 的手动注入要求自然解除（该目标仍是 `EXCLUDE_FROM_ALL` 显式冒烟，不进默认 CTest 门槛）。
+
+**安全注记**：Key 进入版本库在本课程项目范围内可接受，但需知悉——
+1. 桌面 WebEngine 场景无法用腾讯控制台的域名白名单有效限制（无固定 Referer），Key 实际上对拿到它的人开放；
+2. 若仓库转为公开或发现配额异常消耗，应在腾讯位置服务控制台调整配额并**轮换** `UserAppConfig::bundledTencentMapKey()` 中的值（单点修改，env/ini 覆盖机制不变）。
+
+## 13. 参考虚拟机环境清单（经验证的依赖）
+
+> `scripts/bootstrap.sh` 已包含下列全部核心包（E11 修复后），新环境直接跑脚本即可；已有环境可按清单补装。
 
 ```bash
 sudo apt install -y \
@@ -155,12 +197,14 @@ export QTWEBENGINE_CHROMIUM_FLAGS="--ignore-gpu-blocklist"
 
 注意：不要设置 `--disable-gpu`（会禁用 WebGL，地图必挂）。
 
-## 12. 移交 #3 的行动项汇总
+## 14. 移交 #3 的行动项汇总
 
 | 项 | 行动 |
 |---|---|
 | E5 | 放宽 `renderedPixelsNearColor` 阈值或增加容差 |
-| E6 | 明确 `user_tencentmap` 占位 Key 与真实 API 的测试口径 |
+| E6 | 明确 `user_tencentmap` 占位 Key 与真实 API 的测试口径（注意：Key 现已内置默认值，见 E12） |
 | E10 | 按 PRL 报告 §6 复核套件上下文 SIGABRT（gdb core / 用例二分） |
 | E7 | 排查用户端是否存在同类"仅检查返回值"的写文件路径 |
-| 文档 | 将 E1/E2/E3 的包依赖与环境变量固化进 `environment-matrix.md` 与引导脚本 |
+| E11 | 知悉 `check_env.sh` 新增 QtWebEngineProcess 检测（脚本行为有配套测试） |
+| E12 | 知悉 `UserAppConfig` 内置默认 Key 兜底改动（涉及你的 user-client 领域，`tst_formatters` 断言已更新并新增兜底测试；如对 Key 管理方式有异议请反馈） |
+| 文档 | 将 E1/E2/E3 的包依赖与环境变量固化进 `environment-matrix.md`（bootstrap/check_env 已同步） |

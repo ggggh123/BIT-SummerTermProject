@@ -5,9 +5,10 @@
 - CMake 3.25+、Ninja 和支持 C++17 的编译器。
 - Qt 6.2+，包含 Core、Gui、Widgets、Network、WebEngineWidgets 和 Test 组件。
 - Node.js 18+，仅用于本地导航 HTML 合同测试。
-- 运行中的项目 Qt 服务端，以及本机自行申请的腾讯地图 WebService/Web JavaScript API Key。
+- 运行中的项目 Qt 服务端。腾讯地图 Key 已内置团队申请的默认值，**零配置即可使用**；
+  如需覆盖，可在本机环境变量或已忽略的 `config.local.ini` 中配置。
 
-Key 只能放在本机环境变量或已忽略的 `config.local.ini`，不得提交。以下命令均从仓库根目录执行；可在该目录创建不含真实密钥的本地配置：
+Key 解析优先级：`EV_TENCENT_MAP_KEY` > `config.local.ini` 的 `tencent/mapKey` > 代码内置默认值（`UserAppConfig::bundledTencentMapKey()`）。以下命令均从仓库根目录执行；可在该目录创建本地配置覆盖默认 Key：
 
 ```ini
 [server]

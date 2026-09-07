@@ -96,6 +96,24 @@ else
   fail 'default core environment check succeeds' 'core check returned non-zero'
 fi
 
+# The QtWebEngine helper process check must pass on a provisioned machine;
+# on hosts missing libqt6webenginecore6-bin the default check is expected to
+# fail with the dedicated MISSING line (pkg-config alone cannot catch this).
+if default_env_output=$("$check_env" 2>&1); then
+  if printf '%s\n' "$default_env_output" | grep -F -- 'MISSING qtwebengine-process' >/dev/null 2>&1; then
+    fail 'QtWebEngineProcess helper binary is detected' 'helper reported missing despite passing check'
+  else
+    pass 'QtWebEngineProcess helper binary is detected'
+  fi
+else
+  if printf '%s\n' "$default_env_output" | grep -F -- 'MISSING qtwebengine-process' >/dev/null 2>&1; then
+    pass 'QtWebEngineProcess helper binary is detected (reports dedicated MISSING on unprovisioned host)'
+  else
+    fail 'QtWebEngineProcess helper binary is detected' \
+      'default check failed without the dedicated MISSING qtwebengine-process line'
+  fi
+fi
+
 if "$check_env" --with-web >/dev/null 2>&1; then
   pass 'web profile environment check succeeds'
 else
