@@ -413,16 +413,19 @@ exec "$bundle/python/bin/python3" "$bundle/support/portable_launcher.py" __COMMA
         path = bundle / filename
         path.write_text(common.replace("__COMMAND__", command), encoding="utf-8")
         path.chmod(0o755)
-    (bundle / "bin/qt.conf").write_text(
+    qt_config = (
         "[Paths]\n"
         "Prefix = ..\n"
         "Libraries = lib\n"
         "Plugins = plugins\n"
         "LibraryExecutables = libexec\n"
         "Data = .\n"
-        "Translations = translations\n",
-        encoding="utf-8",
+        "Translations = translations\n"
     )
+    for executable_dir in ("bin", "libexec"):
+        (bundle / executable_dir / "qt.conf").write_text(
+            qt_config, encoding="utf-8"
+        )
     (bundle / "fonts/fonts.conf").write_text(
         "<?xml version=\"1.0\"?>\n"
         "<!DOCTYPE fontconfig SYSTEM \"fonts.dtd\">\n"

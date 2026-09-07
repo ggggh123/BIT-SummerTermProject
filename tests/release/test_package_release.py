@@ -1,4 +1,5 @@
 """Ubuntu 22.04 portable release collector behavior tests."""
+import configparser
 from pathlib import Path
 import hashlib
 import json
@@ -390,6 +391,34 @@ def test_package_uses_explicit_support_database_and_resource_whitelists(tmp_path
     assert "__pycache__" not in (
         output / "licenses/dependencies.json"
     ).read_text(encoding="utf-8")
+
+
+def test_each_qt_executable_directory_resolves_private_bundle_paths(tmp_path):
+    output = _run_package(_make_package_inputs(tmp_path))
+
+    for executable_dir in (output / "bin", output / "libexec"):
+        config_path = executable_dir / "qt.conf"
+        config = configparser.ConfigParser(interpolation=None)
+        with config_path.open(encoding="utf-8") as stream:
+            config.read_file(stream)
+        prefix = (executable_dir / config["Paths"]["Prefix"]).resolve()
+        resolved = {
+            name: (prefix / config["Paths"][name]).resolve()
+            for name in (
+                "Libraries",
+                "Plugins",
+                "LibraryExecutables",
+                "Data",
+                "Translations",
+            )
+        }
+        assert resolved == {
+            "Libraries": output / "lib",
+            "Plugins": output / "plugins",
+            "LibraryExecutables": output / "libexec",
+            "Data": output,
+            "Translations": output / "translations",
+        }
 
 
 def test_common_license_texts_have_provenance_and_notice_path_mapping(tmp_path):
