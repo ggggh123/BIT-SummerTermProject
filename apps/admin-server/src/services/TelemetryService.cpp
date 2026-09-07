@@ -17,22 +17,7 @@ QString nowIso()
     return BusinessTime::now();
 }
 
-// 合同固定 +08:00、四位年份。整数秒可以按字符串排序；小数只去掉
-// 末尾零，不转 double/QDateTime/julianday，避免丢失任意长度的小数精度。
-QString timestampKey(const QString &value)
-{
-    static const QRegularExpression pattern(QStringLiteral(
-        "\\A([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\\.([0-9]+))?\\+08:00\\z"));
-    const auto match = pattern.match(value);
-    if (!match.hasMatch()
-        || !QDate(match.captured(1).toInt(), match.captured(2).toInt(), match.captured(3).toInt()).isValid()
-        || !QTime(match.captured(4).toInt(), match.captured(5).toInt(), match.captured(6).toInt()).isValid()) {
-        return {};
-    }
-    QString fraction = match.captured(7);
-    while (fraction.endsWith(QLatin1Char('0'))) fraction.chop(1);
-    return value.left(19) + QLatin1Char('.') + fraction;
-}
+using BusinessTime::timestampKey;
 
 QJsonValue nullableText(const QString &value)
 {

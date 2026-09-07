@@ -52,7 +52,9 @@ SimulatorConfig configFromCommandLine(const QCoreApplication &app)
     config.port = static_cast<quint16>(parser.value(portOpt).toUShort());
     config.seed = parser.value(seedOpt).toUInt();
     config.intervalMs = parser.value(intervalOpt).toInt();
-    config.token = parser.value(tokenOpt);
+    config.token = parser.isSet(tokenOpt)
+        ? parser.value(tokenOpt)
+        : qEnvironmentVariable("EV_SIMULATOR_TOKEN");
     return config;
 }
 

@@ -4,6 +4,9 @@
 #include "services/UserApi.h"
 
 #include <QLabel>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QIcon>
 #include <QPushButton>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -12,12 +15,11 @@ namespace {
 
 const QString kUncertain = QStringLiteral("结果未确认，需要刷新");
 
-QString meterText(const ev::user::Order &order)
+QString durationText(qint64 elapsedSec)
 {
-    return QStringLiteral("已充电 %1 秒 · 电量 %2 kWh · 金额 %3 元")
-        .arg(order.elapsedSec)
-        .arg(order.energyKwh, 0, 'f', 3)
-        .arg(formatFen(order.amountFen));
+    return QStringLiteral("%1:%2")
+        .arg(elapsedSec / 60, 2, 10, QLatin1Char('0'))
+        .arg(elapsedSec % 60, 2, 10, QLatin1Char('0'));
 }
 
 } // namespace
@@ -25,25 +27,42 @@ QString meterText(const ev::user::Order &order)
 ChargePage::ChargePage(UserApi *api, QWidget *parent)
     : QWidget(parent)
     , api_(api)
+    , title_(new QLabel(QStringLiteral("当前订单"), this))
+    , progress_(new QLabel(this))
     , status_(new QLabel(this))
     , identity_(new QLabel(this))
+    , metrics_(new QWidget(this))
+    , metricCaption_(new QLabel(this))
     , meter_(new QLabel(this))
+    , metricUnit_(new QLabel(this))
+    , duration_(new QLabel(this))
+    , secondaryCaption_(new QLabel(this))
+    , secondaryMetric_(new QLabel(this))
+    , notice_(new QLabel(this))
     , summary_(new QLabel(this))
     , error_(new QLabel(this))
     , reserveButton_(new QPushButton(QStringLiteral("预约充电桩"), this))
     , startButton_(new QPushButton(QStringLiteral("开始充电"), this))
     , cancelButton_(new QPushButton(QStringLiteral("取消预约"), this))
     , stopButton_(new QPushButton(QStringLiteral("停止充电"), this))
-    , settleButton_(new QPushButton(QStringLiteral("结算"), this))
+    , settleButton_(new QPushButton(QStringLiteral("确认结算"), this))
     , backButton_(new QPushButton(QStringLiteral("返回充电站"), this))
     , retryButton_(new QPushButton(QStringLiteral("刷新订单"), this))
     , pollTimer_(new QTimer(this))
 {
     Q_ASSERT(api_ != nullptr);
     setObjectName(QStringLiteral("chargePage"));
+    title_->setObjectName(QStringLiteral("chargeTitle"));
+    progress_->setObjectName(QStringLiteral("chargeProgress"));
     status_->setObjectName(QStringLiteral("chargeStatus"));
     identity_->setObjectName(QStringLiteral("chargeOrderIdentity"));
+    metrics_->setObjectName(QStringLiteral("chargeMetrics"));
+    metricCaption_->setObjectName(QStringLiteral("chargeMetricCaption"));
     meter_->setObjectName(QStringLiteral("chargeMeter"));
+    metricUnit_->setObjectName(QStringLiteral("chargeMetricUnit"));
+    duration_->setObjectName(QStringLiteral("chargeDuration"));
+    secondaryMetric_->setObjectName(QStringLiteral("chargeSecondaryMetric"));
+    notice_->setObjectName(QStringLiteral("chargeNotice"));
     summary_->setObjectName(QStringLiteral("chargeSummary"));
     error_->setObjectName(QStringLiteral("chargeError"));
     reserveButton_->setObjectName(QStringLiteral("chargeReserveButton"));
@@ -53,17 +72,75 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
     settleButton_->setObjectName(QStringLiteral("chargeSettleButton"));
     backButton_->setObjectName(QStringLiteral("chargeBackButton"));
     retryButton_->setObjectName(QStringLiteral("chargeRetryButton"));
-    status_->setWordWrap(true);
-    identity_->setWordWrap(true);
-    meter_->setWordWrap(true);
-    summary_->setWordWrap(true);
-    error_->setWordWrap(true);
+    for (QLabel *label : {title_, progress_, status_, identity_, metricCaption_, meter_,
+                         metricUnit_, duration_, secondaryCaption_, secondaryMetric_, notice_,
+                         summary_, error_}) {
+        label->setWordWrap(true);
+        label->setTextFormat(Qt::PlainText);
+        label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    }
+    title_->setProperty("role", QStringLiteral("pageTitle"));
+    status_->setProperty("role", QStringLiteral("sectionTitle"));
+    for (QLabel *label : {progress_, identity_, metricCaption_, secondaryCaption_, summary_})
+        label->setProperty("role", QStringLiteral("secondary"));
+    meter_->setProperty("role", QStringLiteral("chargeMetric"));
+    duration_->setProperty("role", QStringLiteral("chargeSubMetric"));
+    secondaryMetric_->setProperty("role", QStringLiteral("chargeSubMetric"));
+    notice_->setProperty("role", QStringLiteral("chargeNotice"));
+    error_->setProperty("role", QStringLiteral("danger"));
+    for (QPushButton *button : {reserveButton_, startButton_, settleButton_, backButton_})
+        button->setProperty("role", QStringLiteral("primary"));
+    stopButton_->setProperty("role", QStringLiteral("danger"));
+    cancelButton_->setProperty("role", QStringLiteral("textAction"));
+    retryButton_->setProperty("role", QStringLiteral("outline"));
 
     auto *layout = new QVBoxLayout(this);
-    layout->addWidget(status_);
-    layout->addWidget(identity_);
-    layout->addWidget(meter_);
-    layout->addWidget(summary_);
+    layout->setContentsMargins(20, 20, 20, 20);
+    layout->setSpacing(16);
+    layout->addWidget(title_);
+    layout->addWidget(progress_);
+    auto *card = new QFrame(this);
+    card->setProperty("role", QStringLiteral("card"));
+    auto *cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(16, 16, 16, 16);
+    cardLayout->setSpacing(12);
+    auto *header = new QHBoxLayout;
+    auto *icon = new QLabel(card);
+    icon->setPixmap(QIcon(QStringLiteral(":/ui/charger.svg")).pixmap(40, 40));
+    icon->setFixedSize(44, 44);
+    header->addWidget(icon);
+    header->addWidget(status_, 1);
+    cardLayout->addLayout(header);
+    cardLayout->addWidget(identity_);
+    auto *metricLayout = new QVBoxLayout(metrics_);
+    metricLayout->setContentsMargins(0, 8, 0, 8);
+    metricLayout->setSpacing(8);
+    metricCaption_->setAlignment(Qt::AlignCenter);
+    meter_->setAlignment(Qt::AlignCenter);
+    metricUnit_->setAlignment(Qt::AlignCenter);
+    metricLayout->addWidget(metricCaption_);
+    metricLayout->addWidget(meter_);
+    metricLayout->addWidget(metricUnit_);
+    auto *secondary = new QHBoxLayout;
+    secondary->setSpacing(16);
+    auto *durationGroup = new QVBoxLayout;
+    auto *durationCaption = new QLabel(QStringLiteral("充电时长 · 分:秒"), metrics_);
+    durationCaption->setProperty("role", QStringLiteral("secondary"));
+    durationCaption->setAlignment(Qt::AlignCenter);
+    duration_->setAlignment(Qt::AlignCenter);
+    durationGroup->addWidget(durationCaption);
+    durationGroup->addWidget(duration_);
+    auto *secondaryGroup = new QVBoxLayout;
+    secondaryCaption_->setAlignment(Qt::AlignCenter);
+    secondaryMetric_->setAlignment(Qt::AlignCenter);
+    secondaryGroup->addWidget(secondaryCaption_);
+    secondaryGroup->addWidget(secondaryMetric_);
+    secondary->addLayout(durationGroup, 1);
+    secondary->addLayout(secondaryGroup, 1);
+    metricLayout->addLayout(secondary);
+    cardLayout->addWidget(metrics_);
+    cardLayout->addWidget(notice_);
+    layout->addWidget(card);
     layout->addWidget(error_);
     layout->addWidget(reserveButton_);
     layout->addWidget(startButton_);
@@ -72,6 +149,12 @@ ChargePage::ChargePage(UserApi *api, QWidget *parent)
     layout->addWidget(settleButton_);
     layout->addWidget(retryButton_);
     layout->addWidget(backButton_);
+    // Put the active action before the long receipt so it stays reachable on short screens.
+    layout->addWidget(summary_);
+    auto *footnote = new QLabel(QStringLiteral("费用以服务端结算结果为准 · 演示余额扣款"), this);
+    footnote->setWordWrap(true);
+    footnote->setProperty("role", QStringLiteral("secondary"));
+    layout->addWidget(footnote);
     layout->addStretch();
 
     pollTimer_->setInterval(2'000);
@@ -412,9 +495,15 @@ void ChargePage::resetForSessionExpiry(quint64 sessionGeneration)
 
 void ChargePage::render()
 {
+    title_->setText(QStringLiteral("当前订单"));
+    progress_->setText(QStringLiteral("预约  /  充电  /  结算"));
     identity_->hide();
+    metrics_->hide();
     meter_->setVisible(false);
     summary_->setVisible(false);
+    error_->setVisible(!error_->text().isEmpty());
+    for (QPushButton *button : {reserveButton_, startButton_, cancelButton_, stopButton_,
+                               settleButton_, backButton_}) button->hide();
     reserveButton_->setEnabled(false);
     startButton_->setEnabled(false);
     cancelButton_->setEnabled(false);
@@ -424,6 +513,11 @@ void ChargePage::render()
     retryButton_->setVisible(reconciliationRequired_ || factsFailed_ || !connected_);
     retryButton_->setEnabled(pageActive_ && !pendingRead_.has_value()
                              && !factsPending_ && !pendingMutation_.has_value());
+    notice_->setText(!connected_ ? QStringLiteral("连接已断开，当前显示上次确认数据")
+        : pendingMutation_.has_value() ? QStringLiteral("正在提交，请等待服务端确认")
+        : reconciliationRequired_ || factsFailed_ || (factsPending_ && factsGateRequired_)
+            ? QStringLiteral("正在核验订单，确认前暂停操作")
+            : QStringLiteral("操作与数据均以服务端确认为准"));
 
     if (!pageActive_) {
         status_->setText(QStringLiteral("充电页面已离开"));
@@ -435,12 +529,18 @@ void ChargePage::render()
     if (!order_.has_value()) {
         status_->setText(QStringLiteral("尚未预约"));
         if (selection_.has_value()) {
-            status_->setText(QStringLiteral("已选择 %1 · %2")
-                                 .arg(selection_->station.name, selection_->charger.code));
+            title_->setText(QStringLiteral("预约确认"));
+            status_->setText(QStringLiteral("已选择充电桩"));
+            identity_->setText(QStringLiteral("%1\n充电桩 %2\n站点挂牌价 ¥ %3 / 度")
+                .arg(selection_->station.name, selection_->charger.code,
+                     formatFen(selection_->station.priceFenPerKwh)));
+            identity_->show();
+            reserveButton_->show();
             reserveButton_->setEnabled(
                 mutableNow && selection_->charger.status == QStringLiteral("idle"));
         } else if (reconciledNoOrder_) {
             status_->setText(QStringLiteral("当前无未完成订单"));
+            backButton_->show();
             backButton_->setEnabled(!chargeFlowBlocked());
         }
         updatePolling();
@@ -448,39 +548,63 @@ void ChargePage::render()
     }
     const ev::user::Order &order = *order_;
     identity_->setText(
-        QStringLiteral("订单 ID：%1 · 充电站：%2 · 充电桩：%3")
+        QStringLiteral("%2\n充电桩 %3 · 订单 ID：%1")
             .arg(order.orderId)
             .arg(order.stationName.isEmpty() ? QStringLiteral("—") : order.stationName,
                  order.chargerCode.isEmpty() ? QStringLiteral("—") : order.chargerCode));
     identity_->show();
+    summary_->setText(QStringLiteral("订单时间记录（服务端原值）\n预约：%1%2%3")
+        .arg(order.reservedAt,
+             order.startedAt.isEmpty() ? QString() : QStringLiteral("\n开始：%1").arg(order.startedAt),
+             order.endedAt.isEmpty() ? QString() : QStringLiteral("\n结束：%1").arg(order.endedAt)));
+    summary_->show();
+    const bool monetaryPrimary = (order.status == QStringLiteral("charging") && !order.endedAt.isEmpty())
+        || order.status == QStringLiteral("completed");
+    if (order.status == QStringLiteral("charging") || order.status == QStringLiteral("completed")) {
+        metricCaption_->setText(monetaryPrimary ? (order.status == QStringLiteral("completed")
+            ? QStringLiteral("已结算金额") : QStringLiteral("应付金额")) : QStringLiteral("已充电量"));
+        meter_->setText(monetaryPrimary ? formatFen(order.amountFen)
+                                       : QString::number(order.energyKwh, 'f', 3));
+        metricUnit_->setText(monetaryPrimary ? QStringLiteral("元") : QStringLiteral("kWh"));
+        duration_->setText(durationText(order.elapsedSec));
+        secondaryCaption_->setText(monetaryPrimary ? QStringLiteral("已充电量") : QStringLiteral("当前金额"));
+        secondaryMetric_->setText(monetaryPrimary
+            ? QStringLiteral("%1 kWh").arg(order.energyKwh, 0, 'f', 3)
+            : QStringLiteral("¥ %1").arg(formatFen(order.amountFen)));
+        metrics_->show();
+        meter_->show();
+    }
     if (order.status == QStringLiteral("reserved")) {
+        progress_->setText(QStringLiteral("第 1 步 · 预约已确认"));
         status_->setText(QStringLiteral("已预约"));
+        startButton_->show();
+        cancelButton_->show();
         const bool associatedReserved = associatedCharger_.has_value()
             && associatedCharger_->chargerId == order.chargerId
             && associatedCharger_->status == QStringLiteral("reserved");
         startButton_->setEnabled(mutableNow && associatedReserved);
         cancelButton_->setEnabled(mutableNow && associatedReserved);
     } else if (order.status == QStringLiteral("charging") && order.endedAt.isEmpty()) {
+        progress_->setText(QStringLiteral("第 2 步 · 充电进行中"));
         status_->setText(QStringLiteral("充电中"));
-        meter_->setText(meterText(order));
-        meter_->setVisible(true);
+        stopButton_->show();
         stopButton_->setEnabled(mutableNow);
     } else if (order.status == QStringLiteral("charging")) {
+        title_->setText(QStringLiteral("确认结算"));
+        progress_->setText(QStringLiteral("第 3 步 · 已停止，待结算"));
         status_->setText(QStringLiteral("充电已停止，等待结算"));
-        summary_->setText(QStringLiteral("最终数据：%1 · 停止时间 %2")
-                              .arg(meterText(order), order.endedAt));
-        summary_->setVisible(true);
+        settleButton_->show();
         settleButton_->setEnabled(mutableNow);
     } else if (order.status == QStringLiteral("completed")) {
+        title_->setText(QStringLiteral("结算结果"));
+        progress_->setText(QStringLiteral("本次充电已完成"));
         status_->setText(QStringLiteral("充电完成，结算成功"));
-        summary_->setText(QStringLiteral("结算结果：%1").arg(meterText(order)));
-        summary_->setVisible(true);
+        backButton_->show();
         backButton_->setEnabled(!chargeFlowBlocked());
     } else if (order.status == QStringLiteral("cancelled")) {
+        progress_->setText(QStringLiteral("本次预约已结束"));
         status_->setText(QStringLiteral("预约已取消"));
-        summary_->setText(QStringLiteral("订单 %1 · 取消时间 %2")
-                              .arg(order.orderId).arg(order.endedAt));
-        summary_->setVisible(true);
+        backButton_->show();
         backButton_->setEnabled(!chargeFlowBlocked());
     }
     updatePolling();

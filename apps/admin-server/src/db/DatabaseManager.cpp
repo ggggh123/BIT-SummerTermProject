@@ -14,6 +14,7 @@
 #include <QStandardPaths>
 #include <QStringList>
 #include <QVariant>
+#include <QUuid>
 
 namespace {
 
@@ -111,22 +112,33 @@ int scalarInt(QSqlDatabase database, const QString &sql)
 
 } // namespace
 
-Result DatabaseManager::open(const QString &databasePath)
+DatabaseManager::DatabaseManager()
+    : m_connectionName(QStringLiteral("management-") + QUuid::createUuid().toString(QUuid::WithoutBraces)) {}
+
+DatabaseManager::~DatabaseManager()
+{
+    if (QSqlDatabase::contains(m_connectionName)) {
+        { auto db = QSqlDatabase::database(m_connectionName, false); db.close(); }
+        QSqlDatabase::removeDatabase(m_connectionName);
+    }
+}
+
+QString DatabaseManager::resolvePath(const QString &databasePath)
 {
     if (databasePath.trimmed().isEmpty()) {
         QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
         if (dataDir.isEmpty()) {
             dataDir = QDir::currentPath() + QStringLiteral("/runtime");
         }
-        QDir().mkpath(dataDir);
-        m_databasePath = dataDir + QStringLiteral("/charging_platform_server_data_v1.db");
-    } else {
-        m_databasePath = QDir::cleanPath(databasePath);
-        const QFileInfo databaseFile(m_databasePath);
-        if (!databaseFile.absolutePath().isEmpty()) {
-            QDir().mkpath(databaseFile.absolutePath());
-        }
+        return QDir(dataDir).absoluteFilePath(QStringLiteral("charging_platform_server_data_v1.db"));
     }
+    return QFileInfo(QDir::cleanPath(databasePath)).absoluteFilePath();
+}
+
+Result DatabaseManager::open(const QString &databasePath)
+{
+    m_databasePath = resolvePath(databasePath);
+    QDir().mkpath(QFileInfo(m_databasePath).absolutePath());
 
     QSqlDatabase db = QSqlDatabase::contains(m_connectionName)
         ? QSqlDatabase::database(m_connectionName)

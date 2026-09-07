@@ -1,5 +1,7 @@
 # Foundation v1 冻结接口合同
 
+> **2026-09-06 已批准补充：** 用户明确同意第 5 节“命令容量准入例外”。帧、身份和基础字段检查完成后，命令容量耗尽可先返回 `SERVER_BUSY`；成功准入后继续原权威业务检查和幂等语义。本补充不改变 v1 envelope、action、字段、状态或已有成功 ACK 内容，详见[变更记录](../management/interface-amendment-2026-09-06-capacity.md)。
+
 > **2026-09-04 运行 profile 说明：** 本合同的 v1 action、字段、状态、错误码和语义保持冻结，不因交付范围重置而删除、改名或缩窄。默认 **core profile** 只要求 Qt 用户端、Qt 管理/服务端、SQLite/设备模拟器形成闭环；它不要求在线 ML 生产者或 Web 消费者。`forecast.publish` 是显式启用的 optional producer extension；`forecast.latest`、`ForecastRun`/`ForecastRecord` 与第 8 节 dashboard snapshot contract 是必须保留的兼容能力。没有 active forecast 是合法 core 状态，`forecast.latest` 必须按既有合同返回 `forecastRun: null` 与 `records: []`；Web snapshot 不进入 core release gate。启用 Web 或 ML optional profile 时，本合同全文仍完整适用，不能以 optional 身份放宽任何既有合同规则。
 
 ## 1. 范围与规范词
@@ -133,7 +135,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 | `DB_BUSY` | false | SQLite busy 或锁等待超时 |
 | `INTERNAL_ERROR` | false | 其他未分类服务端错误；不得泄露凭据或 SQL 细节 |
 
-失败判定使用固定优先级，先命中者决定唯一 code：
+正常准入请求的失败判定使用以下固定优先级，先命中者决定唯一 code；命令容量耗尽时仅适用本节下方明确列出的准入例外：
 
 1. frame/envelope/version：无效帧、JSON、envelope 或未知 action 为 `INVALID_REQUEST`；数值 version 非 1 为 `UNSUPPORTED_VERSION`；
 2. auth/permission：`AUTH_REQUIRED` 先于 `FORBIDDEN`，均在业务 SQL 和 action payload 语义校验前完成；
@@ -142,6 +144,14 @@ charger 与 active order 必须作为一个耦合状态处理：
 5. infrastructure：`SERVER_BUSY`，然后 `DB_BUSY`，最后 `INTERNAL_ERROR`。
 
 一般 infrastructure 失败在相关 action 均可适用；第 7 节逐 action 的“主要失败”按该 action 内的判定顺序书写。未知 action 对所有身份返回 `INVALID_REQUEST`，权限函数则必须返回 deny。
+
+### 5.1 命令容量准入例外（2026-09-06 用户批准）
+
+- 已接纳连接上的命令先完成 frame/envelope/version、action 存在性、auth/permission 与基础字段检查，再判定待处理命令容量。基础字段包括声明字段的缺失、JSON 类型、safe integer、基础范围/枚举/结构，以及手机号格式、设备 Timestamp 格式和 `demo.reset.confirmation`；错误仍使用上述对应 code，不能被容量错误覆盖。
+- 当命令容量已满，且这些前置检查均通过时，允许直接返回 `ok=false,code=SERVER_BUSY,data={}`，不要求先查询数据库判断实体存在性、订单/余额/设备状态、历史 requestId 或预测业务语义。forecast 字段基础类型和结构仍在准入前校验；跨字段关系、144 条完整性、预测物理边界、唯一性、站点集合及 run/hash 等 `FORECAST_INVALID` 语义在成功准入后按原合同判定。
+- 此类 `SERVER_BUSY` 代表本次调用未接纳：不排入业务队列、不修改业务数据、不创建或覆盖持久化业务 ACK、不占用 requestId。调用方稍后可用同一 requestId 和同一有效 payload 重试。若此前已保存该 requestId 的最终 ACK，满队列时本次尝试仍可先被拒绝；后续成功准入必须重放原 ACK bytes，不能以这次 `SERVER_BUSY` 替换原 ACK 或重复业务。
+- 成功准入后，第 7 节各 action 的业务检查顺序、事务原子性、历史 ACK 重放、Timestamp 和错误域均保持不变。该例外不允许未认证调用、放宽字段校验、无界扩容、前台执行 SQL 或跨线程使用数据库连接。
+- 缓存 `system.health` 不依赖数据库命令容量，仍可直接响应；连接槽位耗尽时，连接尚未接纳，仍按 `SERVER_BUSY` 的连接容量含义拒绝连接，不据此开放业务权限。
 
 ## 6. 27 个 action 与权限矩阵
 

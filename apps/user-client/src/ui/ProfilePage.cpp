@@ -3,8 +3,9 @@
 #include "domain/Formatters.h"
 #include "services/UserApi.h"
 
-#include <QFormLayout>
+#include <QFrame>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPixmap>
@@ -40,6 +41,7 @@ ProfilePage::ProfilePage(UserApi *api, QWidget *parent)
     : QWidget(parent)
     , api_(api)
     , avatar_(new QLabel(this))
+    , displayName_(new QLabel(this))
     , nicknameEdit_(new QLineEdit(this))
     , nicknameSaveButton_(new QPushButton(QStringLiteral("保存昵称"), this))
     , mobile_(new QLineEdit(this))
@@ -55,35 +57,89 @@ ProfilePage::ProfilePage(UserApi *api, QWidget *parent)
 
     avatar_->setObjectName(QStringLiteral("profileAvatar"));
     avatar_->setAlignment(Qt::AlignCenter);
-    avatar_->setFixedSize(112, 112);
+    avatar_->setFixedSize(56, 56);
+    displayName_->setObjectName(QStringLiteral("profileDisplayName"));
+    displayName_->setProperty("role", QStringLiteral("sectionTitle"));
+    displayName_->setTextFormat(Qt::PlainText);
+    displayName_->setWordWrap(true);
+    displayName_->setMinimumWidth(0);
+    displayName_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     nicknameEdit_->setObjectName(QStringLiteral("nicknameEdit"));
     nicknameSaveButton_->setObjectName(QStringLiteral("nicknameSaveButton"));
     mobile_->setObjectName(QStringLiteral("profileMobile"));
+    mobile_->setAccessibleName(QStringLiteral("手机号"));
     mobile_->setReadOnly(true);
+    mobile_->setFocusPolicy(Qt::NoFocus);
     balance_->setObjectName(QStringLiteral("profileBalance"));
+    balance_->setProperty("role", QStringLiteral("chargeMetric"));
+    balance_->setWordWrap(true);
+    balance_->setMinimumWidth(0);
+    balance_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     rechargeEdit_->setObjectName(QStringLiteral("rechargeEdit"));
-    rechargeEdit_->setPlaceholderText(QStringLiteral("例如 12.34"));
+    rechargeEdit_->setPlaceholderText(QStringLiteral("输入充值金额（元）"));
+    rechargeEdit_->setAccessibleName(QStringLiteral("充值金额（元）"));
+    rechargeEdit_->setMinimumWidth(0);
+    nicknameEdit_->setMinimumWidth(0);
+    nicknameEdit_->setAccessibleName(QStringLiteral("昵称"));
     rechargeButton_->setObjectName(QStringLiteral("rechargeButton"));
+    rechargeButton_->setProperty("role", QStringLiteral("primary"));
+    nicknameSaveButton_->setProperty("role", QStringLiteral("outline"));
     status_->setObjectName(QStringLiteral("profileStatus"));
     status_->setWordWrap(true);
+    status_->setProperty("role", QStringLiteral("secondary"));
     error_->setObjectName(QStringLiteral("profileError"));
     error_->setWordWrap(true);
+    error_->setTextFormat(Qt::PlainText);
+    error_->setProperty("role", QStringLiteral("danger"));
     retryButton_->setObjectName(QStringLiteral("profileRetryButton"));
 
     auto *layout = new QVBoxLayout(this);
-    layout->addWidget(avatar_, 0, Qt::AlignHCenter);
-    auto *form = new QFormLayout;
+    layout->setContentsMargins(20, 20, 20, 20);
+    layout->setSpacing(16);
+    auto *title = new QLabel(QStringLiteral("我的账户"), this);
+    title->setProperty("role", QStringLiteral("pageTitle"));
+    layout->addWidget(title);
+    auto *identity = new QHBoxLayout;
+    identity->setSpacing(12);
+    identity->addWidget(avatar_, 0, Qt::AlignTop);
+    auto *identityText = new QVBoxLayout;
+    identityText->setSpacing(2);
+    identityText->addWidget(displayName_);
+    identityText->addWidget(mobile_);
+    identity->addLayout(identityText, 1);
+    layout->addLayout(identity);
+
+    auto *wallet = new QFrame(this);
+    wallet->setProperty("role", QStringLiteral("card"));
+    auto *walletLayout = new QVBoxLayout(wallet);
+    walletLayout->setContentsMargins(16, 16, 16, 16);
+    walletLayout->setSpacing(10);
+    auto *balanceTitle = new QLabel(QStringLiteral("账户余额（元）"), wallet);
+    balanceTitle->setProperty("role", QStringLiteral("secondary"));
+    walletLayout->addWidget(balanceTitle);
+    walletLayout->addWidget(balance_);
+    walletLayout->addWidget(rechargeEdit_);
+    walletLayout->addWidget(rechargeButton_);
+    auto *rechargeHint = new QLabel(QStringLiteral("项目演示充值，不涉及真实支付"), wallet);
+    rechargeHint->setProperty("role", QStringLiteral("secondary"));
+    rechargeHint->setWordWrap(true);
+    walletLayout->addWidget(rechargeHint);
+    layout->addWidget(wallet);
+
+    auto *details = new QFrame(this);
+    details->setProperty("role", QStringLiteral("card"));
+    auto *detailsLayout = new QVBoxLayout(details);
+    detailsLayout->setContentsMargins(16, 16, 16, 16);
+    detailsLayout->setSpacing(10);
+    auto *detailsTitle = new QLabel(QStringLiteral("账户资料"), details);
+    detailsTitle->setProperty("role", QStringLiteral("sectionTitle"));
+    detailsLayout->addWidget(detailsTitle);
     auto *nicknameRow = new QHBoxLayout;
-    nicknameRow->addWidget(nicknameEdit_);
+    nicknameRow->setSpacing(8);
+    nicknameRow->addWidget(nicknameEdit_, 1);
     nicknameRow->addWidget(nicknameSaveButton_);
-    form->addRow(QStringLiteral("昵称"), nicknameRow);
-    form->addRow(QStringLiteral("手机号"), mobile_);
-    form->addRow(QStringLiteral("余额"), balance_);
-    auto *rechargeRow = new QHBoxLayout;
-    rechargeRow->addWidget(rechargeEdit_);
-    rechargeRow->addWidget(rechargeButton_);
-    form->addRow(QStringLiteral("充值金额（元）"), rechargeRow);
-    layout->addLayout(form);
+    detailsLayout->addLayout(nicknameRow);
+    layout->addWidget(details);
     layout->addWidget(status_);
     layout->addWidget(error_);
     layout->addWidget(retryButton_, 0, Qt::AlignLeft);
@@ -201,16 +257,21 @@ void ProfilePage::displayUser(const ev::user::User &user)
         pixmap.load(user.avatarPath);
     }
     if (pixmap.isNull()) {
-        pixmap.load(QStringLiteral(":/images/default-avatar.svg"));
+        pixmap = QIcon(QStringLiteral(":/ui/person.svg")).pixmap(QSize(56, 56), devicePixelRatioF());
+    } else {
+        pixmap = pixmap.scaled(QSize(56, 56) * devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        pixmap.setDevicePixelRatio(devicePixelRatioF());
     }
-    avatar_->setPixmap(pixmap.scaled(96, 96, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    avatar_->setPixmap(pixmap);
+    displayName_->setText(user.nickname.isEmpty() ? QStringLiteral("充电用户") : user.nickname);
     nicknameEdit_->setText(user.nickname);
     mobile_->setText(user.mobile);
-    balance_->setText(QStringLiteral("%1 元").arg(formatFen(user.balanceFen)));
+    balance_->setText(formatFen(user.balanceFen));
 }
 
 void ProfilePage::updateControls()
 {
+    error_->setVisible(!error_->text().isEmpty());
     const bool mutationsEnabled = connected_ && hasUser_ && !readPending_ && !mutationPending_
         && !reconciliationRequired_;
     nicknameEdit_->setEnabled(mutationsEnabled);

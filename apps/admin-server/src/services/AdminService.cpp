@@ -6,7 +6,6 @@
 #include <QJsonArray>
 #include <QSqlError>
 #include <QSqlQuery>
-#include <QTimer>
 #include <QVariant>
 #include <cmath>
 
@@ -180,9 +179,6 @@ Result AdminService::chargerRestart(const QJsonObject &payload, QJsonObject *res
     if (!database.commit()) {
         return databaseFailure(database.lastError());
     }
-    QTimer::singleShot(1500, [this, chargerId]() {
-        finishRestart(chargerId);
-    });
     if (responseData) {
         responseData->insert(QStringLiteral("charger"), chargerObject(chargerId));
     }

@@ -2,7 +2,9 @@
 
 充电桩管理与演示平台小学期项目。
 
-> **2026-09-06 本地集成候选：** `integration/core-20260906` 已补交并评审原始三个业务 P0，以及模拟器/数据工具和管理端运行修复；加入实际 Qt 三端正常/故障测试后，清理重建、CTest **25/25**、数据库 15/15 与地图离线 15/15 通过。详见[修复后复验记录](docs/test/core-fixes-2026-09-06.md)及[最终综合审查归档](docs/review/core-fixes-review-2026-09-06.md)；[修前诊断基线](docs/test/core-integration-baseline-2026-09-06.md)保留历史证据。各域的局部审查/测试通过不等于最终综合审查放行；该审查已中断，不能称 review clean。专属 DB worker、在线 reset、人工三端/地图彩排等仍未全部关闭，不是项目 GO，也未合入 dev/main，不能把“下一步只差共享发布”视为事实。
+> **2026-09-06 共享集成基线：** [PR #10](https://github.com/ggggh123/BIT-SummerTermProject/pull/10) 已合入 `dev@97c6da1`。本机后续分支 `feat/core-delivery-20260906` 已实现 DB worker、在线 reset 和恢复加固；用户批准容量补充后，`6863b36` [限定评审](docs/review/server-delivery-review-2026-09-06.md)已关闭 I1/N1。`a867ca6` 继续落实[充电与结算竖屏 UI](docs/test/user-charge-ui-2026-09-06.md)，完整构建、CTest **29/29**、数据库 **15/15** 通过。这些后续提交仍是本机候选，尚未共享合入 dev。
+>
+> **本机运行交付增量（2026-09-06）：** 四个reset/start/smoke/stop入口已实现，真实三程序offscreen基础流程及坏模拟器token回滚已有[验证记录](docs/test/core-runtime-entrypoints-2026-09-06.md)。历史/账户/导航外观收尾、换机验证、人工三端/腾讯地图联调与同 SHA 双彩排仍待完成。按[交付路线](docs/management/project-plan.md)推进，尚未宣布 GO 或发布到 main；此前[综合审查中断记录](docs/review/core-fixes-review-2026-09-06.md)继续保留。
 
 ## 当前交付口径（2026-09-04 生效）
 
@@ -11,7 +13,7 @@
 ## 三条核心交付线
 
 1. **Qt 用户端（#3 PRL）**：11 位手机号登录/自动注册、查站查桩、腾讯地图 Web API 地址解析与 QWebEngineView 驾车/步行导航，以及预约到结算的用户流程。
-2. **Qt 管理/服务端（#2 TL）**：长度前缀 JSON/TCP、业务状态机、唯一运行时 SQLite 写入、管理统计、故障重启与用户管理；原始 P0 已在本地候选修复，剩余合同和发布门槛见修复记录。
+2. **Qt 管理/服务端（#2 TL）**：长度前缀 JSON/TCP、业务状态机、唯一运行时 SQLite 写入、管理统计、故障重启与用户管理；原始 P0 修复已合入 dev，线程隔离与在线复位在后续本机分支收尾，尚不能把本机候选当作共享发布版。
 3. **SQLite 与 Qt 模拟器（#4 SCML）**：版本化 Schema、受校验黄金库、模拟器状态/遥测/故障和数据一致性。
 
 ## Web 与 ML：保留的可选参考成果
@@ -24,8 +26,12 @@
 - [范围基线 v2](docs/management/scope-baseline.md) 与 [2026-09-04 范围变更记录](docs/management/scope-change-2026-09-04.md)
 - [仓库进展审计（2026-09-04）](docs/review/repository-progress-audit-2026-09-04.md)
 - [核心阻塞修复与同版本复验（2026-09-06）](docs/test/core-fixes-2026-09-06.md)、[最终综合审查归档（2026-09-06）](docs/review/core-fixes-review-2026-09-06.md) 与 [团队交接状态](docs/management/core-integration-handoff-2026-09-06.md)
+- [本批服务端交付审查](docs/review/server-delivery-review-2026-09-06.md)（保留历史发现，新增用户批准后的修复与关闭证据）
+- [充电/结算 UI 与实际 Qt 截图](docs/test/user-charge-ui-2026-09-06.md)（受控 UI 响应，不代替真实三端联调）
 - [接口合同](docs/design/interface-contract.md) 与 [当前实施计划索引](docs/superpowers/plans/README.md)
 - [核心验收清单](docs/release/core-acceptance-checklist.md)
+- [核心演示与交付操作手册](docs/release/core-demo-runbook.md)（四运行入口、保留手动流程、八分钟主线、数值核对和双彩排要求）
+- [四入口与真实三程序基础验证](docs/test/core-runtime-entrypoints-2026-09-06.md)（独立运行副本、身份回收、TCP只读业务冒烟；不代替腾讯/人工/换机门禁）
 - [2026-09-01 历史五系统架构图](docs/design/five-system-architecture.html)（历史基线，不是当前唯一架构）
 
 ## 正式角色与当前职责

@@ -170,7 +170,7 @@ void SimulatorClientTest::requestIdIsStableForSample()
     TelemetrySample s;
     s.chargerId = 1001;
     s.recordedAt = QDateTime::fromMSecsSinceEpoch(
-        1234567890000LL, QTimeZone::fromSecondsAheadOfUtc(8 * 3600));
+        1234567890000LL, QTimeZone(8 * 3600));  // Qt 6.2 基线兼容：6.4+ 才有 fromSecondsAheadOfUtc
     const QString a = SimulatorClient::requestIdForSample(s);
     const QString b = SimulatorClient::requestIdForSample(s);
     QCOMPARE(a, b);

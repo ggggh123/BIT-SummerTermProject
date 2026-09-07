@@ -1,6 +1,6 @@
 # 2026-09-04 Core Integration、演示与发布计划
 
-> **状态：当前核心执行计划；运维实现待完成。** 本计划定义 2026-09-04 起的 core acceptance/release 目标，替代旧 [`2026-09-01-integration-demo-release.md`](2026-09-01-integration-demo-release.md) 的五系统默认闸门。它不是已完成联调报告，也不创建任何 `ops/` 或 `scripts/reset_demo.sh`、`start_demo.sh`、`smoke_test.sh`、`rehearse_demo.sh`、`release_check.sh`；截至本计划写入时，这些运维入口均**待实现**。
+> **状态更新（2026-09-06）：** 本机候选已实现并验证`reset_demo.sh`、`start_demo.sh`、`stop_demo.sh`、`smoke_test.sh`四入口，实际参数与边界见[运行手册](../../release/core-demo-runbook.md)和[测试记录](../../test/core-runtime-entrypoints-2026-09-06.md)。`rehearse_demo.sh`、`release_check.sh`仍未实现，人工腾讯导航、换机和同SHA双彩排仍未通过。本计划定义 2026-09-04 起的 core acceptance/release 目标，替代旧五系统默认闸门；下文保留写入时历史和未完成目标，不是完整发布验收报告。
 
 **范围依据：** [核心交付范围重置设计](../specs/2026-09-04-core-scope-rebaseline-design.md)、[范围基线](../../management/scope-baseline.md)、[核心验收清单](../../release/core-acceptance-checklist.md)、[仓库进展审计](../../review/repository-progress-audit-2026-09-04.md) 和 [v1 接口合同](../../design/interface-contract.md)。
 
@@ -25,14 +25,14 @@ Qt 用户端 → Qt 管理/服务端（唯一运行期 SQLite writer） ← Qt �
 - 根构建与服务端专属测试已接入，三个原始时间/计费/幂等 P0 已在本地候选修复并评审，组合 CTest 24/24。27 个 v1 action 与架构尚未全部验收，特别是专属 DatabaseWorker 和在线 `demo.reset` 仍有实现缺口；不能据此宣称最终彩排完成。
 - 已跟踪的 `runtime/golden/demo.db` 是含 1 个预测批次、144 条预测的封存 optional 增强 demo 库；它保留但不是 core 基础库。
 - 独立 `runtime/golden/core.db` 已由数据分支 `10034fd` 提供并引入本地候选，6 站/48 桩，配套 `core.manifest.json` 与 checksum。按 [`database/README.md`](../../../database/README.md) 校验并用 `database/create_runtime_copy.py` 创建全新运行副本；不得直接把封存原件交给会迁移/写库的服务端。
-- 当前仓库没有 `ops/` 目录，也没有本计划所需的 reset/start/stop/smoke/rehearsal/release shell 入口。任何人不得把下文的目标接口当作可直接执行的现有命令。
+- 2026-09-04写入时没有本计划六个shell入口；2026-09-06实现四个基础入口，rehearsal/release仍是目标接口，不得当作可执行命令。
 - 正式 C++ 构建证据应在 `/tmp` 或其他 Linux 原生文件系统的独立 build 目录中产生，避免 VMware 共享目录的瞬态问题。
 
 ## 3. 待实现的 core 运维目标接口
 
-后续单独实施时可使用以下稳定入口名称；在实现、测试和代码评审完成之前，它们全部处于**待实现**状态：
+以下保留六入口目标职责。2026-09-06前三个运行入口及基础smoke已实现，最后两个仍待实现；四入口通过不关闭本计划的业务彩排和发布目标：
 
-| 目标入口（待实现） | 目标职责 | core 约束 |
+| 入口（前四个已实现，后两个待实现） | 目标职责 | core 约束 |
 | --- | --- | --- |
 | `scripts/reset_demo.sh` | 服务端停止后，校验并复制 core 黄金库到运行时数据库 | 仅处理工作区 `runtime/` 内已验证文件；不得手改 SQLite、不得替换 optional `demo.db` |
 | `scripts/start_demo.sh` | 以已记录参数启动核心进程并保存受控 PID/日志 | 只启动管理/服务端、模拟器、用户端；不得启动 Web/ML 作为成功前置条件 |
@@ -55,7 +55,7 @@ Web HTTP 服务、Web snapshot writer、ML 训练与预测发布不在上述顺�
 
 ## 5. 核心 reset 与 smoke 检查项
 
-待实现的 `reset_demo.sh` 与 `smoke_test.sh` 至少应检查以下内容；每项必须由实际命令、测试或报告给出证据后才可标记通过：
+以下是原reset/smoke完整目标；2026-09-06四入口实现的基础冒烟范围以本批运行手册为准，其余业务/人工门禁仍待完成。每项必须由实际命令、测试或报告给出证据后才可标记通过：
 
 | 分类 | 必须检查 | 不可接受的替代 |
 | --- | --- | --- |

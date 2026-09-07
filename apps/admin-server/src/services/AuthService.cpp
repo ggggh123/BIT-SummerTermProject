@@ -109,18 +109,20 @@ bool AuthService::isUserTokenValid(const QString &token) const
 
 bool AuthService::isSimulatorTokenValid(const QString &token) const
 {
-    const QString normalized = token.trimmed();
-    return normalized == QStringLiteral("sim-token")
-        || normalized == QStringLiteral("simulator-token")
-        || normalized == QStringLiteral("demo-simulator-token");
+    return RequestPreflight::roleForToken({},token)==QStringLiteral("simulator");
 }
 
 bool AuthService::isMlTokenValid(const QString &token) const
 {
-    const QString normalized = token.trimmed();
-    return normalized == QStringLiteral("ml-token")
-        || normalized == QStringLiteral("forecast-token")
-        || normalized == QStringLiteral("demo-ml-token");
+    return RequestPreflight::roleForToken({},token)==QStringLiteral("ml");
+}
+
+TokenRoles AuthService::tokenRoles() const
+{
+    TokenRoles roles;
+    for (const auto &token : m_adminTokens) roles.insert(token,QStringLiteral("admin"));
+    for (auto it=m_userTokens.cbegin();it!=m_userTokens.cend();++it) roles.insert(it.key(),QStringLiteral("user"));
+    return roles;
 }
 
 int AuthService::userIdForToken(const QString &token) const

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Result.h"
+#include "services/TokenRoles.h"
 
 #include <QSet>
 #include <QHash>
@@ -27,6 +28,7 @@ public:
     bool isMlTokenValid(const QString &token) const;
     int userIdForToken(const QString &token) const;
     QString adminIdentityForToken(const QString &token) const;
+    TokenRoles tokenRoles() const;
 
 private:
     QString issueToken(const QString &username) const;

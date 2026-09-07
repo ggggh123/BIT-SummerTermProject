@@ -52,6 +52,26 @@ void apply(QApplication &application)
             font-size: 26px;
             font-weight: 700;
         }
+        QLabel[role="chargeMetric"] {
+            color: #00856A;
+            font-size: 44px;
+            font-weight: 700;
+        }
+        QLabel[role="chargeSubMetric"] {
+            color: #172B3A;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        QLabel[role="chargeNotice"] {
+            color: #006F59;
+            background: #EAF6F2;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        QWidget#chargeMetrics {
+            background: transparent;
+        }
         QWidget[role="priceGroup"] {
             background: transparent;
         }
@@ -112,13 +132,34 @@ void apply(QApplication &application)
             color: #89979F;
             background: #EEF2F4;
         }
-        QComboBox#addressBox::drop-down {
+        QLineEdit#profileMobile {
+            min-height: 22px;
+            padding: 0px;
+            color: #61717B;
+            background: transparent;
+            border: none;
+            font-size: 14px;
+        }
+        QListWidget#historyList {
+            background: transparent;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            outline: none;
+        }
+        QListWidget#historyList:focus {
+            border-color: #006F59;
+        }
+        QListWidget#historyList::item {
+            background: transparent;
+            border: none;
+        }
+        QComboBox#addressBox::drop-down, QComboBox#routeModeBox::drop-down {
             subcontrol-origin: padding;
             subcontrol-position: top right;
             width: 30px;
             border: none;
         }
-        QComboBox#addressBox::down-arrow {
+        QComboBox#addressBox::down-arrow, QComboBox#routeModeBox::down-arrow {
             image: url(:/ui/expand-more.svg);
             width: 20px;
             height: 20px;
@@ -205,6 +246,10 @@ void apply(QApplication &application)
             padding: 0px;
             border: none;
             background: transparent;
+        }
+        QPushButton[role="back"]:focus {
+            border: 2px solid #006F59;
+            padding: 0px;
         }
         QWidget#authenticatedNavigation {
             background: #FFFFFF;
