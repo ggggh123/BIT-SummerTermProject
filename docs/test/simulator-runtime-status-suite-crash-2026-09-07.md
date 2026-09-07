@@ -56,6 +56,8 @@ FAIL!  : RuntimeStatusTest::revokeFailureIsExplicitlyReported()
 
 ## 6. 待查方向（建议复核人执行）
 
+> 探针源码已收编入库：`simulator/tests/tools/qsave_probe.cpp`（文件头附编译与运行命令），复核时可直接复用。
+
 1. **gdb 分析 core 转储**：`core_pattern` 为 apport 时位于 `/var/lib/apport/coredump/`；`gdb tst_simulator_runtime_status <core>` 取回溯，确认 abort 的调用栈；
 2. **QtTest 用例二分**：同一进程内顺序执行相邻用例复现跨用例状态污染：
    ```bash
