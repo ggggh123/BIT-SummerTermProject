@@ -101,6 +101,21 @@ bool RuntimeStatusWriter::writeState(const QString &sessionState,
                                     .arg(filePath_, file.errorString());
         return failWrite(message);
     }
+    // Qt 6.2 兼容：实测（RLIMIT_FSIZE=0 场景）内核拒绝写入时 write()/commit() 仍可能
+    // 返回成功，仅设备错误状态会记录"文件过大"。因此提交后必须核对错误状态，并回读
+    // 校验实际落盘内容；任何静默失败都按写入失败处理并撤销已发布状态。
+    if (file.error() != QFileDevice::NoError) {
+        const QString message = QStringLiteral("运行状态文件写入被系统拒绝 %1：%2")
+                                    .arg(filePath_, file.errorString());
+        return failWrite(message);
+    }
+    QFile verify(filePath_);
+    if (!verify.open(QIODevice::ReadOnly) || verify.readAll() != contents) {
+        verify.close();
+        const QString message = QStringLiteral("运行状态文件落盘校验失败 %1")
+                                    .arg(filePath_);
+        return failWrite(message);
+    }
     hasPublished_ = true;
     return true;
 }
