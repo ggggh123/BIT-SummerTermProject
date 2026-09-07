@@ -307,6 +307,8 @@ def test_surviving_nonserver_roles_block_second_start(bundle, tmp_path, monkeypa
         assert caught.value.code == "ACTIVE_SERVER"
         assert not (runtime.runs / "new-round").exists()
     finally:
+        if (runtime.runs / "new-round/manifest.json").exists():
+            runtime.stop(args("new-round"))
         assert runtime.stop(args("active-round"))["code"] == "STOPPED"
 
 
