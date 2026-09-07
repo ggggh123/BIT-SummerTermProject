@@ -75,7 +75,7 @@ function deferred() {
 function fakeTMap({ routeResult } = {}) {
   const calls = {
     maps: [], driving: [], walking: [], searches: [], polylineStyles: [], polylines: [],
-    markerStyles: [], markers: [], detachedLayers: [], attachedLayers: [],
+    markerStyles: [], markers: [], detachedLayers: [], attachedLayers: [], fittedBounds: [],
   };
   let nextRouteResult = routeResult ?? { result: { routes: [{ polyline: [{ lat: 39.9, lng: 116.4 }, { lat: 39.91, lng: 116.41 }] }] } };
   const queuedRouteResults = [];
@@ -88,6 +88,10 @@ function fakeTMap({ routeResult } = {}) {
   }
   class Map {
     constructor(container, options) { calls.maps.push({ container, options }); }
+    fitBounds(bounds, options) { calls.fittedBounds.push({ bounds, options }); }
+  }
+  class LatLngBounds {
+    constructor(southwest, northeast) { this.southwest = southwest; this.northeast = northeast; }
   }
   class Driving {
     constructor(options) { calls.driving.push(options); }
@@ -127,7 +131,7 @@ function fakeTMap({ routeResult } = {}) {
     }
   }
   return {
-    api: { LatLng, Map, PolylineStyle, MultiPolyline, MarkerStyle, MultiMarker, service: { Driving, Walking } },
+    api: { LatLng, LatLngBounds, Map, PolylineStyle, MultiPolyline, MarkerStyle, MultiMarker, service: { Driving, Walking } },
     calls,
     setRouteResult(value) { nextRouteResult = value; },
     queueRouteResult(value) { queuedRouteResults.push(value); },
@@ -176,15 +180,31 @@ async function configureWithFakeMap(page, key = 'runtime key +&=') {
   return fake;
 }
 
-test('qrc manifest exposes only the checked-in navigation page and default avatar', () => {
+test('qrc manifest exposes the checked-in navigation, avatar and approved local UI assets', () => {
   const qrc = readFileSync(qrcPath, 'utf8');
   const files = [...qrc.matchAll(/<file(?:\s[^>]*)?>([^<]+)<\/file>/g)].map((match) => match[1].trim());
-  assert.deepEqual(files, ['map/navigation.html', 'images/default-avatar.svg']);
+  const approvedFiles = [
+    'map/navigation.html', 'images/default-avatar.svg', 'ui/login-illustration.png',
+    'ui/location.svg', 'ui/battery-charging.svg', 'ui/history.svg', 'ui/person.svg',
+    'ui/back.svg', 'ui/charger.svg', 'ui/expand-more.svg',
+  ];
+  assert.deepEqual(files, approvedFiles);
+  for (const file of approvedFiles) {
+    assert.ok(readFileSync(new URL(`../resources/${file}`, import.meta.url)).length > 0,
+      `${file} must exist as a nonempty checked-in local resource`);
+  }
   const mapping = execFileSync(rccExecutable, ['--list-mapping', qrcPath.pathname], { encoding: 'utf8' });
   assert.deepEqual(
-    mapping.trim().split('\n').map((line) => line.split('\t')[0]),
-    [':/images/default-avatar.svg', ':/map/navigation.html'],
+    mapping.trim().split('\n').map((line) => line.split('\t')[0]).sort(),
+    [':/images/default-avatar.svg', ':/map/navigation.html', ':/ui/back.svg',
+      ':/ui/battery-charging.svg', ':/ui/charger.svg', ':/ui/expand-more.svg', ':/ui/history.svg',
+      ':/ui/location.svg', ':/ui/login-illustration.png', ':/ui/person.svg'],
   );
+  const resolved = new Map(mapping.trim().split('\n').map((line) => line.split('\t')));
+  for (const file of approvedFiles) {
+    assert.equal(resolved.get(`:/${file}`), new URL(`../resources/${file}`, import.meta.url).pathname,
+      `${file} must retain its exact source-to-resource mapping`);
+  }
 });
 
 test('page has no committed key and does not load remote code before configuration', () => {
@@ -296,6 +316,26 @@ test('route runtime keeps the key secret while constructing Tencent driving and 
   assert.ok(fake.calls.detachedLayers.some(({ kind, layer, map }) => kind === 'marker' && layer === fake.calls.markers[0] && map === null));
   const exposed = `${JSON.stringify(page.context.lastRouteStatus)} ${page.elements['route-status'].textContent} ${page.elements['route-empty'].textContent} ${page.logs.join(' ')}`;
   assert.doesNotMatch(exposed, new RegExp(runtimeKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('successful route fits every route point and endpoints without reframing on failure', async () => {
+  const page = loadPage();
+  const fake = await configureWithFakeMap(page);
+  fake.setRouteResult({ result: { routes: [{ polyline: [
+    { lat: 39.95, lng: 116.30 }, { lat: 40.02, lng: 116.28 }, { lat: 39.96, lng: 116.33 },
+  ] }] } });
+  const request = {
+    from: { lat: 39.94, lng: 116.31 }, to: { lat: 39.97, lng: 116.34 },
+    mode: 'walking', stationName: '完整路线',
+  };
+  await page.context.renderRoute(request, 'fit-route');
+  assert.equal(fake.calls.fittedBounds.length, 1);
+  const { bounds } = fake.calls.fittedBounds[0];
+  assert.deepEqual({ ...bounds.southwest }, { lat: 39.94, lng: 116.28 });
+  assert.deepEqual({ ...bounds.northeast }, { lat: 40.02, lng: 116.34 });
+  fake.setRouteResult({ result: { routes: [] } });
+  await assert.rejects(page.context.renderRoute(request, 'failed-route'), /路线规划失败/);
+  assert.equal(fake.calls.fittedBounds.length, 1, 'failed request must retain the previous camera');
 });
 
 test('newer route attempt owns overlays status and cache when deferred completions invert', async () => {

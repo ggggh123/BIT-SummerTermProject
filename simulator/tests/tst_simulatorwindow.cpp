@@ -1,5 +1,7 @@
 #include <QtTest>
 
+#include <QLabel>
+
 #include "core/TelemetryEngine.h"
 #include "net/SimulatorClient.h"
 #include "ui/SimulatorWindow.h"
@@ -27,6 +29,10 @@ public:
         emit logMessage(QStringLiteral("09:00:03  charger %1  simulator.fault_set  OK")
                             .arg(intent.chargerId));
     }
+
+    void setRunning(bool running) override { lastRunning = running; }
+
+    bool lastRunning = false;
 };
 
 class SimulatorWindowTest : public QObject
@@ -35,6 +41,7 @@ class SimulatorWindowTest : public QObject
 private slots:
     void runPauseTickAndLog();
     void faultDisabledWithoutSelection();
+    void distinguishesTransportFromAuthenticatedSession();
 };
 
 static QDateTime t0()
@@ -57,9 +64,11 @@ void SimulatorWindowTest::runPauseTickAndLog()
 
     QCOMPARE(window.runButtonText(), QStringLiteral("Run"));
     QCOMPARE(window.tickCount(), 0);
+    QVERIFY(!client.lastRunning);  // R13: panel starts paused
 
     window.toggleRun();
     QCOMPARE(window.runButtonText(), QStringLiteral("Pause"));
+    QVERIFY(client.lastRunning);   // R13: run state propagated to the client
 
     window.doTick();
     window.doTick();
@@ -69,6 +78,7 @@ void SimulatorWindowTest::runPauseTickAndLog()
 
     window.toggleRun();
     QCOMPARE(window.runButtonText(), QStringLiteral("Run"));
+    QVERIFY(!client.lastRunning);  // R13: pause propagated to the client
 }
 
 void SimulatorWindowTest::faultDisabledWithoutSelection()
@@ -79,6 +89,31 @@ void SimulatorWindowTest::faultDisabledWithoutSelection()
 
     QVERIFY(!window.faultEnabled());
     QVERIFY(!window.recoverEnabled());
+}
+
+void SimulatorWindowTest::distinguishesTransportFromAuthenticatedSession()
+{
+    TelemetryEngine engine(20260901, t0(), 3000);
+    FakeClient client;
+    SimulatorWindow window(&client, &engine);
+
+    auto hasBadge = [&window](const QString &text) {
+        const QList<QLabel *> labels = window.findChildren<QLabel *>();
+        for (const QLabel *label : labels) {
+            if (label->text() == text)
+                return true;
+        }
+        return false;
+    };
+
+    emit client.connected();
+    QVERIFY(hasBadge(QStringLiteral("等待鉴权")));
+
+    emit client.authenticationFailed(QStringLiteral("AUTH_REQUIRED"));
+    QVERIFY(hasBadge(QStringLiteral("鉴权失败")));
+
+    emit client.sessionReady();
+    QVERIFY(hasBadge(QStringLiteral("已接入")));
 }
 
 QTEST_MAIN(SimulatorWindowTest)

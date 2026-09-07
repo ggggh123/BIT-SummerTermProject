@@ -1,5 +1,7 @@
 # Web ECharts Dashboard Implementation Plan
 
+> **状态：可选参考计划。** 2026-09-04 起，Web 大屏不纳入 core acceptance 或 core release；本计划的 checkbox、测试记录和既有成果均保留，只有在显式启用 Web optional profile 时才作为独立参考执行。当前范围见 [`2026-09-04-core-scope-rebaseline.md`](2026-09-04-core-scope-rebaseline.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a polished single-page ECharts operations dashboard that displays current KPIs, station/charger health, trends, events and ML forecasts from the server's atomic JSON snapshot.

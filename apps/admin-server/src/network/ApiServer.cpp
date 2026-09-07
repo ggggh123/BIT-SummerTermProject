@@ -1,138 +1,41 @@
 #include "network/ApiServer.h"
-
-#include "contracts/Actions.h"
-#include "protocol/JsonEnvelope.h"
-
-#include <QJsonObject>
-#include <QTcpSocket>
-
-namespace {
-
-bool requiresAdminToken(const QString &action)
+#include <QThread>
+ApiServer::ApiServer(QObject *parent) : QTcpServer(parent)
 {
-    return action == ev::actions::AdminDashboard
-        || action == ev::actions::AdminStationCreate
-        || action == ev::actions::AdminChargerRestart
-        || action == ev::actions::AdminUserList
-        || action == ev::actions::AdminUserSetStatus;
+    qRegisterMetaType<ev::protocol::RequestEnvelope>();
 }
-
-} // namespace
-
-ApiServer::ApiServer(AuthService *authService, DashboardService *dashboardService, ForecastService *forecastService, QObject *parent)
-    : QTcpServer(parent)
-    , m_authService(authService)
-    , m_dashboardService(dashboardService)
-    , m_forecastService(forecastService)
+ApiServer::~ApiServer() { stop(); }
+void ApiServer::incomingConnection(qintptr descriptor)
 {
-}
-
-void ApiServer::incomingConnection(qintptr socketDescriptor)
-{
-    auto *socket = new QTcpSocket(this);
-    if (!socket->setSocketDescriptor(socketDescriptor)) {
-        socket->deleteLater();
-        return;
-    }
-
-    m_decoders.insert(socket, ev::protocol::FrameDecoder{});
-
-    connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
-        readSocket(socket);
+    auto *thread = new QThread(this);
+    auto *connection = new ConnectionWorker(descriptor, m_connections.size() >= 16);
+    connection->moveToThread(thread);
+    m_connections.insert(thread, connection);
+    connect(thread,&QThread::started,connection,&ConnectionWorker::start);
+    connect(thread,&QThread::finished,connection,&QObject::deleteLater);
+    connect(connection,&ConnectionWorker::requestReceived,this,[this,connection](const auto &request) {
+        if (!m_stopping) emit requestReceived(connection,request);
     });
-    connect(socket, &QTcpSocket::disconnected, this, [this, socket]() {
-        m_decoders.remove(socket);
-        socket->deleteLater();
-    });
+    connect(connection,&ConnectionWorker::closed,this,[this,thread] { retire(thread); });
+    thread->start();
 }
-
-void ApiServer::readSocket(QTcpSocket *socket)
+void ApiServer::retire(QThread *thread)
 {
-    auto decoderIt = m_decoders.find(socket);
-    if (decoderIt == m_decoders.end()) {
-        return;
-    }
-
-    QList<QByteArray> frames;
-    try {
-        const QByteArray bytes = socket->readAll();
-        frames = decoderIt.value().append(QByteArrayView(bytes.constData(), bytes.size()));
-    } catch (const ev::protocol::FrameError &error) {
-        const auto response = fail(QString(), QStringLiteral("INVALID_REQUEST"), QString::fromLatin1(error.what()));
-        const QByteArray payload = ev::protocol::toJson(response);
-        socket->write(ev::protocol::encodeFrame(QByteArrayView(payload.constData(), payload.size())));
-        socket->disconnectFromHost();
-        return;
-    }
-
-    for (const QByteArray &frame : frames) {
-        ev::protocol::ResponseEnvelope response;
-        try {
-            response = handleRequest(ev::protocol::parseRequest(frame));
-        } catch (const ev::protocol::EnvelopeError &error) {
-            response = fail(QString(), error.code(), error.message());
-        }
-        const QByteArray payload = ev::protocol::toJson(response);
-        socket->write(ev::protocol::encodeFrame(QByteArrayView(payload.constData(), payload.size())));
-    }
+    if (!m_connections.contains(thread)) return;
+    m_connections.remove(thread);
+    thread->quit();
+    thread->wait();
+    thread->deleteLater();
 }
-
-ev::protocol::ResponseEnvelope ApiServer::handleRequest(const ev::protocol::RequestEnvelope &request) const
+void ApiServer::stop()
 {
-    if (request.action == ev::actions::SystemHealth) {
-        return ok(request.requestId, QStringLiteral("ready"), m_forecastService->healthState());
+    if (m_stopping) return;
+    m_stopping = true;
+    close();
+    const auto threads = m_connections.keys();
+    for (auto *thread : threads) {
+        auto *connection = m_connections.value(thread);
+        QMetaObject::invokeMethod(connection, &ConnectionWorker::stop, Qt::BlockingQueuedConnection);
+        retire(thread);
     }
-
-    if (request.action == ev::actions::AdminLogin) {
-        const LoginResult result = m_authService->login(
-            request.payload.value(QStringLiteral("username")).toString(),
-            request.payload.value(QStringLiteral("password")).toString());
-        if (!result.ok) {
-            return fail(request.requestId, result.code, result.message);
-        }
-        return ok(request.requestId, result.message, QJsonObject{
-            {QStringLiteral("username"), request.payload.value(QStringLiteral("username")).toString()},
-            {QStringLiteral("token"), result.token}
-        });
-    }
-
-    if (requiresAdminToken(request.action) && !m_authService->isTokenValid(request.token)) {
-        return fail(request.requestId, QStringLiteral("UNAUTHORIZED"), QStringLiteral("admin token is missing or invalid"));
-    }
-
-    if (request.action == ev::actions::AdminDashboard) {
-        return ok(request.requestId, QStringLiteral("success"), m_dashboardService->summary());
-    }
-
-    if (request.action == ev::actions::ForecastPublish) {
-        QJsonObject data;
-        const Result result = m_forecastService->publish(request.requestId, request.payload, &data);
-        if (!result.ok) {
-            return fail(request.requestId, result.code, result.message);
-        }
-        return ok(request.requestId, result.message, data);
-    }
-
-    if (request.action == ev::actions::ForecastLatest) {
-        QJsonObject data;
-        const Result result = m_forecastService->latest(&data);
-        if (!result.ok) {
-            return fail(request.requestId, result.code, result.message);
-        }
-        return ok(request.requestId, result.message, data);
-    }
-
-    return fail(request.requestId, QStringLiteral("INVALID_REQUEST"), QStringLiteral("未支持的接口动作"));
 }
-
-ev::protocol::ResponseEnvelope ApiServer::ok(const QString &requestId, const QString &message, const QJsonValue &data) const
-{
-    return {requestId, true, QStringLiteral("OK"), message, data};
-}
-
-ev::protocol::ResponseEnvelope ApiServer::fail(const QString &requestId, const QString &code, const QString &message) const
-{
-    return {requestId, false, code, message, QJsonObject{}};
-}
-
-

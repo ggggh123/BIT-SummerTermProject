@@ -2,6 +2,8 @@
 
 #include <QComboBox>
 #include <QHBoxLayout>
+#include <QFrame>
+#include <QIcon>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -9,6 +11,7 @@
 #include <QPushButton>
 #include <QPointer>
 #include <QSignalBlocker>
+#include <QStyle>
 #include <QTimer>
 #include <QUuid>
 #include <QVariantMap>
@@ -110,32 +113,74 @@ NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScr
     , view_(new QWebEngineView(this))
     , statusLabel_(new QLabel(QStringLiteral("正在加载导航页面…"), this))
     , cacheLabel_(new QLabel(QStringLiteral("暂无成功路线"), this))
+    , destinationLabel_(new QLabel(QStringLiteral("选择站点后开始导航"), this))
     , retryButton_(new QPushButton(QStringLiteral("重试"), this))
     , modeBox_(new QComboBox(this))
     , callbackGate_(std::make_shared<CallbackGate>())
 {
     setObjectName(QStringLiteral("navigationPage"));
     statusLabel_->setObjectName(QStringLiteral("navigationStatus"));
+    statusLabel_->setWordWrap(true);
+    statusLabel_->setTextFormat(Qt::PlainText);
+    statusLabel_->setProperty("role", QStringLiteral("secondary"));
+    statusLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     cacheLabel_->setObjectName(QStringLiteral("lastRouteLabel"));
     cacheLabel_->setWordWrap(true);
+    cacheLabel_->setTextFormat(Qt::PlainText);
+    cacheLabel_->setProperty("role", QStringLiteral("secondary"));
+    cacheLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    cacheLabel_->hide();
+    destinationLabel_->setObjectName(QStringLiteral("navigationDestination"));
+    destinationLabel_->setProperty("role", QStringLiteral("sectionTitle"));
+    destinationLabel_->setWordWrap(true);
+    destinationLabel_->setTextFormat(Qt::PlainText);
+    destinationLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     retryButton_->setObjectName(QStringLiteral("navigationRetryButton"));
     retryButton_->hide();
+    retryButton_->setProperty("role", QStringLiteral("outline"));
     view_->setObjectName(QStringLiteral("navigationWebView"));
+    view_->setMinimumHeight(240);
     modeBox_->setObjectName(QStringLiteral("routeModeBox"));
     modeBox_->addItem(QStringLiteral("驾车"), QStringLiteral("driving"));
     modeBox_->addItem(QStringLiteral("步行"), QStringLiteral("walking"));
-    auto *backButton = new QPushButton(QStringLiteral("返回附近站点"), this);
+    modeBox_->setAccessibleName(QStringLiteral("出行方式"));
+    modeBox_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto *backButton = new QPushButton(this);
     backButton->setObjectName(QStringLiteral("navigationBackButton"));
+    backButton->setAccessibleName(QStringLiteral("返回附近站点"));
+    backButton->setToolTip(QStringLiteral("返回附近站点"));
+    backButton->setIcon(QIcon(QStringLiteral(":/ui/back.svg")));
+    backButton->setIconSize(QSize(22, 22));
+    backButton->setFixedWidth(44);
+    backButton->setProperty("role", QStringLiteral("back"));
 
+    auto *header = new QHBoxLayout;
+    header->addWidget(backButton);
+    auto *title = new QLabel(QStringLiteral("站点导航"), this);
+    title->setProperty("role", QStringLiteral("sectionTitle"));
+    title->setAlignment(Qt::AlignCenter);
+    header->addWidget(title, 1);
+    header->addSpacing(44);
     auto *controls = new QHBoxLayout;
-    controls->addWidget(backButton);
-    controls->addWidget(modeBox_);
+    auto *modeLabel = new QLabel(QStringLiteral("出行方式"), this);
+    modeLabel->setProperty("role", QStringLiteral("secondary"));
+    controls->addWidget(modeLabel);
+    controls->addWidget(modeBox_, 1);
     controls->addWidget(retryButton_);
-    controls->addStretch();
     auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(20, 12, 20, 16);
+    layout->setSpacing(12);
+    layout->addLayout(header);
+    auto *summary = new QFrame(this);
+    summary->setProperty("role", QStringLiteral("card"));
+    auto *summaryLayout = new QVBoxLayout(summary);
+    summaryLayout->setContentsMargins(16, 14, 16, 14);
+    summaryLayout->setSpacing(8);
+    summaryLayout->addWidget(destinationLabel_);
+    summaryLayout->addWidget(statusLabel_);
+    summaryLayout->addWidget(cacheLabel_);
+    layout->addWidget(summary);
     layout->addLayout(controls);
-    layout->addWidget(statusLabel_);
-    layout->addWidget(cacheLabel_);
     layout->addWidget(view_, 1);
 
     view_->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
@@ -305,6 +350,7 @@ void NavigationPage::showRoute(ev::user::GeoPoint origin, ev::user::Station stat
         return;
     }
     routeOperationId_ = operationId;
+    destinationLabel_->setText(station.name);
     routeTracker_.begin(operationId, {origin, destination, station.name, mode, {}});
     const int modeIndex = modeBox_->findData(mode);
     if (modeIndex >= 0 && modeBox_->currentIndex() != modeIndex) {
@@ -312,11 +358,11 @@ void NavigationPage::showRoute(ev::user::GeoPoint origin, ev::user::Station stat
         modeBox_->setCurrentIndex(modeIndex);
     }
     if (!pageLoaded_ || !configured_) {
-        statusLabel_->setText(QStringLiteral("地图配置完成后将规划路线"));
+        setStatus(QStringLiteral("地图配置完成后将规划路线"));
         return;
     }
     view_->page()->runJavaScript(script);
-    statusLabel_->setText(QStringLiteral("正在规划路线…"));
+    setStatus(QStringLiteral("正在规划路线…"));
     retryButton_->hide();
     pollOperation(operationId, OperationKind::Route);
 }
@@ -327,7 +373,7 @@ void NavigationPage::deactivate()
     routeTracker_.invalidatePending();
     routeOperationId_.clear();
     retryButton_->hide();
-    statusLabel_->setText(QStringLiteral("导航已暂停"));
+    setStatus(QStringLiteral("导航已暂停"));
 }
 
 void NavigationPage::resetForSession()
@@ -337,7 +383,9 @@ void NavigationPage::resetForSession()
     routeOperationId_.clear();
     retryButton_->hide();
     cacheLabel_->setText(QStringLiteral("暂无成功路线"));
-    statusLabel_->setText(QStringLiteral("导航会话已重置"));
+    cacheLabel_->hide();
+    destinationLabel_->setText(QStringLiteral("选择站点后开始导航"));
+    setStatus(QStringLiteral("导航会话已重置"));
     if (view_ != nullptr && view_->page() != nullptr) {
         view_->page()->runJavaScript(buildResetRouteSessionScript());
     }
@@ -351,7 +399,7 @@ void NavigationPage::configureForCurrentLoad()
     configurationStarted_ = true;
     configureOperationId_ = QStringLiteral("configure-%1").arg(++nextOperationId_);
     view_->page()->runJavaScript(buildConfigureMapScript(mapKey_, configureOperationId_));
-    statusLabel_->setText(QStringLiteral("正在配置腾讯地图…"));
+    setStatus(QStringLiteral("正在配置腾讯地图…"));
     pollOperation(configureOperationId_, OperationKind::Configure);
 }
 
@@ -370,7 +418,7 @@ void NavigationPage::executePendingRoute()
     }
     routeTracker_.begin(routeOperationId_, *route);
     view_->page()->runJavaScript(script);
-    statusLabel_->setText(QStringLiteral("正在规划路线…"));
+    setStatus(QStringLiteral("正在规划路线…"));
     pollOperation(routeOperationId_, OperationKind::Route);
 }
 
@@ -407,7 +455,7 @@ void NavigationPage::finishOperation(const QString &operationId, OperationKind k
         }
         if (state == QStringLiteral("success")) {
             configured_ = true;
-            statusLabel_->setText(QStringLiteral("地图已加载"));
+            setStatus(QStringLiteral("地图已加载"));
             retryButton_->hide();
             executePendingRoute();
         } else {
@@ -419,7 +467,7 @@ void NavigationPage::finishOperation(const QString &operationId, OperationKind k
         return;
     }
     if (state == QStringLiteral("success")) {
-        statusLabel_->setText(QStringLiteral("路线规划成功"));
+        setStatus(QStringLiteral("路线规划成功"));
         retryButton_->hide();
         updateLastSuccessLabel();
     } else {
@@ -440,9 +488,17 @@ void NavigationPage::invalidateRouteAttempt()
 
 void NavigationPage::showFailure(const QString &reason)
 {
-    statusLabel_->setText(reason);
+    setStatus(reason, true);
     retryButton_->show();
     updateLastSuccessLabel();
+}
+
+void NavigationPage::setStatus(const QString &text, bool failed)
+{
+    statusLabel_->setText(text);
+    statusLabel_->setProperty("role", failed ? QStringLiteral("danger") : QStringLiteral("secondary"));
+    statusLabel_->style()->unpolish(statusLabel_);
+    statusLabel_->style()->polish(statusLabel_);
 }
 
 void NavigationPage::updateLastSuccessLabel()
@@ -450,8 +506,10 @@ void NavigationPage::updateLastSuccessLabel()
     const auto last = routeTracker_.lastSuccessfulRoute();
     if (!last.has_value()) {
         cacheLabel_->setText(QStringLiteral("暂无成功路线"));
+        cacheLabel_->hide();
         return;
     }
+    cacheLabel_->show();
     cacheLabel_->setText(QStringLiteral("上次成功路线：%1（%2，生成于 %3）")
         .arg(last->stationName,
              last->mode == QStringLiteral("walking") ? QStringLiteral("步行") : QStringLiteral("驾车"),

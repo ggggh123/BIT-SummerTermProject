@@ -238,6 +238,8 @@ class ChargePageTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void stateSpecificActionsHideUnrelatedMutations_data();
+    void stateSpecificActionsHideUnrelatedMutations();
     void exactStateTableUsesOnlyAuthoritativeFields();
     void lifecycleUsesExactPayloadsAndUpdatesBalanceByRevision();
     void canonicalDecoderRejectsBadTimestampNullAndExtraFields();
@@ -254,6 +256,52 @@ private slots:
     void factsFailureRetryReconcilesCurrentBeforeRestoringReservedActions();
     void nullReconciliationRetainsIdleSelectionUntilFactsRestoreReserve();
 };
+
+void ChargePageTest::stateSpecificActionsHideUnrelatedMutations_data()
+{
+    QTest::addColumn<QString>("state");
+    QTest::addColumn<bool>("ended");
+    QTest::addColumn<QStringList>("visibleActions");
+    QTest::newRow("selection") << QString() << false << QStringList{"chargeReserveButton"};
+    QTest::newRow("reserved") << QString("reserved") << false
+        << QStringList{"chargeStartButton", "chargeCancelButton"};
+    QTest::newRow("charging") << QString("charging") << false << QStringList{"chargeStopButton"};
+    QTest::newRow("awaiting-settlement") << QString("charging") << true << QStringList{"chargeSettleButton"};
+    QTest::newRow("completed") << QString("completed") << true << QStringList{"chargeBackButton"};
+    QTest::newRow("cancelled") << QString("cancelled") << true << QStringList{"chargeBackButton"};
+}
+
+void ChargePageTest::stateSpecificActionsHideUnrelatedMutations()
+{
+    QFETCH(QString, state);
+    QFETCH(bool, ended);
+    QFETCH(QStringList, visibleActions);
+    TcpJsonClient client;
+    UserApi api(&client);
+    ChargePage page(&api);
+    page.setConnectionAvailable(true);
+    if (state.isEmpty()) page.enterSelection(selection());
+    else page.enterOrder(decodedOrder(state, ended), selection(12, QStringLiteral("reserved")));
+    const QStringList actions{"chargeReserveButton", "chargeStartButton", "chargeCancelButton",
+                              "chargeStopButton", "chargeSettleButton", "chargeBackButton"};
+    for (const auto &name : actions) {
+        auto *action = page.findChild<QPushButton *>(name);
+        QVERIFY(action);
+        QCOMPARE(action->isVisibleTo(&page), visibleActions.contains(name));
+    }
+    if (state == QStringLiteral("charging")) {
+        auto *caption = page.findChild<QLabel *>(QStringLiteral("chargeMetricCaption"));
+        QVERIFY(caption);
+        QCOMPARE(caption->text(), ended ? QStringLiteral("应付金额") : QStringLiteral("已充电量"));
+        QCOMPARE(label(page, "chargeMeter")->text(), ended ? QStringLiteral("23.45") : QStringLiteral("12.500"));
+        QVERIFY(!label(page, "chargeStatus")->text().contains(QStringLiteral("成功")));
+    }
+    page.setConnectionAvailable(false);
+    QVERIFY(button(page, "chargeRetryButton")->isVisibleTo(&page));
+    for (const auto &name : actions.mid(0, 5)) {
+        QVERIFY(!page.findChild<QPushButton *>(name)->isEnabled());
+    }
+}
 
 void ChargePageTest::exactStateTableUsesOnlyAuthoritativeFields()
 {
@@ -284,16 +332,17 @@ void ChargePageTest::exactStateTableUsesOnlyAuthoritativeFields()
     page.enterOrder(decodedOrder(QStringLiteral("charging"), false, 7.125, 876, 543));
     QVERIFY(button(page, "chargeStopButton")->isEnabled());
     QVERIFY(label(page, "chargeMeter")->isVisibleTo(&page));
-    QVERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("543")));
-    QVERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("7.125")));
-    QVERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("8.76")));
+    QCOMPARE(label(page, "chargeMeter")->text(), QStringLiteral("7.125"));
+    QCOMPARE(label(page, "chargeDuration")->text(), QStringLiteral("09:03"));
+    QCOMPARE(label(page, "chargeSecondaryMetric")->text(), QStringLiteral("¥ 8.76"));
 
     page.enterOrder(decodedOrder(QStringLiteral("charging"), true, 8.5, 999, 600),
                     selection(13, QStringLiteral("fault")));
     QVERIFY(button(page, "chargeSettleButton")->isEnabled());
     QVERIFY(label(page, "chargeSummary")->isVisibleTo(&page));
-    QVERIFY(label(page, "chargeSummary")->text().contains(QStringLiteral("8.500")));
-    QVERIFY(label(page, "chargeSummary")->text().contains(QStringLiteral("9.99")));
+    QCOMPARE(label(page, "chargeSecondaryMetric")->text(), QStringLiteral("8.500 kWh"));
+    QCOMPARE(label(page, "chargeMeter")->text(), QStringLiteral("9.99"));
+    QVERIFY(label(page, "chargeSummary")->text().contains(QString::fromLatin1(kEndedTimestamp)));
 
     page.enterOrder(decodedOrder(QStringLiteral("completed"), true));
     QVERIFY(button(page, "chargeBackButton")->isEnabled());

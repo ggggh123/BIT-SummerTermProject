@@ -1,5 +1,7 @@
 # ML Forecasting Subsystem Implementation Plan
 
+> **状态：可选参考计划。** 2026-09-04 起，ML 训练、在线发布和预测展示不纳入 core acceptance 或 core release；本计划的 checkbox、测试记录和既有成果均保留，只有在显式启用 ML optional profile 时才作为独立参考执行。当前范围见 [`2026-09-04-core-scope-rebaseline.md`](2026-09-04-core-scope-rebaseline.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Train a reproducible seasonal-naive baseline and Ridge models from the fixed 90-day station history, produce 6-station × 24-hour forecasts with 1h/6h/24h metrics, and publish one validated 144-record run to the Qt service.

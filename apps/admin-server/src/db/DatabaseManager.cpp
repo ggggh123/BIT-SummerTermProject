@@ -1,4 +1,6 @@
 #include "db/DatabaseManager.h"
+#include "core/BusinessTime.h"
+#include "db/SqlTransaction.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -12,6 +14,7 @@
 #include <QStandardPaths>
 #include <QStringList>
 #include <QVariant>
+#include <QUuid>
 
 namespace {
 
@@ -23,7 +26,7 @@ QString adminPasswordHash(const QString &password)
 
 QString nowIso()
 {
-    return QDateTime::currentDateTime().toString(Qt::ISODate);
+    return BusinessTime::now();
 }
 
 QString projectSourceDir()
@@ -109,22 +112,33 @@ int scalarInt(QSqlDatabase database, const QString &sql)
 
 } // namespace
 
-Result DatabaseManager::open(const QString &databasePath)
+DatabaseManager::DatabaseManager()
+    : m_connectionName(QStringLiteral("management-") + QUuid::createUuid().toString(QUuid::WithoutBraces)) {}
+
+DatabaseManager::~DatabaseManager()
+{
+    if (QSqlDatabase::contains(m_connectionName)) {
+        { auto db = QSqlDatabase::database(m_connectionName, false); db.close(); }
+        QSqlDatabase::removeDatabase(m_connectionName);
+    }
+}
+
+QString DatabaseManager::resolvePath(const QString &databasePath)
 {
     if (databasePath.trimmed().isEmpty()) {
         QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
         if (dataDir.isEmpty()) {
             dataDir = QDir::currentPath() + QStringLiteral("/runtime");
         }
-        QDir().mkpath(dataDir);
-        m_databasePath = dataDir + QStringLiteral("/charging_platform_server_data_v1.db");
-    } else {
-        m_databasePath = QDir::cleanPath(databasePath);
-        const QFileInfo databaseFile(m_databasePath);
-        if (!databaseFile.absolutePath().isEmpty()) {
-            QDir().mkpath(databaseFile.absolutePath());
-        }
+        return QDir(dataDir).absoluteFilePath(QStringLiteral("charging_platform_server_data_v1.db"));
     }
+    return QFileInfo(QDir::cleanPath(databasePath)).absoluteFilePath();
+}
+
+Result DatabaseManager::open(const QString &databasePath)
+{
+    m_databasePath = resolvePath(databasePath);
+    QDir().mkpath(QFileInfo(m_databasePath).absolutePath());
 
     QSqlDatabase db = QSqlDatabase::contains(m_connectionName)
         ? QSqlDatabase::database(m_connectionName)
@@ -132,7 +146,7 @@ Result DatabaseManager::open(const QString &databasePath)
 
     db.setDatabaseName(m_databasePath);
     if (!db.open()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), db.lastError().text());
+        return databaseFailure(db.lastError());
     }
 
     execSql(QStringLiteral("PRAGMA foreign_keys = ON"));
@@ -161,7 +175,7 @@ Result DatabaseManager::migrate()
     QSqlQuery exists(database());
     exists.prepare(QStringLiteral("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"));
     if (!exists.exec()) {
-        return Result::failure(QStringLiteral("DB_ERROR"), exists.lastError().text());
+        return databaseFailure(exists.lastError());
     }
     if (exists.next()) {
         return Result::success();
@@ -193,7 +207,7 @@ Result DatabaseManager::seed()
         query.addBindValue(adminPasswordHash(QStringLiteral("123456")));
         query.addBindValue(timestamp);
         if (!query.exec()) {
-            return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+            return databaseFailure(query.lastError());
         }
     }
 
@@ -228,7 +242,7 @@ Result DatabaseManager::seed()
                 query.addBindValue(QStringLiteral("idle"));
                 query.addBindValue(timestamp);
                 if (!query.exec()) {
-                    return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+                    return databaseFailure(query.lastError());
                 }
             }
         }
@@ -244,7 +258,7 @@ Result DatabaseManager::seed()
         query.addBindValue(userIndex == 0 ? 50000 : 10000 + userIndex * 1000);
         query.addBindValue(timestamp);
         if (!query.exec()) {
-            return Result::failure(QStringLiteral("DB_ERROR"), query.lastError().text());
+            return databaseFailure(query.lastError());
         }
     }
 
@@ -262,4 +276,3 @@ bool DatabaseManager::execSql(const QString &sql, QString *errorMessage)
     }
     return false;
 }
-

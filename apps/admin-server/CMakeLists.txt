@@ -1,7 +1,21 @@
 find_package(Qt6 6.2 REQUIRED COMPONENTS Core Widgets Network Sql)
 
+if(NOT DEFINED EV_PROJECT_SOURCE_DIR)
+    set(EV_PROJECT_SOURCE_DIR "${CMAKE_SOURCE_DIR}")
+endif()
+
 add_executable(ev_admin_server
     src/main.cpp
+    src/db/DatabaseWorker.cpp
+    src/db/DatabaseWorker.h
+    src/network/ConnectionWorker.cpp
+    src/network/ConnectionWorker.h
+    src/services/RequestDispatcher.cpp
+    src/services/RequestDispatcher.h
+    src/services/RequestPreflight.h
+    src/services/TokenRoles.h
+    src/services/DemoResetService.cpp
+    src/services/DemoResetService.h
     src/app/AppContext.cpp
     src/app/AppContext.h
     src/core/Result.h
@@ -12,22 +26,33 @@ add_executable(ev_admin_server
     src/db/DatabaseManager.h
     src/network/ApiServer.cpp
     src/network/ApiServer.h
+    src/services/AdminService.cpp
+    src/services/AdminService.h
     src/services/AuthService.cpp
     src/services/AuthService.h
     src/services/DashboardService.cpp
     src/services/DashboardService.h
     src/services/ForecastService.cpp
     src/services/ForecastService.h
-    src/ui/HealthPanel.cpp
-    src/ui/HealthPanel.h
+    src/services/RequestLogService.cpp
+    src/services/RequestLogService.h
+    src/services/TelemetryService.cpp
+    src/services/TelemetryService.h
+    src/services/UserService.cpp
+    src/services/UserService.h
     src/ui/LoginDialog.cpp
     src/ui/LoginDialog.h
     src/ui/MainWindow.cpp
     src/ui/MainWindow.h
+    src/ui/AdminTheme.cpp
+    src/ui/AdminTheme.h
+    src/ui/AdminVisuals.cpp
+    src/ui/AdminVisuals.h
+    src/ui/admin-ui.qrc
 )
 
 target_include_directories(ev_admin_server PRIVATE src)
-target_compile_definitions(ev_admin_server PRIVATE EV_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(ev_admin_server PRIVATE EV_PROJECT_SOURCE_DIR="${EV_PROJECT_SOURCE_DIR}")
 target_link_libraries(ev_admin_server PRIVATE
     Qt6::Core
     Qt6::Widgets

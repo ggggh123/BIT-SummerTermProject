@@ -138,6 +138,8 @@ CREATE TABLE events (
 
 CREATE TABLE request_log (
     request_id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    code TEXT NOT NULL,
     response_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );

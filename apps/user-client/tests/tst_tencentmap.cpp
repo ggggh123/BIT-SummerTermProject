@@ -7,9 +7,11 @@
 #include "ui/MainWindow.h"
 #include "ui/NavigationPage.h"
 #include "ui/NearbyPage.h"
+#include "ui/UiTheme.h"
 
 #include <QApplication>
 #include <QComboBox>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QEvent>
@@ -22,6 +24,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QSet>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStackedWidget>
 #include <QTcpServer>
@@ -406,8 +409,10 @@ private slots:
     void navigationScriptsAreJsonEscapedValidatedAndKeyFreeInCompletionState();
     void routeOperationCorrelationCachesOnlyMatchingSuccessAndRetainsLastSuccess();
     void realNavigationPageRunsQrcPromisePollingAndRetryOffline();
+    void navigationFailureControlsFitPortrait();
     void navigationPageDestructionIgnoresPendingWebCallbacks();
     void mainWindowTopNavigationInvalidatesHiddenRouteAndPreservesSuccess();
+    void sessionExpiryClearsNavigationCacheBeforeRelogin_data();
     void sessionExpiryClearsNavigationCacheBeforeRelogin();
     void resourceAndPageContractsRemainFixedAndDisplayPredictionStates();
     void nearbyChargerButtonsLocalizeEveryWireStatus();
@@ -880,6 +885,61 @@ void TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOfflin
     QVERIFY(!completionState.contains(QStringLiteral("offline map test value")));
 }
 
+void TencentMapClientTest::navigationFailureControlsFitPortrait()
+{
+    const auto previousStyle = qApp->styleSheet();
+    const auto previousFont = qApp->font();
+    const auto restoreTheme = qScopeGuard([&] {
+        qApp->setStyleSheet(previousStyle);
+        qApp->setFont(previousFont);
+    });
+    UiTheme::apply(*qApp);
+    // Empty key fails locally; this test never loads the Tencent SDK or uses a real key.
+    NavigationPage page(QString{}, nullptr);
+    page.resize(390, 720);
+    page.show();
+    auto *retry = page.findChild<QPushButton *>("navigationRetryButton");
+    QTRY_VERIFY_WITH_TIMEOUT(retry->isVisible(), 5000);
+    page.showFailure(QStringLiteral("地图暂时无法加载，请检查网络连接与地图配置后重试。原有订单不受影响，可返回站点继续查看充电桩。"));
+    QTest::qWait(30);
+    QCOMPARE(page.width(), 390);
+    for (const char *name : {"navigationBackButton", "routeModeBox", "navigationRetryButton", "navigationStatus"}) {
+        auto *control = page.findChild<QWidget *>(QString::fromLatin1(name));
+        QVERIFY(control);
+        QVERIFY2(page.rect().contains(QRect(control->mapTo(&page, QPoint()), control->size())), name);
+    }
+    auto *status = page.findChild<QLabel *>("navigationStatus");
+    QVERIFY(status->wordWrap());
+    QVERIFY(status->height() >= status->heightForWidth(status->width()));
+    auto *view = page.findChild<QWebEngineView *>("navigationWebView");
+    QVERIFY(view->height() >= 240);
+    auto *backButton = page.findChild<QPushButton *>("navigationBackButton");
+    backButton->setFocus(Qt::TabFocusReason);
+    QTRY_VERIFY(backButton->hasFocus());
+    const QImage focused = backButton->grab().toImage();
+    int focusPixels = 0;
+    for (int y = 0; y < focused.height(); ++y) {
+        for (int x = 0; x < focused.width(); ++x) {
+            const auto color = focused.pixelColor(x, y);
+            if (qAbs(color.red()) <= 6 && qAbs(color.green() - 111) <= 6
+                && qAbs(color.blue() - 89) <= 6) ++focusPixels;
+        }
+    }
+    QVERIFY2(focusPixels > 40, "The icon-only back button needs a visible keyboard focus ring");
+    backButton->clearFocus();
+    const QString dir = qEnvironmentVariable("EV_UI_SCREENSHOT_DIR");
+    if (!dir.isEmpty()) {
+        QDir().mkpath(dir);
+        QVERIFY(page.grab().save(QDir(dir).filePath("navigation-error-390x720.png")));
+        page.resize(390, 844);
+        QTest::qWait(30);
+        QVERIFY(page.grab().save(QDir(dir).filePath("navigation-error-390x844.png")));
+    }
+    QSignalSpy back(&page, &NavigationPage::backRequested);
+    page.findChild<QPushButton *>("navigationBackButton")->click();
+    QCOMPARE(back.count(), 1);
+}
+
 void TencentMapClientTest::navigationPageDestructionIgnoresPendingWebCallbacks()
 {
     {
@@ -1014,8 +1074,16 @@ void TencentMapClientTest::mainWindowTopNavigationInvalidatesHiddenRouteAndPrese
     QVERIFY(!webStatus.contains(pending.name));
 }
 
+void TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin_data()
+{
+    QTest::addColumn<bool>("expireFirst");
+    QTest::newRow("auth-required-then-relogin") << true;
+    QTest::newRow("relogin-without-auth-error") << false;
+}
+
 void TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin()
 {
+    QFETCH(bool, expireFirst);
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
     UserAppConfig config;
@@ -1084,14 +1152,18 @@ void TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin()
                 .toBool());
     QVERIFY(completed);
 
-    const auto expiryContext = api->loadOrderHistory(20, 0, 99, 101);
-    QVERIFY(!expiryContext.requestId.isEmpty());
-    const auto expiryRequest = takeRequest(peer.data());
-    QCOMPARE(expiryRequest.action, QStringLiteral("order.list"));
-    reply(peer.data(), expiryRequest.requestId, false, QStringLiteral("AUTH_REQUIRED"),
-          QStringLiteral("expired"), QJsonObject{});
-    QTRY_COMPARE_WITH_TIMEOUT(pages->currentWidget()->objectName(),
-                              QStringLiteral("loginPage"), 1'000);
+    if (expireFirst) {
+        const auto expiryContext = api->loadOrderHistory(20, 0, 99, 101);
+        QVERIFY(!expiryContext.requestId.isEmpty());
+        const auto expiryRequest = takeRequest(peer.data());
+        QCOMPARE(expiryRequest.action, QStringLiteral("order.list"));
+        reply(peer.data(), expiryRequest.requestId, false, QStringLiteral("AUTH_REQUIRED"),
+              QStringLiteral("expired"), QJsonObject{});
+        QTRY_COMPARE_WITH_TIMEOUT(pages->currentWidget()->objectName(),
+                                  QStringLiteral("loginPage"), 1'000);
+    } else {
+        completeMainLogin(window, peer.data(), 77);
+    }
     QTRY_COMPARE_WITH_TIMEOUT(
         runJavaScriptAndWait(
             view->page(), QStringLiteral("window.__hardeningRoute.resetCount"), &completed)
@@ -1107,7 +1179,9 @@ void TencentMapClientTest::sessionExpiryClearsNavigationCacheBeforeRelogin()
                  .toBool());
     QVERIFY(completed);
 
-    completeMainLogin(window, peer.data(), 77);
+    if (expireFirst) {
+        completeMainLogin(window, peer.data(), 77);
+    }
     QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
     QVERIFY(!navigation->lastSuccessfulRoute().has_value());
     QVERIFY(!navigation->routeTracker_.retryRoute().has_value());
@@ -1184,11 +1258,14 @@ void TencentMapClientTest::nearbyChargerButtonsLocalizeEveryWireStatus()
         const auto *button = page.findChild<QPushButton *>(
             QStringLiteral("chargerButton_%1").arg(30 + index));
         QVERIFY(button != nullptr);
-        QVERIFY2(button->text().contains(expectedLabels.at(index).second),
-                 qPrintable(button->text()));
+        const auto *status = page.findChild<QLabel *>(
+            QStringLiteral("chargerStatus_%1").arg(30 + index));
+        QVERIFY(status != nullptr);
+        QVERIFY2(status->text().contains(expectedLabels.at(index).second),
+                 qPrintable(status->text()));
         for (const auto &wireAndLabel : expectedLabels) {
-            QVERIFY2(!button->text().contains(wireAndLabel.first),
-                     qPrintable(button->text()));
+            QVERIFY2(!status->text().contains(wireAndLabel.first),
+                     qPrintable(status->text()));
         }
     }
 }
@@ -1209,7 +1286,9 @@ void TencentMapClientTest::nearbySelectionCarriesOriginStationAndChargerWithoutM
     auto *chargerButton = page.findChild<QPushButton *>(QStringLiteral("chargerButton_1001"));
     auto *navigateButton = page.findChild<QPushButton *>(QStringLiteral("navigateButton"));
     QVERIFY(chargerButton != nullptr);
-    QVERIFY(chargerButton->text().contains(QStringLiteral("充电桩 ID：1001")));
+    auto *chargerId = page.findChild<QLabel *>(QStringLiteral("chargerId_1001"));
+    QVERIFY(chargerId != nullptr);
+    QCOMPARE(chargerId->text(), QStringLiteral("1001"));
     QVERIFY(navigateButton != nullptr);
     chargerButton->click();
     QCOMPARE(selected.size(), 1);

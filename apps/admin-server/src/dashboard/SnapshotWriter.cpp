@@ -1,4 +1,5 @@
 #include "dashboard/SnapshotWriter.h"
+#include "core/BusinessTime.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -72,7 +73,7 @@ QJsonObject SnapshotWriter::buildSnapshot() const
 {
     QJsonObject snapshot;
     snapshot.insert(QStringLiteral("schemaVersion"), 1);
-    snapshot.insert(QStringLiteral("generatedAt"), QDateTime::currentDateTime().toString(Qt::ISODate));
+    snapshot.insert(QStringLiteral("generatedAt"), BusinessTime::now());
     snapshot.insert(QStringLiteral("snapshotVersion"), scalarInt(QStringLiteral("SELECT version FROM snapshot_meta WHERE id=1")));
 
     QJsonObject kpi;
@@ -179,4 +180,3 @@ int SnapshotWriter::scalarInt(const QString &sql, int fallback) const
     }
     return fallback;
 }
-

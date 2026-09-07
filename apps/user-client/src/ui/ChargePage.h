@@ -88,9 +88,18 @@ private:
     [[nodiscard]] static bool isBusinessRefreshError(const QString &code);
 
     UserApi *api_;
+    QLabel *title_;
+    QLabel *progress_;
     QLabel *status_;
     QLabel *identity_;
+    QWidget *metrics_;
+    QLabel *metricCaption_;
     QLabel *meter_;
+    QLabel *metricUnit_;
+    QLabel *duration_;
+    QLabel *secondaryCaption_;
+    QLabel *secondaryMetric_;
+    QLabel *notice_;
     QLabel *summary_;
     QLabel *error_;
     QPushButton *reserveButton_;

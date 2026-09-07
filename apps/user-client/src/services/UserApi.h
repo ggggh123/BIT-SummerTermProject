@@ -53,6 +53,7 @@ signals:
     void systemHealthLoaded(QString requestId, ev::user::SystemHealthResult result);
     void chargerListLoaded(QString requestId, ev::user::ChargerListResult result);
     void loginSucceeded(ev::user::User user);
+    void sessionReset(quint64 sessionGeneration);
     void sessionExpired(quint64 sessionGeneration);
     void currentOrderLoaded(ev::user::RequestContext context,
                             ev::user::CurrentOrderResult result);
@@ -127,6 +128,7 @@ private:
     void applySessionUser(ev::user::User user);
     void finishProfileOperation(Operation operation);
     void markProfileUncertain();
+    void resetSession();
     void expireAuthenticatedSession();
     void handleConnectionState(bool connected);
     void handleResponse(const ev::protocol::ResponseEnvelope &response);

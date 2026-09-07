@@ -1,5 +1,7 @@
 # Five-System Integration, Demo, and Release Implementation Plan
 
+> **历史实施计划（2026-09-01）：** 本文的五系统 reset/start/smoke/rehearsal/release 门槛已不再是默认执行入口；它保留为原五系统设计的实施证据。当前 core 只使用 [`2026-09-04-core-integration-demo-release.md`](2026-09-04-core-integration-demo-release.md) 的门槛。本文中列出的 `ops/` 与 `scripts/reset_demo.sh` 等文件在当前提交尚未实现，不能据此宣称可运行。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Provide safe reset/start/stop/smoke/rehearsal commands, explicit fallbacks, formal role evidence, and an objective release gate for the complete five-system demonstration.

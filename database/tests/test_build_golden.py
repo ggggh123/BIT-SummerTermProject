@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sqlite3
 
@@ -40,3 +41,69 @@ def test_build_base_writes_db_manifest_and_is_deterministic(tmp_path):
     out2 = tmp_path / "golden2"
     build_base(out2, seed=20260901, cutoff=CUTOFF, name="base.db")
     assert canonical_hash(base1) == canonical_hash(out2 / "base.db")
+
+
+def test_build_core_writes_named_manifest_checksum_and_preserves_demo_manifest(
+        tmp_path):
+    out = tmp_path / "golden"
+    out.mkdir()
+    demo_manifest = out / "manifest.json"
+    demo_manifest.write_text('{"name":"demo.db"}\n', encoding="utf-8")
+
+    build_base(out, seed=20260901, cutoff=CUTOFF, name="core.db")
+
+    core = out / "core.db"
+    digest = hashlib.sha256(core.read_bytes()).hexdigest()
+    manifest = json.loads(
+        (out / "core.manifest.json").read_text(encoding="utf-8"))
+    assert manifest == {
+        "name": "core.db",
+        "schema_version": 1,
+        "seed": 20260901,
+        "cutoff": CUTOFF,
+        "row_counts": {
+            "admins": 1,
+            "users": 30,
+            "stations": 6,
+            "chargers": 48,
+            "orders": 431,
+            "telemetry": 0,
+            "station_hourly_history": 12960,
+            "forecast_runs": 0,
+            "forecasts": 0,
+            "events": 0,
+            "request_log": 0,
+        },
+        "sha256": digest,
+    }
+    assert (out / "core.db.sha256").read_text(encoding="utf-8").strip() == digest
+    assert demo_manifest.read_text(encoding="utf-8") == '{"name":"demo.db"}\n'
+
+    conn = sqlite3.connect(str(core))
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    conn.close()
+
+
+def test_build_core_refuses_to_overwrite_existing_artifacts(tmp_path):
+    out = tmp_path / "golden"
+    build_base(out, seed=20260901, cutoff=CUTOFF, name="core.db")
+    original = {
+        path.name: path.read_bytes()
+        for path in (
+            out / "core.db",
+            out / "core.manifest.json",
+            out / "core.db.sha256",
+        )
+    }
+
+    with pytest.raises(FileExistsError):
+        build_base(out, seed=20260901, cutoff=CUTOFF, name="core.db")
+
+    assert {
+        path.name: path.read_bytes()
+        for path in (
+            out / "core.db",
+            out / "core.manifest.json",
+            out / "core.db.sha256",
+        )
+    } == original

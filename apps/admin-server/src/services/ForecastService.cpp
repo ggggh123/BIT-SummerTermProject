@@ -167,8 +167,7 @@ QJsonObject ForecastService::healthState() const
         {QStringLiteral("schemaVersion"), 1},
         {QStringLiteral("snapshotVersion"), snapshotVersion},
         {QStringLiteral("forecastRunId"), runId.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(runId)},
-        {QStringLiteral("serverTime"), chinaTimestampNow()},
-        {QStringLiteral("service"), QStringLiteral("charging-platform-admin-server")}
+        {QStringLiteral("serverTime"), chinaTimestampNow()}
     };
 }
 
