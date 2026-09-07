@@ -215,7 +215,14 @@ def _make_package_inputs(tmp_path):
 
     copyright_path = sysroot / "usr/share/doc/fixture-runtime/copyright"
     copyright_path.parent.mkdir(parents=True)
-    copyright_path.write_text("Fixture redistribution notice\n", encoding="utf-8")
+    copyright_path.write_text(
+        "Fixture redistribution notice; see /usr/share/common-licenses/GPL-3\n",
+        encoding="utf-8",
+    )
+    common_license = sysroot / "usr/share/common-licenses/GPL-3"
+    common_license.parent.mkdir(parents=True)
+    common_license.write_text("Fixture GPL-3 full text\n", encoding="utf-8")
+    (common_license.parent / "GPL").symlink_to("GPL-3")
     packaged_paths = [
         path for path in sysroot.rglob("*")
         if path.is_file() or path.is_symlink()
@@ -254,6 +261,59 @@ def _run_package(inputs):
         release_id="1.0.0-20260907-3aa9a27",
         source_commit="3aa9a2721d493584a40640d9a0147d802d9723e6",
     )
+
+
+@pytest.mark.parametrize("existing_kind", ["file", "directory", "symlink", "dangling"])
+def test_package_entrypoint_rejects_every_existing_output_identity(
+        tmp_path, existing_kind):
+    inputs = _make_package_inputs(tmp_path)
+    output = inputs[3]
+    if existing_kind == "file":
+        output.write_text("user file", encoding="utf-8")
+    elif existing_kind == "directory":
+        output.mkdir()
+    else:
+        target = tmp_path / (
+            "valid symlink target" if existing_kind == "symlink" else "missing target"
+        )
+        if existing_kind == "symlink":
+            target.mkdir()
+        output.symlink_to(target, target_is_directory=True)
+    original_inode = os.lstat(output).st_ino
+
+    with pytest.raises(FileExistsError, match="overwrite"):
+        _run_package(inputs)
+
+    assert os.path.lexists(output)
+    assert os.lstat(output).st_ino == original_inode
+    if existing_kind == "file":
+        assert output.read_text(encoding="utf-8") == "user file"
+    elif existing_kind == "dangling":
+        assert not output.exists()
+
+
+def test_package_publication_does_not_replace_racing_empty_directory(
+        tmp_path, monkeypatch):
+    inputs = _make_package_inputs(tmp_path)
+    output = inputs[3]
+    original_publish = package_release_module._publish_no_replace
+    collision = {}
+
+    def publish_after_collision(stage, destination):
+        destination.mkdir()
+        collision["inode"] = destination.stat().st_ino
+        return original_publish(stage, destination)
+
+    monkeypatch.setattr(
+        package_release_module, "_publish_no_replace", publish_after_collision
+    )
+
+    with pytest.raises(FileExistsError):
+        _run_package(inputs)
+
+    assert output.is_dir()
+    assert output.stat().st_ino == collision["inode"]
+    assert list(output.iterdir()) == []
 
 
 def test_package_writes_exact_runtime_manifest_hashes_and_immutable_sums(tmp_path):
@@ -321,12 +381,35 @@ def test_package_uses_explicit_support_database_and_resource_whitelists(tmp_path
     assert (output / "plugins/platforms/libqxcb.so").is_file()
     assert (output / "fonts/NotoSansCJK-Regular.ttc").is_file()
     assert (output / "licenses/fixture-runtime/copyright").is_file()
+    assert (output / "licenses/common-licenses/GPL-3").read_text(
+        encoding="utf-8"
+    ) == "Fixture GPL-3 full text\n"
     assert not (output / ".git").exists()
     assert not (output / "private-notes.txt").exists()
     assert not (output / "python/lib/python3.10/__pycache__").exists()
     assert "__pycache__" not in (
         output / "licenses/dependencies.json"
     ).read_text(encoding="utf-8")
+
+
+def test_common_license_texts_have_provenance_and_notice_path_mapping(tmp_path):
+    output = _run_package(_make_package_inputs(tmp_path))
+
+    provenance = json.loads(
+        (output / "licenses/dependencies.json").read_text(encoding="utf-8")
+    )
+    all_sources = {
+        source
+        for package in provenance["packages"]
+        for source in package["sourceFiles"]
+    }
+    assert "/usr/share/common-licenses/GPL-3" in all_sources
+    assert "/usr/share/common-licenses/GPL" in all_sources
+    notices = (output / "licenses/THIRD_PARTY_NOTICES.md").read_text(
+        encoding="utf-8"
+    )
+    assert "/usr/share/common-licenses" in notices
+    assert "licenses/common-licenses" in notices
     assert "must not read or ship" not in (output / "config.local.ini").read_text()
 
 
@@ -346,9 +429,48 @@ def test_package_rejects_input_symlink_that_escapes_its_declared_root(tmp_path):
     outside.write_text("must never be collected", encoding="utf-8")
     stdlib_file = inputs[0] / "usr/lib/python3.10/os.py"
     stdlib_file.unlink()
-    stdlib_file.symlink_to(outside)
+    stdlib_file.symlink_to("../../../../host-only-secret")
 
     with pytest.raises(ValueError, match="escapes"):
+        _run_package(inputs)
+    assert not inputs[3].exists()
+
+
+def test_package_rebases_valid_absolute_sysroot_symlink_and_records_target(
+        tmp_path):
+    inputs = _make_package_inputs(tmp_path)
+    sysroot = inputs[0]
+    target = sysroot / "etc/python3.10/sitecustomize.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("# sysroot site customization\n", encoding="utf-8")
+    link = sysroot / "usr/lib/python3.10/sitecustomize.py"
+    link.symlink_to("/etc/python3.10/sitecustomize.py")
+    listing = sysroot / "var/lib/dpkg/info/fixture-runtime.list"
+    with listing.open("a", encoding="utf-8") as stream:
+        stream.write("/usr/lib/python3.10/sitecustomize.py\n")
+        stream.write("/etc/python3.10/sitecustomize.py\n")
+
+    output = _run_package(inputs)
+
+    bundled = output / "python/lib/python3.10/sitecustomize.py"
+    assert not bundled.is_symlink()
+    assert bundled.read_text(encoding="utf-8") == "# sysroot site customization\n"
+    provenance = json.loads(
+        (output / "licenses/dependencies.json").read_text(encoding="utf-8")
+    )
+    source_files = provenance["packages"][0]["sourceFiles"]
+    assert "/etc/python3.10/sitecustomize.py" in source_files
+
+
+def test_package_rejects_cyclic_sysroot_symlink(tmp_path):
+    inputs = _make_package_inputs(tmp_path)
+    stdlib = inputs[0] / "usr/lib/python3.10"
+    first = stdlib / "cycle-first.py"
+    second = stdlib / "cycle-second.py"
+    first.symlink_to(second.name)
+    second.symlink_to(first.name)
+
+    with pytest.raises(ValueError, match="cyclic"):
         _run_package(inputs)
     assert not inputs[3].exists()
 

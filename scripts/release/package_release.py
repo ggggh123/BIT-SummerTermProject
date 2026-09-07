@@ -4,6 +4,8 @@ from __future__ import annotations
 import configparser
 from collections import deque
 import argparse
+import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -86,7 +88,9 @@ REQUIRED_WEBENGINE_RESOURCES = (
 
 def prepare_output(path: Path) -> Path:
     """Create and return a new output directory, refusing any existing path."""
-    output = Path(path).resolve()
+    output = Path(os.path.abspath(path))
+    if os.path.lexists(output):
+        raise FileExistsError(f"refusing to overwrite existing output: {output}")
     output.mkdir(parents=True, exist_ok=False)
     return output
 
@@ -150,6 +154,39 @@ def _within(path: Path, root: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _resolve_in_root(
+        root: Path, path: Path, seen: set[Path] | None = None) -> Path:
+    """Resolve all symlinks as if ``root`` were ``/``, never via the host root."""
+    boundary = Path(root).resolve()
+    candidate = Path(os.path.abspath(path))
+    if not _within(candidate, boundary):
+        raise ValueError(f"release input symlink escapes its declared root: {path}")
+    current = boundary
+    visited = set() if seen is None else seen
+    for part in candidate.relative_to(boundary).parts:
+        item = current / part
+        if item.is_symlink():
+            lexical = Path(os.path.abspath(item))
+            if lexical in visited:
+                raise ValueError(f"cyclic sysroot symlink: {path}")
+            visited.add(lexical)
+            link = Path(os.readlink(item))
+            target = (
+                boundary / str(link).lstrip("/")
+                if link.is_absolute()
+                else item.parent / link
+            )
+            target = Path(os.path.abspath(target))
+            if not _within(target, boundary):
+                raise ValueError(f"release input symlink escapes its declared root: {path}")
+            current = _resolve_in_root(boundary, target, visited)
+        else:
+            current = item
+    if not current.exists():
+        raise FileNotFoundError(f"sysroot link target is missing: {path}")
+    return current
 
 
 def _resolve_symlink_chain(sysroot: Path, source: Path) -> tuple[Path, list[Path]]:
@@ -272,21 +309,33 @@ def _copy_tree(
     if not src.is_dir():
         raise FileNotFoundError(f"required release directory is missing: {src}")
     allowed = Path(allowed_root).resolve() if allowed_root is not None else src.resolve()
-    for path in src.rglob("*"):
-        if (path.is_file() or path.is_symlink()) and not _within(path.resolve(), allowed):
-            raise ValueError(f"release input symlink escapes its declared root: {path}")
-    shutil.copytree(
-        src,
-        destination,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
-    )
-    return [
-        path.resolve()
-        for path in src.rglob("*")
-        if path.is_file()
-        and "__pycache__" not in path.relative_to(src).parts
-        and path.suffix not in (".pyc", ".pyo")
-    ]
+    copied: list[Path] = []
+
+    def copy_entry(item: Path, target: Path, directory_chain: set[tuple[int, int]]) -> None:
+        resolved = _resolve_in_root(allowed, item)
+        if resolved.is_dir():
+            identity = (resolved.stat().st_dev, resolved.stat().st_ino)
+            if identity in directory_chain:
+                raise ValueError(f"cyclic sysroot directory symlink: {item}")
+            target.mkdir(parents=True, exist_ok=False)
+            next_chain = directory_chain | {identity}
+            for child in sorted(resolved.iterdir(), key=lambda path: path.name):
+                if (child.name == "__pycache__"
+                        or child.suffix in (".pyc", ".pyo")):
+                    continue
+                copy_entry(child, target / child.name, next_chain)
+            shutil.copystat(resolved, target, follow_symlinks=False)
+        elif resolved.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(resolved, target)
+            if item.is_symlink():
+                copied.append(Path(os.path.abspath(item)))
+            copied.append(resolved)
+        else:
+            raise ValueError(f"required sysroot tree entry is not a file or directory: {item}")
+
+    copy_entry(src, Path(destination), set())
+    return copied
 
 
 def _copy_matching_files(
@@ -338,6 +387,8 @@ def _validate_inputs(
         Path(sysroot) / "usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         sysroot,
     )
+    if not (Path(sysroot) / "usr/share/common-licenses").is_dir():
+        raise FileNotFoundError("required common license texts directory is missing")
     for name in ("libssl.so.3", "libcrypto.so.3"):
         resolve_sysroot_library(sysroot, name)
     # Parse the authorized input now, before creating a release tree.  This never logs the key.
@@ -428,7 +479,7 @@ def _write_provenance(bundle: Path, sysroot: Path, sources: set[Path]) -> None:
     root = Path(sysroot).resolve()
     owners, statuses = _dpkg_owners(root)
     packages: dict[str, dict[str, object]] = {}
-    for source in sorted({path.resolve() for path in sources}):
+    for source in sorted({Path(os.path.abspath(path)) for path in sources}):
         if not _within(source, root):
             continue
         source_name = "/" + source.relative_to(root).as_posix()
@@ -462,6 +513,8 @@ def _write_provenance(bundle: Path, sysroot: Path, sources: set[Path]) -> None:
     (licenses / "THIRD_PARTY_NOTICES.md").write_text(
         "# 第三方依赖来源与版权\n\n"
         "本目录按 Ubuntu Jammy 已安装包记录实际收集文件、版本和版权文本。\n\n"
+        "原系统路径 `/usr/share/common-licenses` 的通用许可正文位于包内"
+        " `licenses/common-licenses`。\n\n"
         + "\n".join(
             f"- `{item['package']}` `{item['version']}`："
             f"`{item['package']}/copyright`"
@@ -574,6 +627,12 @@ def _populate_release(
     for font in fonts:
         sysroot_sources.add(_copy_file(font, bundle / "fonts" / font.name, sysroot))
 
+    sysroot_sources.update(_copy_tree(
+        sysroot / "usr/share/common-licenses",
+        bundle / "licenses/common-licenses",
+        sysroot,
+    ))
+
     for ssl_name in ("libssl.so.3", "libcrypto.so.3"):
         source = _copy_sysroot_library(sysroot, ssl_name, bundle / "lib")
         sysroot_sources.add(source)
@@ -599,6 +658,36 @@ def _populate_release(
     _write_sums(bundle)
 
 
+def _publish_no_replace(stage: Path, output: Path) -> None:
+    """Atomically rename a completed tree while refusing every existing target."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    try:
+        renameat2 = libc.renameat2
+    except AttributeError as exc:
+        raise OSError(errno.ENOSYS, "renameat2 is required for no-replace publication") from exc
+    renameat2.argtypes = (
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    )
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        -100,
+        os.fsencode(stage),
+        -100,
+        os.fsencode(output),
+        1,
+    )
+    if result == 0:
+        return
+    error = ctypes.get_errno()
+    if error in (errno.EEXIST, errno.ENOTEMPTY):
+        raise FileExistsError(error, "refusing to overwrite existing output", output)
+    raise OSError(error, os.strerror(error), output)
+
+
 def package_release(
         *, sysroot: Path, build_dir: Path, source_dir: Path, output_dir: Path,
         config_file: Path, release_id: str, source_commit: str) -> Path:
@@ -611,7 +700,7 @@ def package_release(
     build = Path(build_dir).resolve()
     source = Path(source_dir).resolve()
     config = Path(config_file).resolve()
-    output = Path(output_dir).resolve()
+    output = Path(os.path.abspath(output_dir))
     if os.path.lexists(output):
         raise FileExistsError(f"refusing to overwrite existing output: {output}")
     _validate_inputs(root, build, source, config)
@@ -623,7 +712,7 @@ def package_release(
         )
         if os.path.lexists(output):
             raise FileExistsError(f"refusing to overwrite existing output: {output}")
-        stage.rename(output)
+        _publish_no_replace(stage, output)
     except BaseException:
         if stage.exists():
             shutil.rmtree(stage)
