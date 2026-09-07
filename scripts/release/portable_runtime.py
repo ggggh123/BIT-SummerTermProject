@@ -79,7 +79,7 @@ class PortableRuntime(Runtime):
             try:
                 with source.open(encoding="utf-8") as stream:
                     config.read_file(stream)
-            except (OSError, configparser.Error) as exc:
+            except (OSError, UnicodeError, configparser.Error) as exc:
                 raise DemoError("CONFIG_INVALID", "本地INI配置缺失或格式无效") from exc
             key = config.get("tencent", "mapKey", fallback="").strip().strip('"').strip()
         if not key:
@@ -132,13 +132,17 @@ class PortableRuntime(Runtime):
                 raise DemoError("ACTIVE_SERVER", "存在无法确认身份的未停止发行记录") from exc
             if manifest["state"] == "STOPPED":
                 continue
-            record = manifest["processes"].get("server")
-            if record is not None and processes.inspect(record) != "EXITED":
+            active = {}
+            for role, record in manifest["processes"].items():
+                state = processes.inspect(record)
+                if state != "EXITED":
+                    active[role] = state
+            if active:
                 if manifest["sourceRoot"] != str(self.bundle):
                     raise DemoError(
                         "BUNDLE_MOVED_RUNNING", "发行包在进程运行期间被移动；请移回原位置后停止"
                     )
-                raise DemoError("ACTIVE_SERVER", "本发行版已有活跃或身份不明的服务端记录")
+                raise DemoError("ACTIVE_SERVER", "本发行版已有活跃或身份不明的三端进程记录")
 
     @contextlib.contextmanager
     def _launch_environment(self, software_rendering):
@@ -171,27 +175,44 @@ class PortableRuntime(Runtime):
             raise DemoError("DESKTOP_MISSING", "未检测到桌面显示会话，三端图形程序不会启动")
         self.refuse_active_server()
         self._configuration_token = secrets.token_urlsafe(32)
-        self.configuration()
-        self.build_info(self.bundle)
-        with socket.socket() as probe:
-            try:
-                probe.bind(("127.0.0.1", args.port))
-            except OSError as exc:
-                raise DemoError("PORT_IN_USE", "本机端口已被占用，不启动任何进程") from exc
-        args.build_dir = self.bundle
-        args.headless = False
-        self.reset(args)
-        self.data_root.mkdir(parents=True, exist_ok=True)
-        atomic_json(self.data_root / "current.json", {
-            "schemaVersion": 1,
-            "releaseId": self.release["releaseId"],
-            "runId": args.run_id,
-        })
         try:
+            self.configuration()
+            self.build_info(self.bundle)
+            with socket.socket() as probe:
+                try:
+                    probe.bind(("127.0.0.1", args.port))
+                except OSError as exc:
+                    raise DemoError("PORT_IN_USE", "本机端口已被占用，不启动任何进程") from exc
+            args.build_dir = self.bundle
+            args.headless = False
+            self.reset(args)
+            self.data_root.mkdir(parents=True, exist_ok=True)
+            atomic_json(self.data_root / "current.json", {
+                "schemaVersion": 1,
+                "releaseId": self.release["releaseId"],
+                "runId": args.run_id,
+            })
             with self._launch_environment(getattr(args, "software_rendering", False)):
                 return Runtime.start(self, args)
         finally:
             self._configuration_token = None
+
+    def stop(self, args):
+        _, manifest = self.load(args.run_id)
+        if manifest["state"] != "STOPPED" and manifest["sourceRoot"] != str(self.bundle):
+            states = {
+                role: processes.inspect(record)
+                for role, record in manifest["processes"].items()
+            }
+            if any(state != "EXITED" for state in states.values()):
+                return {
+                    "ok": False,
+                    "code": "BUNDLE_MOVED_RUNNING",
+                    "processes": states,
+                    "message": "发行包在进程运行期间被移动；请移回原位置后再停止："
+                               + manifest["sourceRoot"],
+                }
+        return Runtime.stop(self, args)
 
     def status(self, args):
         _, manifest = self.load(args.run_id)

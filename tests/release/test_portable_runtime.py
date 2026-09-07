@@ -116,11 +116,14 @@ def test_verified_binaries_need_no_build_cache(bundle, tmp_path):
 def test_tampered_binary_is_rejected_before_start(bundle, tmp_path, monkeypatch):
     (bundle / "bin/ev_user_client").write_bytes(b"#!/bin/sh\nexit 3\n")
     monkeypatch.setenv("DISPLAY", ":fixture")
+    generated = iter(("failed-start-token", "fresh-token"))
+    monkeypatch.setattr("portable_runtime.secrets.token_urlsafe", lambda size: next(generated))
     runtime = PortableRuntime(bundle, data_home=tmp_path / "数据")
     with pytest.raises(DemoError) as caught:
         runtime.start(args(port=free_port()))
     assert caught.value.code == "BINARY_MISMATCH"
     assert not any(path.is_dir() for path in runtime.runs.iterdir())
+    assert runtime.configuration()[1] == "fresh-token"
 
 
 def test_user_config_overrides_bundle_and_runtime_generates_private_token(
@@ -179,6 +182,18 @@ def test_default_config_errors_are_explicit_before_start(
     with pytest.raises(DemoError) as caught:
         runtime.start(args(port=free_port()))
     assert caught.value.code == code
+    assert not any(path.is_dir() for path in runtime.runs.iterdir())
+
+
+def test_invalid_utf8_config_is_reported_as_config_invalid(
+        bundle, tmp_path, monkeypatch):
+    (bundle / "config.local.ini").write_bytes(b"[tencent]\nmapKey=\xff\n")
+    monkeypatch.setenv("DISPLAY", ":fixture")
+    monkeypatch.delenv("EV_TENCENT_MAP_KEY", raising=False)
+    runtime = PortableRuntime(bundle, data_home=tmp_path / "data")
+    with pytest.raises(DemoError) as caught:
+        runtime.start(args(port=free_port()))
+    assert caught.value.code == "CONFIG_INVALID"
     assert not any(path.is_dir() for path in runtime.runs.iterdir())
 
 
@@ -242,6 +257,9 @@ def test_client_early_exit_rolls_back_registered_processes(
     import demo_processes
     monkeypatch.setenv("DISPLAY", ":fixture")
     monkeypatch.setenv("PORTABLE_FIXTURE_MODE", "client_exit")
+    monkeypatch.setenv("EV_SIMULATOR_TOKEN", "external-token-must-not-be-used")
+    monkeypatch.setattr("portable_runtime.secrets.token_urlsafe",
+                        lambda size: "generated-token-must-not-leak")
     runtime = PortableRuntime(bundle, data_home=tmp_path / "data")
     with pytest.raises(DemoError) as caught:
         runtime.start(args(port=free_port()))
@@ -253,7 +271,13 @@ def test_client_early_exit_rolls_back_registered_processes(
                for record in manifest["processes"].values())
     serialized = json.dumps(manifest)
     assert "bundle-fixture-key" not in serialized
-    assert "EV_SIMULATOR_TOKEN" not in serialized
+    assert "generated-token-must-not-leak" not in serialized
+    assert "external-token-must-not-be-used" not in serialized
+    for log in (runtime.runs / "round-01").glob("*.log"):
+        contents = log.read_text(errors="replace")
+        assert "bundle-fixture-key" not in contents
+        assert "generated-token-must-not-leak" not in contents
+        assert "external-token-must-not-be-used" not in contents
 
 
 def test_no_desktop_is_rejected_before_creating_run(bundle, tmp_path, monkeypatch):
@@ -266,13 +290,60 @@ def test_no_desktop_is_rejected_before_creating_run(bundle, tmp_path, monkeypatc
     assert not runtime.runs.exists()
 
 
-def test_moving_running_bundle_is_reported_and_stop_still_targets_records(
-        bundle, tmp_path, monkeypatch):
+def test_surviving_nonserver_roles_block_second_start(bundle, tmp_path, monkeypatch):
+    import demo_processes
     monkeypatch.setenv("DISPLAY", ":fixture")
     data_home = tmp_path / "data"
     runtime = PortableRuntime(bundle, data_home=data_home)
     first = args("active-round", port=free_port())
     runtime.start(first)
+    try:
+        manifest = json.loads((runtime.runs / "active-round/manifest.json").read_text())
+        assert demo_processes.stop_one(manifest["processes"]["server"], 1, True) == "EXITED"
+        assert demo_processes.inspect(manifest["processes"]["simulator"]) == "ALIVE"
+        assert demo_processes.inspect(manifest["processes"]["client"]) == "ALIVE"
+        with pytest.raises(DemoError) as caught:
+            runtime.start(args("new-round", port=free_port()))
+        assert caught.value.code == "ACTIVE_SERVER"
+        assert not (runtime.runs / "new-round").exists()
+    finally:
+        assert runtime.stop(args("active-round"))["code"] == "STOPPED"
+
+
+def test_identity_ambiguous_nonserver_record_blocks_second_start(
+        bundle, tmp_path, monkeypatch):
+    monkeypatch.setenv("DISPLAY", ":fixture")
+    runtime = PortableRuntime(bundle, data_home=tmp_path / "data")
+    runtime.reset(args("ambiguous-round"))
+    manifest_path = runtime.runs / "ambiguous-round/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.update(state="FAILED", processes={"client": {"pid": True}})
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(DemoError) as caught:
+        runtime.start(args("new-round", port=free_port()))
+    assert caught.value.code == "ACTIVE_SERVER"
+    assert not (runtime.runs / "new-round").exists()
+
+
+def test_moved_running_elf_refuses_start_and_stop_until_restored(
+        bundle, tmp_path, monkeypatch):
+    import demo_processes
+    monkeypatch.setenv("DISPLAY", ":fixture")
+    client = bundle / "bin/ev_user_client"
+    shutil.copyfile("/usr/bin/sleep", client)
+    client.chmod(0o755)
+    release_path = bundle / "release.json"
+    release = json.loads(release_path.read_text())
+    release["binaries"]["client"]["sha256"] = hashlib.sha256(client.read_bytes()).hexdigest()
+    release_path.write_text(json.dumps(release), encoding="utf-8")
+    data_home = tmp_path / "data"
+    runtime = PortableRuntime(bundle, data_home=data_home)
+    runtime.reset(args("elf-round"))
+    child = subprocess.Popen([client, "60"])
+    manifest_path = runtime.runs / "elf-round/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.update(state="RUNNING", processes={"client": demo_processes.capture(child.pid)})
+    manifest_path.write_text(json.dumps(manifest))
     moved = tmp_path / "running bundle moved"
     bundle.rename(moved)
     relocated = PortableRuntime(moved, data_home=data_home)
@@ -280,9 +351,21 @@ def test_moving_running_bundle_is_reported_and_stop_still_targets_records(
         with pytest.raises(DemoError) as caught:
             relocated.start(args("new-round", port=free_port()))
         assert caught.value.code == "BUNDLE_MOVED_RUNNING"
-        assert relocated.status(args("active-round"))["installPathChanged"] is True
+        refused = relocated.stop(args("elf-round"))
+        assert refused["ok"] is False
+        assert refused["code"] == "BUNDLE_MOVED_RUNNING"
+        assert "移回原位置" in refused["message"]
+        assert child.poll() is None
+        moved.rename(bundle)
+        restored = PortableRuntime(bundle, data_home=data_home)
+        assert restored.stop(args("elf-round"))["code"] == "STOPPED"
+        child.wait(timeout=2)
     finally:
-        assert relocated.stop(args("active-round"))["code"] == "STOPPED"
+        if moved.exists() and not bundle.exists():
+            moved.rename(bundle)
+        if child.poll() is None:
+            child.kill()
+        child.wait(timeout=2)
 
 
 def materialize_support(bundle):
