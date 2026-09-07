@@ -50,6 +50,11 @@ DashboardService *AppContext::dashboardService() const
     return m_dashboardService.get();
 }
 
+ForecastService *AppContext::forecastService() const
+{
+    return m_forecastService.get();
+}
+
 ApiServer *AppContext::apiServer() const
 {
     return m_apiServer.get();

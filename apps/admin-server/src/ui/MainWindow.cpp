@@ -1,4 +1,5 @@
 #include "ui/MainWindow.h"
+#include "ui/HealthPanel.h"
 
 #include <QHeaderView>
 #include <QJsonObject>
@@ -35,6 +36,7 @@ MainWindow::MainWindow(AppContext *context, QWidget *parent)
                      {{QStringLiteral("监听地址"), QStringLiteral("127.0.0.1:4545")},
                       {QStringLiteral("数据库"), m_context->databasePath()}}),
                  QStringLiteral("接口服务"));
+    tabs->addTab(new HealthPanel(m_context), QStringLiteral("系统健康"));
 
     setCentralWidget(tabs);
 }

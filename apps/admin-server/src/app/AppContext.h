@@ -24,6 +24,7 @@ public:
 
     AuthService *authService() const;
     DashboardService *dashboardService() const;
+    ForecastService *forecastService() const;
     ApiServer *apiServer() const;
     QString databasePath() const;
     QString host() const;
