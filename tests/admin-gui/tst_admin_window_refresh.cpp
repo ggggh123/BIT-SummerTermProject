@@ -301,7 +301,8 @@ private slots:
             "INSERT INTO orders(user_id,charger_id,status,reserved_at,started_at,ended_at,energy_kwh,amount_fen) "
             "SELECT u.id,c.id,'completed','%1T00:00:00+08:00','%1T00:00:00+08:00','%1T00:01:00+08:00',1.0,777 "
             "FROM users u CROSS JOIN chargers c LIMIT 1").arg(today)));
-        const QString expectedToday = QStringLiteral("今日营收：") + moneyText(todayBefore + 777);
+        // 新卡片将标题与数值分开，继续核验刷新后真实金额而非旧文案布局。
+        const QString expectedToday = moneyText(todayBefore + 777);
         QTRY_COMPARE_WITH_TIMEOUT(todayMetric->text(), expectedToday, 4000);
 
         tabs->setCurrentIndex(2);

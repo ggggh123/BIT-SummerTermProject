@@ -49,6 +49,11 @@ add_executable(tst_admin_window_refresh
     ../../apps/admin-server/src/services/UserService.h
     ../../apps/admin-server/src/ui/MainWindow.cpp
     ../../apps/admin-server/src/ui/MainWindow.h
+    ../../apps/admin-server/src/ui/AdminTheme.cpp
+    ../../apps/admin-server/src/ui/AdminTheme.h
+    ../../apps/admin-server/src/ui/AdminVisuals.cpp
+    ../../apps/admin-server/src/ui/AdminVisuals.h
+    ../../apps/admin-server/src/ui/admin-ui.qrc
 )
 target_include_directories(tst_admin_window_refresh PRIVATE ../../apps/admin-server/src)
 target_compile_definitions(tst_admin_window_refresh PRIVATE
@@ -59,3 +64,17 @@ target_link_libraries(tst_admin_window_refresh PRIVATE
     Qt6::Test Qt6::Widgets Qt6::Network Qt6::Sql ev_protocol)
 add_test(NAME admin_window_refresh COMMAND tst_admin_window_refresh)
 set_tests_properties(admin_window_refresh PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# 视觉/交互测试复用同一组真实管理端实现，不新增服务或测试专用业务入口。
+get_target_property(ADMIN_GUI_SHARED_SOURCES tst_admin_window_refresh SOURCES)
+list(REMOVE_ITEM ADMIN_GUI_SHARED_SOURCES tst_admin_window_refresh.cpp)
+foreach(ui_test IN ITEMS admin_ui admin_login_style)
+    add_executable(tst_${ui_test} tst_${ui_test}.cpp ${ADMIN_GUI_SHARED_SOURCES})
+    target_include_directories(tst_${ui_test} PRIVATE ../../apps/admin-server/src)
+    target_compile_definitions(tst_${ui_test} PRIVATE
+        EV_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        EV_TEST_GOLDEN_DB="${CMAKE_SOURCE_DIR}/runtime/golden/core.db")
+    target_link_libraries(tst_${ui_test} PRIVATE Qt6::Test Qt6::Widgets Qt6::Network Qt6::Sql ev_protocol)
+    add_test(NAME ${ui_test} COMMAND tst_${ui_test})
+    set_tests_properties(${ui_test} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endforeach()
