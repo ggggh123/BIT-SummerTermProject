@@ -1,5 +1,4 @@
 find_package(Qt6 6.2 REQUIRED COMPONENTS Core Widgets Network Sql)
-find_package(Qt6 6.2 COMPONENTS Charts QUIET)
 
 if(NOT DEFINED EV_PROJECT_SOURCE_DIR)
     set(EV_PROJECT_SOURCE_DIR "${CMAKE_SOURCE_DIR}")
@@ -45,6 +44,11 @@ add_executable(ev_admin_server
     src/ui/LoginDialog.h
     src/ui/MainWindow.cpp
     src/ui/MainWindow.h
+    src/ui/AdminTheme.cpp
+    src/ui/AdminTheme.h
+    src/ui/AdminVisuals.cpp
+    src/ui/AdminVisuals.h
+    src/ui/admin-ui.qrc
 )
 
 target_include_directories(ev_admin_server PRIVATE src)
@@ -56,8 +60,3 @@ target_link_libraries(ev_admin_server PRIVATE
     Qt6::Sql
     ev_protocol
 )
-
-if(TARGET Qt6::Charts)
-    target_compile_definitions(ev_admin_server PRIVATE EV_HAS_QT_CHARTS)
-    target_link_libraries(ev_admin_server PRIVATE Qt6::Charts)
-endif()

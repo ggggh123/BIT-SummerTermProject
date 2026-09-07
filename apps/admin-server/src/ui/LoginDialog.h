@@ -6,6 +6,8 @@
 #include <QString>
 
 class QLineEdit;
+class QLabel;
+class QPushButton;
 
 class LoginDialog : public QDialog
 {
@@ -23,5 +25,7 @@ private:
     bool m_busy = false;
     QLineEdit *m_usernameEdit = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
+    QLabel *m_feedbackLabel = nullptr;
+    QPushButton *m_loginButton = nullptr;
     QString m_adminToken;
 };
