@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import uuid
 
 
 LIBRARY_DIRS = (
@@ -399,9 +400,11 @@ def _write_wrappers(bundle: Path) -> None:
     common = r'''#!/bin/sh
 set -eu
 bundle=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+cd -- "$bundle"
 export PYTHONHOME="$bundle/python"
 export PYTHONPATH="$bundle/python/lib/python3.10:$bundle/python/lib/python3.10/lib-dynload"
 export PYTHONNOUSERSITE=1
+export PYTHONDONTWRITEBYTECODE=1
 export FONTCONFIG_FILE="$bundle/fonts/fonts.conf"
 export FONTCONFIG_PATH="$bundle/fonts"
 export LD_LIBRARY_PATH="$bundle/lib"
@@ -430,13 +433,14 @@ exec "$bundle/python/bin/python3" "$bundle/support/portable_launcher.py" __COMMA
         "<?xml version=\"1.0\"?>\n"
         "<!DOCTYPE fontconfig SYSTEM \"fonts.dtd\">\n"
         "<fontconfig>\n"
-        "  <dir prefix=\"relative\">.</dir>\n"
+        "  <dir>fonts</dir>\n"
         "  <cachedir prefix=\"xdg\">fontconfig</cachedir>\n"
         "  <alias><family>sans-serif</family><prefer>"
         "<family>Noto Sans CJK SC</family></prefer></alias>\n"
         "</fontconfig>\n",
         encoding="utf-8",
     )
+    (bundle / "fonts/.uuid").write_text(str(uuid.uuid4()), encoding="ascii")
 
 
 def _dpkg_status(sysroot: Path) -> dict[str, dict[str, str]]:

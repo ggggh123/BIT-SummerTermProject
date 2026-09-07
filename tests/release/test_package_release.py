@@ -4,9 +4,11 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
+import uuid
 
 import pytest
 
@@ -588,3 +590,85 @@ def test_start_wrapper_keeps_space_arguments_and_private_environment_local(tmp_p
         "--software-rendering",
     ]
     assert os.environ.get("PYTHONHOME") != str(output / "python")
+
+
+def test_start_wrapper_real_imports_do_not_write_bytecode_into_bundle(tmp_path):
+    output = _run_package(_make_package_inputs(tmp_path))
+    (output / "support/portable_runtime.py").write_text(
+        "IMPORTED = True\n", encoding="utf-8"
+    )
+    (output / "database/build_golden.py").write_text(
+        "IMPORTED = True\n", encoding="utf-8"
+    )
+    (output / "support/portable_launcher.py").write_text(
+        "import sys\n"
+        "from pathlib import Path\n"
+        "bundle = Path(__file__).resolve().parents[1]\n"
+        "sys.path.insert(0, str(bundle / 'database'))\n"
+        "import portable_runtime\n"
+        "import build_golden\n",
+        encoding="utf-8",
+    )
+    interpreter = output / "python/bin/python3"
+    interpreter.write_text(
+        "#!/bin/sh\n"
+        "unset PYTHONHOME PYTHONPATH\n"
+        f"exec {shlex.quote(sys.executable)} \"$@\"\n",
+        encoding="utf-8",
+    )
+    interpreter.chmod(0o755)
+    host_environment = os.environ.copy()
+    host_environment.pop("PYTHONDONTWRITEBYTECODE", None)
+
+    subprocess.run(
+        [str(output / "启动.sh")],
+        check=True,
+        env=host_environment,
+        cwd=tmp_path,
+    )
+
+    assert not list((output / "support").rglob("*.pyc"))
+    assert not list((output / "database").rglob("*.pyc"))
+    assert not (output / "support/__pycache__").exists()
+    assert not (output / "database/__pycache__").exists()
+
+
+def test_fontconfig_wrapper_limits_movable_font_search_to_bundle_fonts(tmp_path):
+    output = _run_package(_make_package_inputs(tmp_path))
+    font_uuid = output / "fonts/.uuid"
+    assert len(font_uuid.read_bytes()) == 36
+    assert uuid.UUID(font_uuid.read_text(encoding="ascii")).version == 4
+    uuid_digest = hashlib.sha256(font_uuid.read_bytes()).hexdigest()
+    assert f"{uuid_digest}  fonts/.uuid" in (
+        output / "SHA256SUMS"
+    ).read_text(encoding="utf-8").splitlines()
+    relocated = tmp_path / "relocated package with spaces"
+    output.rename(relocated)
+    uuid_before = (relocated / "fonts/.uuid").read_bytes()
+    recorder = relocated / "python/bin/python3"
+    recorder.write_text(
+        "#!/bin/sh\n"
+        "printf '%s\\n' \"$PWD\" \"$FONTCONFIG_FILE\"\n",
+        encoding="utf-8",
+    )
+    recorder.chmod(0o755)
+    caller = tmp_path / "unrelated caller directory"
+    caller.mkdir()
+
+    result = subprocess.run(
+        [str(relocated / "查看状态.sh")],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        cwd=caller,
+    )
+
+    assert result.stdout.splitlines() == [
+        str(relocated),
+        str(relocated / "fonts/fonts.conf"),
+    ]
+    font_config = (relocated / "fonts/fonts.conf").read_text(encoding="utf-8")
+    assert "<dir>fonts</dir>" in font_config
+    assert "prefix=\"relative\"" not in font_config
+    assert str(output) not in font_config
+    assert (relocated / "fonts/.uuid").read_bytes() == uuid_before
