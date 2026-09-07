@@ -1,6 +1,6 @@
 # 三端便携发行包使用说明
 
-本说明对应 Ubuntu x86_64 便携包。实际版本和源码 SHA 见包内 `release.json`，依赖包版本与来源见 `licenses/dependencies.json`；本机验收结果另见对应发行测试记录，不以本文代替兼容性实测。
+本说明对应 Ubuntu x86_64 便携包。实际版本和源码 SHA 见包内 `release.json`，编译器、Qt、构建系统、Release 配置及限定范围的源码状态见 `build-manifest.json`，依赖包版本与来源见 `licenses/dependencies.json`；本机验收结果另见对应发行测试记录，不以本文代替兼容性实测。
 
 ## 1. 接收方需要什么
 

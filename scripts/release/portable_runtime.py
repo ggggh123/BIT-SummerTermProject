@@ -52,19 +52,50 @@ class PortableRuntime(Runtime):
                 or set(release["binaries"]) != set(PORTABLE_BINARIES)):
             raise DemoError("RELEASE_INVALID", "发行清单版本、身份、平台或程序列表无效")
         self.release = release
-        base = Path(data_home) if data_home is not None else Path(
-            os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")
+        try:
+            build_manifest = json.loads(
+                safe_path(self.bundle / "build-manifest.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise DemoError("RELEASE_INVALID", "构建清单缺失或格式无效") from exc
+        source_state = (
+            build_manifest.get("sourceState")
+            if isinstance(build_manifest, dict) else None
         )
+        if (not isinstance(build_manifest, dict)
+                or type(build_manifest.get("schemaVersion")) is not int
+                or build_manifest.get("schemaVersion") != 1
+                or build_manifest.get("sourceCommit") != release["sourceCommit"]
+                or not isinstance(source_state, dict)
+                or type(source_state.get("sourceDirty")) is not bool
+                or source_state.get("releaseInputsCommitted") is not True
+                or source_state.get("scope") != "explicit-release-input-whitelist"
+                or not isinstance(source_state.get("excludedChanges"), list)):
+            raise DemoError("RELEASE_INVALID", "构建清单与发行身份或源码状态不匹配")
+        self.build_manifest = build_manifest
+        if data_home is not None:
+            base = Path(data_home)
+        else:
+            configured_data_home = os.environ.get("XDG_DATA_HOME", "")
+            candidate = Path(configured_data_home)
+            base = (
+                candidate
+                if configured_data_home and candidate.is_absolute()
+                else Path.home() / ".local/share"
+            )
         self.data_root = safe_path(base / "evcharging" / release["releaseId"])
         self.runs = safe_path(self.data_root / "runs")
         self.config_path = safe_path(self.data_root / "config.local.ini")
 
     def fingerprint(self):
+        source_state = self.build_manifest["sourceState"]
         return {
             "sourceCommit": self.release["sourceCommit"],
             "releaseId": self.release["releaseId"],
-            "sourceDirty": False,
-            "sourceDirtyScope": "发行清单与二进制指纹",
+            "sourceDirty": source_state["sourceDirty"],
+            "sourceDirtyScope": source_state["scope"],
         }
 
     def configuration(self):
@@ -95,7 +126,7 @@ class PortableRuntime(Runtime):
         path = self.run_path(run_id)
         try:
             manifest = json.loads(safe_path(path / "manifest.json").read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise DemoError("MANIFEST_INVALID", "运行清单缺失或格式无效") from exc
         if (not isinstance(manifest, dict)
                 or type(manifest.get("version")) is not int
@@ -125,7 +156,7 @@ class PortableRuntime(Runtime):
             except DemoError as exc:
                 try:
                     raw = json.loads(manifest_path.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError):
+                except (OSError, UnicodeError, json.JSONDecodeError):
                     raw = None
                 if isinstance(raw, dict) and raw.get("state") == "STOPPED":
                     continue

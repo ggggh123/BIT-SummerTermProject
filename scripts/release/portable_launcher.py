@@ -36,6 +36,8 @@ def generated_run_id():
 def current_run_id(runtime):
     try:
         value = json.loads(safe_path(runtime.data_root / "current.json").read_text(encoding="utf-8"))
+    except UnicodeError as exc:
+        raise DemoError("MANIFEST_INVALID", "当前运行轮次指针编码无效") from exc
     except (OSError, json.JSONDecodeError) as exc:
         raise DemoError("RUN_MISSING", "没有当前运行轮次，请先执行start") from exc
     if (not isinstance(value, dict) or value.get("schemaVersion") != 1

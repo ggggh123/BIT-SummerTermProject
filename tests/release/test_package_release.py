@@ -143,6 +143,7 @@ def _make_package_inputs(tmp_path):
     source = tmp_path / "source whitelist root"
     output = tmp_path / "EVCharging fixture package"
     config = tmp_path / "authorized fixture.ini"
+    build_info = tmp_path / "verified build info.json"
 
     programs = {
         "apps/admin-server/ev_admin_server",
@@ -250,17 +251,45 @@ def _make_package_inputs(tmp_path):
         "[tencent]\nmapKey=fake-test-map-key\n",
         encoding="utf-8",
     )
-    return sysroot, build, source, output, config
+    build_info.write_text(
+        json.dumps({
+            "schemaVersion": 1,
+            "sourceCommit": "3aa9a2721d493584a40640d9a0147d802d9723e6",
+            "build": {
+                "configuration": "Release",
+                "buildSystem": {
+                    "name": "CMake",
+                    "version": "3.22.1",
+                    "generator": "Ninja",
+                },
+                "compiler": {
+                    "id": "GNU",
+                    "version": "11.4.0",
+                    "target": "x86_64-linux-gnu",
+                },
+                "qt": {"version": "6.2.4"},
+            },
+            "sourceState": {
+                "sourceDirty": True,
+                "releaseInputsCommitted": True,
+                "scope": "explicit-release-input-whitelist",
+                "excludedChanges": ["README.md", "docs/local-notes.md"],
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return sysroot, build, source, output, config, build_info
 
 
 def _run_package(inputs):
-    sysroot, build, source, output, config = inputs
+    sysroot, build, source, output, config, build_info = inputs
     return package_release(
         sysroot=sysroot,
         build_dir=build,
         source_dir=source,
         output_dir=output,
         config_file=config,
+        build_info_file=build_info,
         release_id="1.0.0-20260907-3aa9a27",
         source_commit="3aa9a2721d493584a40640d9a0147d802d9723e6",
     )
@@ -361,6 +390,76 @@ def test_package_writes_exact_runtime_manifest_hashes_and_immutable_sums(tmp_pat
         output / "licenses/dependencies.json"
     ).read_text() + (output / "SHA256SUMS").read_text()
     assert "fake-test-map-key" not in metadata
+
+
+def test_package_copies_validated_build_manifest_into_immutable_sums(tmp_path):
+    inputs = _make_package_inputs(tmp_path)
+
+    output = _run_package(inputs)
+
+    manifest = json.loads((output / "build-manifest.json").read_text(encoding="utf-8"))
+    assert manifest == json.loads(inputs[5].read_text(encoding="utf-8"))
+    assert manifest["build"] == {
+        "configuration": "Release",
+        "buildSystem": {
+            "name": "CMake",
+            "version": "3.22.1",
+            "generator": "Ninja",
+        },
+        "compiler": {
+            "id": "GNU",
+            "version": "11.4.0",
+            "target": "x86_64-linux-gnu",
+        },
+        "qt": {"version": "6.2.4"},
+    }
+    digest = hashlib.sha256((output / "build-manifest.json").read_bytes()).hexdigest()
+    assert f"{digest}  build-manifest.json" in (
+        output / "SHA256SUMS"
+    ).read_text(encoding="utf-8").splitlines()
+    assert not list(output.rglob("CMakeCache.txt"))
+
+
+@pytest.mark.parametrize(
+    "invalid_change",
+    [
+        "source-commit",
+        "debug-build",
+        "missing-compiler",
+        "uncommitted-release-input",
+        "dirty-without-exclusions",
+        "absolute-exclusion",
+        "boolean-schema",
+        "extra-field",
+    ],
+)
+def test_package_rejects_untrusted_or_incomplete_build_info(
+        tmp_path, invalid_change):
+    inputs = _make_package_inputs(tmp_path)
+    build_info = inputs[5]
+    document = json.loads(build_info.read_text(encoding="utf-8"))
+    if invalid_change == "source-commit":
+        document["sourceCommit"] = "f" * 40
+    elif invalid_change == "debug-build":
+        document["build"]["configuration"] = "Debug"
+    elif invalid_change == "missing-compiler":
+        del document["build"]["compiler"]
+    elif invalid_change == "uncommitted-release-input":
+        document["sourceState"]["releaseInputsCommitted"] = False
+    elif invalid_change == "dirty-without-exclusions":
+        document["sourceState"]["excludedChanges"] = []
+    elif invalid_change == "absolute-exclusion":
+        document["sourceState"]["excludedChanges"] = ["/tmp/host-path"]
+    elif invalid_change == "boolean-schema":
+        document["schemaVersion"] = True
+    else:
+        document["buildPath"] = "/tmp/must-not-be-copied"
+    build_info.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises((FileNotFoundError, ValueError), match="build-info"):
+        _run_package(inputs)
+
+    assert not inputs[3].exists()
 
 
 def test_package_uses_explicit_support_database_and_resource_whitelists(tmp_path):

@@ -126,6 +126,68 @@ def write_sanitized_config(source: Path, destination: Path) -> None:
     target.chmod(0o600)
 
 
+def _read_build_info(source: Path, source_commit: str) -> dict:
+    """Read one narrowly-scoped, externally verified build evidence record."""
+    try:
+        document = json.loads(Path(source).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise FileNotFoundError("required build-info JSON is missing or malformed") from exc
+
+    def exact_record(value, keys):
+        return isinstance(value, dict) and set(value) == set(keys)
+
+    def evidence_text(value):
+        return (
+            type(value) is str
+            and value == value.strip()
+            and 0 < len(value) <= 128
+            and "\0" not in value
+            and "\n" not in value
+            and "\r" not in value
+        )
+
+    if not exact_record(
+            document, ("schemaVersion", "sourceCommit", "build", "sourceState")):
+        raise ValueError("build-info must use the exact schemaVersion 1 fields")
+    build = document["build"]
+    state = document["sourceState"]
+    if (type(document["schemaVersion"]) is not int
+            or document["schemaVersion"] != 1
+            or document["sourceCommit"] != source_commit
+            or not exact_record(
+                build, ("configuration", "buildSystem", "compiler", "qt"))
+            or not exact_record(
+                build.get("buildSystem"), ("name", "version", "generator"))
+            or not exact_record(
+                build.get("compiler"), ("id", "version", "target"))
+            or not exact_record(build.get("qt"), ("version",))
+            or build.get("configuration") != "Release"
+            or build["buildSystem"].get("name") != "CMake"
+            or not all(evidence_text(build["buildSystem"].get(name))
+                       for name in ("version", "generator"))
+            or not all(evidence_text(build["compiler"].get(name))
+                       for name in ("id", "version", "target"))
+            or not evidence_text(build["qt"].get("version"))
+            or not exact_record(
+                state,
+                ("sourceDirty", "releaseInputsCommitted", "scope", "excludedChanges"),
+            )
+            or type(state.get("sourceDirty")) is not bool
+            or state.get("releaseInputsCommitted") is not True
+            or state.get("scope") != "explicit-release-input-whitelist"
+            or not isinstance(state.get("excludedChanges"), list)):
+        raise ValueError("build-info identity, Release build, or source state is invalid")
+    excluded = state["excludedChanges"]
+    if bool(excluded) != state["sourceDirty"]:
+        raise ValueError("build-info dirty state and excluded changes are inconsistent")
+    for change in excluded:
+        path = Path(change) if evidence_text(change) else Path(".")
+        if (not evidence_text(change) or path.is_absolute() or path == Path(".")
+                or ".." in path.parts):
+            raise ValueError("build-info excluded changes must be repository-relative paths")
+    return document
+
+
 def read_needed(path: Path) -> list[str]:
     """Return DT_NEEDED names using the host readelf without executing the ELF."""
     try:
@@ -562,6 +624,7 @@ def _populate_release(
         build_dir: Path,
         source_dir: Path,
         config_file: Path,
+        build_info: dict,
         release_id: str,
         source_commit: str) -> None:
     sysroot_sources: set[Path] = set()
@@ -659,6 +722,10 @@ def _populate_release(
     (bundle / "release.json").write_text(
         json.dumps(release, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    (bundle / "build-manifest.json").write_text(
+        json.dumps(build_info, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     _write_wrappers(bundle)
     _write_provenance(bundle, sysroot, sysroot_sources)
     _assert_safe_bundle_tree(bundle)
@@ -697,7 +764,8 @@ def _publish_no_replace(stage: Path, output: Path) -> None:
 
 def package_release(
         *, sysroot: Path, build_dir: Path, source_dir: Path, output_dir: Path,
-        config_file: Path, release_id: str, source_commit: str) -> Path:
+        config_file: Path, build_info_file: Path, release_id: str,
+        source_commit: str) -> Path:
     """Collect one new portable directory from explicit build/sysroot inputs."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", release_id, re.ASCII):
         raise ValueError("release-id must contain 1-64 safe ASCII characters")
@@ -707,6 +775,7 @@ def package_release(
     build = Path(build_dir).resolve()
     source = Path(source_dir).resolve()
     config = Path(config_file).resolve()
+    build_info = _read_build_info(Path(build_info_file), source_commit)
     output = Path(os.path.abspath(output_dir))
     if os.path.lexists(output):
         raise FileExistsError(f"refusing to overwrite existing output: {output}")
@@ -715,7 +784,7 @@ def package_release(
     stage = Path(tempfile.mkdtemp(prefix=".portable-release-", dir=output.parent))
     try:
         _populate_release(
-            stage, root, build, source, config, release_id, source_commit
+            stage, root, build, source, config, build_info, release_id, source_commit
         )
         if os.path.lexists(output):
             raise FileExistsError(f"refusing to overwrite existing output: {output}")
@@ -734,6 +803,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--config-file", type=Path, required=True)
+    parser.add_argument("--build-info", type=Path, required=True)
     parser.add_argument("--release-id", required=True)
     parser.add_argument("--source-commit", required=True)
     return parser
@@ -747,6 +817,7 @@ def main(argv=None) -> int:
         source_dir=args.source_dir,
         output_dir=args.output_dir,
         config_file=args.config_file,
+        build_info_file=args.build_info,
         release_id=args.release_id,
         source_commit=args.source_commit,
     )

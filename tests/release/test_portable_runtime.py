@@ -90,6 +90,30 @@ else:
     (root / "release.json").write_text(
         json.dumps(release, ensure_ascii=False), encoding="utf-8"
     )
+    (root / "build-manifest.json").write_text(
+        json.dumps({
+            "schemaVersion": 1,
+            "sourceCommit": release["sourceCommit"],
+            "build": {
+                "configuration": "Release",
+                "buildSystem": {
+                    "name": "CMake", "version": "3.22.1", "generator": "Ninja"
+                },
+                "compiler": {
+                    "id": "GNU", "version": "11.4.0",
+                    "target": "x86_64-linux-gnu",
+                },
+                "qt": {"version": "6.2.4"},
+            },
+            "sourceState": {
+                "sourceDirty": True,
+                "releaseInputsCommitted": True,
+                "scope": "explicit-release-input-whitelist",
+                "excludedChanges": ["README.md"],
+            },
+        }),
+        encoding="utf-8",
+    )
     (root / "config.local.ini").write_text(
         "[tencent]\nmapKey=bundle-fixture-key\n", encoding="utf-8"
     )
@@ -111,6 +135,27 @@ def test_verified_binaries_need_no_build_cache(bundle, tmp_path):
     assert binaries["server"]["sha256"] == hashlib.sha256(
         (bundle / "bin/ev_admin_server").read_bytes()
     ).hexdigest()
+
+
+def test_runtime_fingerprint_preserves_scoped_source_dirty_evidence(
+        bundle, tmp_path):
+    runtime = PortableRuntime(bundle, data_home=tmp_path / "用户数据")
+
+    assert runtime.fingerprint() == {
+        "sourceCommit": "3aa9a2721d493584a40640d9a0147d802d9723e6",
+        "releaseId": "1.0.0-20260907-3aa9a27",
+        "sourceDirty": True,
+        "sourceDirtyScope": "explicit-release-input-whitelist",
+    }
+
+
+def test_non_object_build_manifest_is_release_invalid(bundle, tmp_path):
+    (bundle / "build-manifest.json").write_text("[]", encoding="utf-8")
+
+    with pytest.raises(DemoError) as caught:
+        PortableRuntime(bundle, data_home=tmp_path / "data")
+
+    assert caught.value.code == "RELEASE_INVALID"
 
 
 def test_tampered_binary_is_rejected_before_start(bundle, tmp_path, monkeypatch):
@@ -204,6 +249,39 @@ def test_data_home_isolated_by_release_id(bundle, tmp_path):
     ).absolute()
     assert runtime.runs == runtime.data_root / "runs"
     assert runtime.bundle not in runtime.data_root.parents
+
+
+@pytest.mark.parametrize(
+    "xdg_value,use_explicit",
+    [(None, False), ("", False), ("relative-data", False), ("absolute", True)],
+)
+def test_environment_data_home_never_writes_runtime_state_into_bundle(
+        bundle, tmp_path, monkeypatch, xdg_value, use_explicit):
+    home = tmp_path / "fallback home"
+    explicit = tmp_path / "absolute XDG data"
+    home.mkdir()
+    explicit.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    if xdg_value is None:
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    elif use_explicit:
+        monkeypatch.setenv("XDG_DATA_HOME", str(explicit))
+    else:
+        monkeypatch.setenv("XDG_DATA_HOME", xdg_value)
+    monkeypatch.chdir(bundle)
+    before = {path.relative_to(bundle) for path in bundle.rglob("*")}
+
+    runtime = PortableRuntime(bundle)
+    runtime.reset(args("xdg-boundary"))
+
+    base = explicit if use_explicit else home / ".local/share"
+    assert runtime.data_root == (
+        base / "evcharging/1.0.0-20260907-3aa9a27"
+    ).resolve()
+    assert (runtime.runs / "xdg-boundary/manifest.json").is_file()
+    assert {path.relative_to(bundle) for path in bundle.rglob("*")} == before
 
 
 def args(run_id="round-01", port=9100, **changes):
@@ -327,6 +405,17 @@ def test_identity_ambiguous_nonserver_record_blocks_second_start(
     assert not (runtime.runs / "new-round").exists()
 
 
+def test_invalid_utf8_run_manifest_is_manifest_invalid(bundle, tmp_path):
+    runtime = PortableRuntime(bundle, data_home=tmp_path / "data")
+    runtime.reset(args("invalid-utf8"))
+    (runtime.runs / "invalid-utf8/manifest.json").write_bytes(b"\xff\xfe")
+
+    with pytest.raises(DemoError) as caught:
+        runtime.load("invalid-utf8")
+
+    assert caught.value.code == "MANIFEST_INVALID"
+
+
 def test_moved_running_elf_refuses_start_and_stop_until_restored(
         bundle, tmp_path, monkeypatch):
     import demo_processes
@@ -396,6 +485,28 @@ def cli(bundle, data_home, command, *extra, env=None):
 
 def cli_result(process):
     return json.loads(process.stdout.splitlines()[-1])
+
+
+def test_cli_invalid_utf8_current_pointer_is_manifest_invalid(bundle, tmp_path):
+    materialize_support(bundle)
+    data_home = tmp_path / "CLI data"
+    runtime = PortableRuntime(bundle, data_home=data_home)
+    runtime.data_root.mkdir(parents=True)
+    (runtime.data_root / "current.json").write_bytes(b"\xff\xfe")
+
+    result = cli(bundle, data_home, "status")
+
+    assert result.returncode == 1
+    assert cli_result(result)["code"] == "MANIFEST_INVALID"
+
+
+def test_cli_missing_current_pointer_remains_run_missing(bundle, tmp_path):
+    materialize_support(bundle)
+
+    result = cli(bundle, tmp_path / "missing data", "status")
+
+    assert result.returncode == 1
+    assert cli_result(result)["code"] == "RUN_MISSING"
 
 
 def test_cli_start_status_stop_with_defaults_and_redacted_output(bundle, tmp_path):
