@@ -2,6 +2,21 @@
 
 充电桩管理与演示平台小学期项目。
 
+## 快速开始（新环境一键部署）
+
+拿到项目文件夹后，在 Ubuntu 虚拟机（22.04+，Qt 6.2 基线）上只需两条命令：
+
+```bash
+python3 scripts/quickstart.py          # 依赖安装 → 环境检查 → 配置 → 全量编译
+python3 scripts/quickstart.py --start  # 同上，完成后自动拉起三端演示
+```
+
+- 依赖安装按需触发（apt 系统包无法随文件夹分发，脚本自动检测缺失并安装）；
+- 自动处理 Windows 复制导致的 shell 脚本 CRLF 换行问题；
+- `--start` 成功后应看到管理端、用户端、模拟器三个窗口；腾讯地图 Key 已内置，无需配置；
+- 环境兼容性问题与解决方法详见 [环境兼容性汇总](docs/test/ubuntu22-qt62-compatibility-2026-09-07.md)。
+
+
 > **2026-09-06 共享集成基线：** [PR #10](https://github.com/ggggh123/BIT-SummerTermProject/pull/10) 已合入 `dev@97c6da1`。本机后续分支 `feat/core-delivery-20260906` 已实现 DB worker、在线 reset 和恢复加固；用户批准容量补充后，`6863b36` [限定评审](docs/review/server-delivery-review-2026-09-06.md)已关闭 I1/N1。`a867ca6` 继续落实[充电与结算竖屏 UI](docs/test/user-charge-ui-2026-09-06.md)，完整构建、CTest **29/29**、数据库 **15/15** 通过。这些后续提交仍是本机候选，尚未共享合入 dev。
 >
 > **本机运行交付增量（2026-09-06）：** 四个reset/start/smoke/stop入口已实现，真实三程序offscreen基础流程及坏模拟器token回滚已有[验证记录](docs/test/core-runtime-entrypoints-2026-09-06.md)。历史/账户/导航外观收尾、换机验证、人工三端/腾讯地图联调与同 SHA 双彩排仍待完成。按[交付路线](docs/management/project-plan.md)推进，尚未宣布 GO 或发布到 main；此前[综合审查中断记录](docs/review/core-fixes-review-2026-09-06.md)继续保留。
