@@ -23,6 +23,20 @@ cmake --build --preset ubuntu22
 
 默认只编译三个程序，Ninja 增量构建、最多并行 2。完整验证使用独立的 `ubuntu22-test` 预设；Qt Creator 配置、拉取本轮分支、内存不足和环境报错处理见[详细指南](docs/development/ubuntu22.md)。启动步骤见[演示操作手册](docs/release/core-demo-runbook.md)。
 
+### 快速开始（新环境一键部署）
+
+不想逐步执行上面流程的成员/新用户，用一键脚本（内部等价于 bootstrap → 环境检查 → `ubuntu22-test` 构建，可选 `--start` 拉起三端）：
+
+```bash
+python3 scripts/quickstart.py          # 依赖安装 → 环境检查 → 配置 → 全量编译
+python3 scripts/quickstart.py --start  # 同上，完成后自动拉起三端演示
+```
+
+- 依赖安装按需触发（apt 系统包无法随文件夹分发，脚本自动检测缺失并调用 `scripts/bootstrap.sh` 安装）；非 22.04 的 Ubuntu（如 25.04）会自动透传 `--allow-other-ubuntu`，属尽力兼容而非验证基线；
+- 自动处理 Windows 复制导致的 shell 脚本 CRLF 换行问题；
+- `--start` 成功后应看到管理端、用户端、模拟器三个窗口；腾讯地图 Key 已内置，无需配置；
+- 环境兼容性问题与解决方法详见 [环境兼容性汇总](docs/test/ubuntu22-qt62-compatibility-2026-09-07.md)。
+
 ### 历史集成记录（不是当前环境要求）
 
 > **2026-09-06 共享集成基线：** [PR #10](https://github.com/ggggh123/BIT-SummerTermProject/pull/10) 已合入 `dev@97c6da1`。本机后续分支 `feat/core-delivery-20260906` 已实现 DB worker、在线 reset 和恢复加固；用户批准容量补充后，`6863b36` [限定评审](docs/review/server-delivery-review-2026-09-06.md)已关闭 I1/N1。`a867ca6` 继续落实[充电与结算竖屏 UI](docs/test/user-charge-ui-2026-09-06.md)，完整构建、CTest **29/29**、数据库 **15/15** 通过。这些后续提交仍是本机候选，尚未共享合入 dev。
