@@ -7,6 +7,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -22,12 +23,38 @@ pytestmark = pytest.mark.skipif(not BUILD, reason="EV_DEMO_BUILD_DIR未配置，
 
 def run(command, run_id, *extra, bad_token=False):
     env = os.environ.copy()
-    env.update(EV_TENCENT_MAP_KEY="invalid-offline-placeholder", EV_SIMULATOR_TOKEN="invalid-simulator-test" if bad_token else "demo-simulator-token",
+    env.update(EV_TENCENT_MAP_KEY="invalid-offline-placeholder", EV_SIMULATOR_TOKEN="demo-simulator-token",
                QT_QPA_PLATFORM="offscreen")
     script = "smoke_test.sh" if command == "smoke" else command + "_demo.sh"
-    process = subprocess.run([str(ROOT / "scripts" / script), "--run-id", run_id, *extra],
-                             cwd="/tmp", env=env, text=True, capture_output=True, timeout=55)
-    return process, json.loads(process.stdout.splitlines()[-1])
+
+    def invoke():
+        process = subprocess.run([str(ROOT / "scripts" / script), "--run-id", run_id, *extra],
+                                 cwd="/tmp", env=env, text=True, capture_output=True, timeout=55)
+        return process, json.loads(process.stdout.splitlines()[-1])
+
+    if not bad_token:
+        return invoke()
+    with tempfile.TemporaryDirectory(prefix="ev-simulator-token-injector-") as directory:
+        Path(directory, "sitecustomize.py").write_text(
+            """import os
+import subprocess
+
+_real_popen = subprocess.Popen
+
+def _simulator_token_mismatch(args, *positional, **keywords):
+    executable = os.fspath(args[0]) if isinstance(args, (list, tuple)) and args else ""
+    if os.path.basename(executable) == "ev_charger_simulator":
+        environment = dict(keywords.get("env") or os.environ)
+        environment["EV_SIMULATOR_TOKEN"] = "invalid-simulator-test"
+        keywords["env"] = environment
+    return _real_popen(args, *positional, **keywords)
+
+subprocess.Popen = _simulator_token_mismatch
+""",
+            encoding="utf-8")
+        existing_python_path = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = directory + (os.pathsep + existing_python_path if existing_python_path else "")
+        return invoke()
 
 
 def port():

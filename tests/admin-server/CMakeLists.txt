@@ -28,7 +28,7 @@ add_executable(tst_admin_auth
 )
 
 target_include_directories(tst_admin_auth PRIVATE ../../apps/admin-server/src)
-target_link_libraries(tst_admin_auth PRIVATE Qt6::Test Qt6::Sql)
+target_link_libraries(tst_admin_auth PRIVATE Qt6::Test Qt6::Sql ev_protocol)
 add_test(NAME admin_auth COMMAND tst_admin_auth)
 
 add_executable(tst_request_log

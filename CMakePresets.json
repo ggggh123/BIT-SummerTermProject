@@ -1,6 +1,21 @@
 {
   "version": 3,
+  "cmakeMinimumRequired": {"major": 3, "minor": 22, "patch": 0},
   "configurePresets": [
+    {
+      "name": "ubuntu22",
+      "displayName": "Ubuntu 22.04 团队默认：只构建三端",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ubuntu22",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Release", "CMAKE_CXX_COMPILER": "/usr/bin/g++", "BUILD_TESTING": "OFF"}
+    },
+    {
+      "name": "ubuntu22-test",
+      "displayName": "Ubuntu 22.04 完整测试构建",
+      "inherits": "ubuntu22",
+      "binaryDir": "${sourceDir}/build/ubuntu22-test",
+      "cacheVariables": {"BUILD_TESTING": "ON", "Python3_EXECUTABLE": "/usr/bin/python3"}
+    },
     {
       "name": "debug",
       "displayName": "Debug",
@@ -21,19 +36,32 @@
     }
   ],
   "buildPresets": [
+    {"name": "ubuntu22", "configurePreset": "ubuntu22", "jobs": 2},
+    {"name": "ubuntu22-test", "configurePreset": "ubuntu22-test", "jobs": 2},
     {
       "name": "debug",
-      "configurePreset": "debug"
+      "configurePreset": "debug",
+      "jobs": 2
     },
     {
       "name": "release",
-      "configurePreset": "release"
+      "configurePreset": "release",
+      "jobs": 2
     }
   ],
   "testPresets": [
     {
+      "name": "ubuntu22-test",
+      "configurePreset": "ubuntu22-test",
+      "environment": {"QT_QPA_PLATFORM": "offscreen"},
+      "execution": {"jobs": 1, "noTestsAction": "error"},
+      "output": {"outputOnFailure": true}
+    },
+    {
       "name": "debug",
       "configurePreset": "debug",
+      "environment": {"QT_QPA_PLATFORM": "offscreen"},
+      "execution": {"jobs": 1, "noTestsAction": "error"},
       "output": {
         "outputOnFailure": true
       }

@@ -1,5 +1,7 @@
 #include "services/AuthService.h"
+#include "services/RequestPreflight.h"
 
+#include <QByteArray>
 #include <QCryptographicHash>
 #include <QJsonObject>
 #include <QSqlDatabase>
@@ -9,10 +11,46 @@
 
 namespace {
 
+class ScopedEnvironmentVariable
+{
+public:
+    explicit ScopedEnvironmentVariable(const QByteArray &name)
+        : m_name(name)
+        , m_wasSet(qEnvironmentVariableIsSet(name.constData()))
+        , m_value(qgetenv(name.constData()))
+    {
+    }
+
+    ~ScopedEnvironmentVariable()
+    {
+        if (m_wasSet) qputenv(m_name.constData(), m_value);
+        else qunsetenv(m_name.constData());
+    }
+
+private:
+    QByteArray m_name;
+    bool m_wasSet;
+    QByteArray m_value;
+};
+
 QString hashPassword(const QString &password)
 {
     return QString::fromLatin1(
         QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+
+Result simulatorStatusPreflight(const AuthService &service, const QString &token)
+{
+    const ev::protocol::RequestEnvelope request{
+        1,
+        QStringLiteral("simulator-auth-test"),
+        ev::actions::SimulatorStatus,
+        token,
+        QJsonObject{{QStringLiteral("simulatedAt"), QStringLiteral("2026-09-07T00:00:00+08:00")},
+                    {QStringLiteral("eventCount"), 0},
+                    {QStringLiteral("state"), QStringLiteral("running")}}};
+    const QString role = service.isSimulatorTokenValid(token) ? QStringLiteral("simulator") : QString();
+    return RequestPreflight::check(role, request);
 }
 
 class ScopedDatabase
@@ -88,6 +126,128 @@ private slots:
         QVERIFY(!result.ok);
         QCOMPARE(result.code, QStringLiteral("INVALID_CREDENTIALS"));
         QVERIFY(result.token.isEmpty());
+    }
+
+    void configuredSimulatorTokenAuthorizesAfterEnvironmentMutation()
+    {
+        ScopedEnvironmentVariable environment(QByteArrayLiteral("EV_SIMULATOR_TOKEN"));
+        const QByteArray configuredToken = QUuid::createUuid().toByteArray(QUuid::WithoutBraces);
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", configuredToken));
+        AuthService service{QSqlDatabase()};
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", QUuid::createUuid().toByteArray(QUuid::WithoutBraces)));
+
+        const Result result = simulatorStatusPreflight(service, QString::fromUtf8(configuredToken));
+
+        QVERIFY(result.ok);
+        QCOMPARE(result.code, QStringLiteral("OK"));
+    }
+
+    void configuredSimulatorTokenDoesNotRotateWithEnvironment()
+    {
+        ScopedEnvironmentVariable environment(QByteArrayLiteral("EV_SIMULATOR_TOKEN"));
+        const QByteArray configuredToken = QUuid::createUuid().toByteArray(QUuid::WithoutBraces);
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", configuredToken));
+        AuthService service{QSqlDatabase()};
+        const QString replacementToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", replacementToken.toUtf8()));
+
+        const Result replacementResult = simulatorStatusPreflight(service, replacementToken);
+        const Result paddedResult = simulatorStatusPreflight(
+            service, QStringLiteral(" ") + QString::fromUtf8(configuredToken));
+
+        QVERIFY(!replacementResult.ok);
+        QCOMPARE(replacementResult.code, QStringLiteral("AUTH_REQUIRED"));
+        QVERIFY(!paddedResult.ok);
+        QCOMPARE(paddedResult.code, QStringLiteral("AUTH_REQUIRED"));
+        QVERIFY(service.isMlTokenValid(QStringLiteral("demo-ml-token")));
+    }
+
+    void configuredSimulatorTokenRejectsLegacyAliasesAfterEnvironmentClear_data()
+    {
+        QTest::addColumn<QString>("legacyToken");
+        QTest::newRow("short") << QStringLiteral("sim-token");
+        QTest::newRow("long") << QStringLiteral("simulator-token");
+        QTest::newRow("demo") << QStringLiteral("demo-simulator-token");
+    }
+
+    void configuredSimulatorTokenRejectsLegacyAliasesAfterEnvironmentClear()
+    {
+        QFETCH(QString, legacyToken);
+        ScopedEnvironmentVariable environment(QByteArrayLiteral("EV_SIMULATOR_TOKEN"));
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", QUuid::createUuid().toByteArray(QUuid::WithoutBraces)));
+        AuthService service{QSqlDatabase()};
+        QVERIFY(qunsetenv("EV_SIMULATOR_TOKEN"));
+
+        const Result result = simulatorStatusPreflight(service, legacyToken);
+
+        QVERIFY(!result.ok);
+        QCOMPARE(result.code, QStringLiteral("AUTH_REQUIRED"));
+    }
+
+    void roleSnapshotDoesNotFollowEnvironmentMutation()
+    {
+        ScopedEnvironmentVariable environment(QByteArrayLiteral("EV_SIMULATOR_TOKEN"));
+        const QString configuredToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QString replacementToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", configuredToken.toUtf8()));
+        const TokenRoles roles=TokenRoles::fromEnvironment();
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", replacementToken.toUtf8()));
+
+        QCOMPARE(RequestPreflight::roleForToken(roles, configuredToken), QStringLiteral("simulator"));
+        QVERIFY(RequestPreflight::roleForToken(roles, replacementToken).isEmpty());
+        QVERIFY(qunsetenv("EV_SIMULATOR_TOKEN"));
+        QVERIFY(RequestPreflight::roleForToken(roles, QStringLiteral("sim-token")).isEmpty());
+    }
+
+    void roleSnapshotDynamicCollisionTakesPrecedence_data()
+    {
+        QTest::addColumn<QString>("dynamicRole");
+        QTest::newRow("admin") << QStringLiteral("admin");
+        QTest::newRow("user") << QStringLiteral("user");
+    }
+
+    void roleSnapshotDynamicCollisionTakesPrecedence()
+    {
+        QFETCH(QString, dynamicRole);
+        ScopedEnvironmentVariable environment(QByteArrayLiteral("EV_SIMULATOR_TOKEN"));
+        const QString configuredToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", configuredToken.toUtf8()));
+        TokenRoles roles=TokenRoles::fromEnvironment();
+        roles.insert(configuredToken, dynamicRole);
+        QVERIFY(qunsetenv("EV_SIMULATOR_TOKEN"));
+
+        QCOMPARE(RequestPreflight::roleForToken(roles, configuredToken), dynamicRole);
+    }
+
+    void roleSnapshotPreservesNormalDynamicAndMlRoles()
+    {
+        ScopedEnvironmentVariable environment(QByteArrayLiteral("EV_SIMULATOR_TOKEN"));
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", QUuid::createUuid().toByteArray(QUuid::WithoutBraces)));
+        TokenRoles roles=TokenRoles::fromEnvironment();
+        roles.insert(QStringLiteral("admin-session"), QStringLiteral("admin"));
+        roles.insert(QStringLiteral("user-session"), QStringLiteral("user"));
+        QVERIFY(qunsetenv("EV_SIMULATOR_TOKEN"));
+
+        QCOMPARE(RequestPreflight::roleForToken(roles, QStringLiteral("admin-session")), QStringLiteral("admin"));
+        QCOMPARE(RequestPreflight::roleForToken(roles, QStringLiteral("user-session")), QStringLiteral("user"));
+        QCOMPARE(RequestPreflight::roleForToken(roles, QStringLiteral("demo-ml-token")), QStringLiteral("ml"));
+    }
+
+    void missingOrEmptySimulatorConfigurationPreservesLegacyTokens()
+    {
+        ScopedEnvironmentVariable environment(QByteArrayLiteral("EV_SIMULATOR_TOKEN"));
+
+        QVERIFY(qunsetenv("EV_SIMULATOR_TOKEN"));
+        AuthService missingService{QSqlDatabase()};
+        QVERIFY(simulatorStatusPreflight(missingService, QStringLiteral("sim-token")).ok);
+        QVERIFY(simulatorStatusPreflight(missingService, QStringLiteral("simulator-token")).ok);
+        QVERIFY(simulatorStatusPreflight(missingService, QStringLiteral("demo-simulator-token")).ok);
+
+        QVERIFY(qputenv("EV_SIMULATOR_TOKEN", QByteArray()));
+        AuthService emptyService{QSqlDatabase()};
+        QVERIFY(simulatorStatusPreflight(emptyService, QStringLiteral("sim-token")).ok);
+        QVERIFY(simulatorStatusPreflight(emptyService, QStringLiteral("simulator-token")).ok);
+        QVERIFY(simulatorStatusPreflight(emptyService, QStringLiteral("demo-simulator-token")).ok);
     }
 };
 

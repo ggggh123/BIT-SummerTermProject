@@ -26,7 +26,13 @@ QString passwordHash(const QString &password)
 } // namespace
 
 AuthService::AuthService(QSqlDatabase database)
+    : AuthService(std::move(database), TokenRoles::fromEnvironment())
+{
+}
+
+AuthService::AuthService(QSqlDatabase database, TokenRoles tokenRoles)
     : m_database(std::move(database))
+    , m_tokenRoles(std::move(tokenRoles))
 {
 }
 
@@ -109,17 +115,17 @@ bool AuthService::isUserTokenValid(const QString &token) const
 
 bool AuthService::isSimulatorTokenValid(const QString &token) const
 {
-    return RequestPreflight::roleForToken({},token)==QStringLiteral("simulator");
+    return RequestPreflight::roleForToken(m_tokenRoles,token)==QStringLiteral("simulator");
 }
 
 bool AuthService::isMlTokenValid(const QString &token) const
 {
-    return RequestPreflight::roleForToken({},token)==QStringLiteral("ml");
+    return RequestPreflight::roleForToken(m_tokenRoles,token)==QStringLiteral("ml");
 }
 
 TokenRoles AuthService::tokenRoles() const
 {
-    TokenRoles roles;
+    TokenRoles roles=m_tokenRoles;
     for (const auto &token : m_adminTokens) roles.insert(token,QStringLiteral("admin"));
     for (auto it=m_userTokens.cbegin();it!=m_userTokens.cend();++it) roles.insert(it.key(),QStringLiteral("user"));
     return roles;

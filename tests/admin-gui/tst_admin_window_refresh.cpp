@@ -94,6 +94,62 @@ class AdminWindowRefreshTest : public QObject
     Q_OBJECT
 
 private slots:
+    void requestLogExactFilterPaginationAndOptionalHealth()
+    {
+        QTemporaryDir dir; AppContext context;
+        AppContext::Options options;
+        options.port=0; options.databasePath=dir.filePath("log-pages.db");
+        options.snapshotPath=dir.filePath("snapshot.json");
+        QVERIFY(context.initialize(options).ok);
+        const auto admin=loginAdmin(context); QVERIFY(!admin.isEmpty());
+        const QString connectionName=QUuid::createUuid().toString();
+        auto database=QSqlDatabase::addDatabase("QSQLITE",connectionName);
+        database.setDatabaseName(context.databasePath()); QVERIFY(database.open());
+        for(const auto &id : {QString("page-log-a"),QString("page-log-ab")}) {
+            QVERIFY(RequestLogService(database).record(id,"system.health",
+                {id,true,"OK","test",QJsonObject{{"token","test-only-secret"}}}).ok);
+        }
+        MainWindow window(&context,admin); window.show();
+        auto *tabs=window.findChild<QTabWidget *>("adminTabs"); QVERIFY(tabs);
+        tabs->setCurrentIndex(6);
+        auto *table=window.findChild<QTableWidget *>("requestLogTable");
+        auto *search=window.findChild<QLineEdit *>("requestLogSearchEdit");
+        auto *limit=window.findChild<QSpinBox *>("requestLogLimitSpin");
+        auto *offset=window.findChild<QSpinBox *>("requestLogOffsetSpin");
+        auto *query=window.findChild<QPushButton *>("requestLogQueryButton");
+        auto *count=window.findChild<QLabel *>("requestLogCountLabel");
+        QVERIFY(table && search && limit && offset && query && count);
+        QTRY_VERIFY(table->rowCount()>=2);
+        QCOMPARE(table->columnCount(),4); // 不新增响应体或 token 列。
+        limit->setValue(1); search->setText("page-log-a");
+        QTest::keyClick(search,Qt::Key_Return);
+        QTRY_COMPARE(table->rowCount(),1);
+        QTRY_COMPARE(table->item(0,0)->text(),QString("page-log-a"));
+        QTRY_COMPARE(count->text(),QStringLiteral("共 1 条 · 当前展示第 1–1 条"));
+        offset->setValue(1); query->click();
+        QTRY_COMPARE(table->rowCount(),0);
+        QTRY_VERIFY(count->text().contains(QStringLiteral("当前页无记录")));
+        QVERIFY(!count->text().contains(QStringLiteral("2–1")));
+        search->setText("page-log"); offset->setValue(0); query->click();
+        QTRY_COMPARE(count->text(),QStringLiteral("共 0 条记录")); // 不是前缀匹配。
+        search->clear(); query->click();
+        QTRY_COMPARE(table->rowCount(),1);
+        const QString first=table->item(0,0)->text();
+        offset->setValue(1); query->click();
+        QTRY_VERIFY(table->rowCount()==1 && table->item(0,0)->text()!=first);
+        tabs->setCurrentIndex(7);
+        auto *core=window.findChild<QTableWidget *>("healthTable");
+        auto *optional=window.findChild<QTableWidget *>("healthOptionalTable");
+        QVERIFY(core && optional);
+        QTRY_COMPARE(core->rowCount(),4);
+        QCOMPARE(core->item(0,0)->text(),QStringLiteral("运行上下文"));
+        QCOMPARE(core->item(0,1)->text(),QStringLiteral("active"));
+        QCOMPARE(optional->item(0,0)->text(),QStringLiteral("扩展预测"));
+        QCOMPARE(optional->item(0,1)->text(),QStringLiteral("disabled"));
+        QCOMPARE(optional->item(1,1)->text(),QStringLiteral("unverified"));
+        database.close(); database={}; QSqlDatabase::removeDatabase(connectionName);
+    }
+
     void failedResetAckKeepsRequestIdForConfirmedRetry()
     {
         QTemporaryDir dir; AppContext context;
@@ -371,7 +427,7 @@ private slots:
         QVERIFY(healthTable);
         QTRY_COMPARE_WITH_TIMEOUT(healthTable->item(3, 2)->text(), expectedVersion, 4000);
         const QString healthStatus = healthTable->item(0, 1)->text();
-        QVERIFY(healthStatus == QStringLiteral("ready") || healthStatus == QStringLiteral("degraded"));
+        QCOMPARE(healthStatus, QStringLiteral("active"));
 
         database.close();
         database = QSqlDatabase();

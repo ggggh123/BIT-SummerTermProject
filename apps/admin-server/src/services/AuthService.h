@@ -19,6 +19,7 @@ class AuthService
 {
 public:
     explicit AuthService(QSqlDatabase database);
+    AuthService(QSqlDatabase database, TokenRoles tokenRoles);
 
     LoginResult login(const QString &username, const QString &password) const;
     LoginResult loginUser(const QString &mobile) const;
@@ -36,6 +37,7 @@ private:
     QJsonObject userObject(int userId) const;
 
     QSqlDatabase m_database;
+    TokenRoles m_tokenRoles;
     mutable QSet<QString> m_adminTokens;
     mutable QHash<QString, QString> m_adminIdentities;
     mutable QHash<QString, int> m_userTokens;
