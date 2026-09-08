@@ -2,6 +2,7 @@
 #include "ui/AdminVisuals.h"
 #include <QComboBox>
 #include <QDateTime>
+#include <QEvent>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHeaderView>
@@ -19,6 +20,37 @@
 #include <QVBoxLayout>
 
 namespace {
+class DeviceCodeLabel final : public QLabel {
+public:
+    explicit DeviceCodeLabel(const QString &fullText):QLabel(fullText),m_fullText(fullText)
+    {
+        setObjectName("fleetDeviceCode");
+        setTextFormat(Qt::PlainText);
+        setAccessibleName(fullText);
+        setToolTip(fullText);
+        setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
+    }
+protected:
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QLabel::resizeEvent(event);
+        refreshText();
+    }
+    void changeEvent(QEvent *event) override
+    {
+        QLabel::changeEvent(event);
+        if(event->type()==QEvent::FontChange||event->type()==QEvent::ContentsRectChange)
+            refreshText();
+    }
+private:
+    void refreshText()
+    {
+        // 使用布局完成后的自身宽度；窗口缩放不依赖下一次设备状态变化。
+        setText(fontMetrics().elidedText(m_fullText,Qt::ElideRight,contentsRect().width()));
+    }
+    QString m_fullText;
+};
+
 const QStringList stateCodes={"idle","reserved","charging","fault","restarting"};
 QColor stateColor(const QString &state)
 {
@@ -334,10 +366,7 @@ void FleetStatusPage::render()
             auto *tile=new QPushButton; tile->setProperty("role","deviceTile");
             tile->setObjectName(QString("fleetDevice%1").arg(chargerId)); tile->setCheckable(true); tile->setMinimumWidth(58);
             auto *parts=new QVBoxLayout(tile); parts->setContentsMargins(8,4,8,4); parts->setSpacing(1);
-            auto *code=text(device.value("code").toString()); colorText(code,QColor("#eaf3f6"),17);
-            code->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
-            code->setText(code->fontMetrics().elidedText(device.value("code").toString(),Qt::ElideRight,
-                qMax(42,(m_array->viewport()->width()/2-44)/4-16)));
+            auto *code=new DeviceCodeLabel(device.value("code").toString()); colorText(code,QColor("#eaf3f6"),17);
             code->setAttribute(Qt::WA_TransparentForMouseEvents);
             auto *state=text(stateText(device.value("status").toString()));
             colorText(state,stateColor(device.value("status").toString()),11);

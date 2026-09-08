@@ -286,6 +286,7 @@ private slots:
     void authenticatedNearbyClearsExpiredSessionCopy();
     void restoredChargeMetricsAndActionsFitPortrait_data();
     void restoredChargeMetricsAndActionsFitPortrait();
+    void pulseSamplingAndCursorPreserveAuthoritativeActions_data();
     void pulseSamplingAndCursorPreserveAuthoritativeActions();
     void accountAndHistoryPresentation_data();
     void accountAndHistoryPresentation();
@@ -1364,8 +1365,16 @@ void MobileUiTest::restoredChargeMetricsAndActionsFitPortrait()
     }
 }
 
+void MobileUiTest::pulseSamplingAndCursorPreserveAuthoritativeActions_data()
+{
+    QTest::addColumn<bool>("missingSamples");
+    QTest::newRow("complete-samples") << false;
+    QTest::newRow("truncated-start-and-gap") << true;
+}
+
 void MobileUiTest::pulseSamplingAndCursorPreserveAuthoritativeActions()
 {
+    QFETCH(bool, missingSamples);
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
     MainWindow window(usableConfig(server.serverPort()));
@@ -1375,6 +1384,16 @@ void MobileUiTest::pulseSamplingAndCursorPreserveAuthoritativeActions()
     QVERIFY(peer);
     const auto start = QDateTime::currentDateTimeUtc().addSecs(-1600);
     const auto order = PulseFixture::order(start);
+    auto telemetry = PulseFixture::telemetry(start);
+    auto samples = telemetry.value("samples").toArray();
+    if (missingSamples) {
+        // 缺少前 300 秒，以及 600～900 秒之间的采样，不得冒充整单电量。
+        for (int i = 0; i < 3; ++i) samples.removeAt(0);
+        samples.removeAt(4);
+        samples.removeAt(4);
+        telemetry["samples"] = samples;
+        telemetry["truncated"] = true;
+    }
     completeLoginWithoutOrder(window,peer.data(),order);
     const auto facts = takeRequest(peer.data());
     QCOMPARE(facts.action,QStringLiteral("station.detail"));
@@ -1392,23 +1411,33 @@ void MobileUiTest::pulseSamplingAndCursorPreserveAuthoritativeActions()
         else {
             QCOMPARE(request.action,QStringLiteral("order.telemetry"));
             QCOMPARE(request.payload.value("orderId").toInt(),1028);
-            reply(peer.data(),request.requestId,PulseFixture::telemetry(start));
+            reply(peer.data(),request.requestId,telemetry);
             sampled = true;
         }
     }
     QVERIFY(sampled);
-    QTRY_COMPARE(chart->sampleCount(),17);
+    QTRY_COMPARE(chart->sampleCount(),samples.size());
     QCOMPARE(required<QLabel>(page,"chargePower")->text(),QStringLiteral("22.5"));
     auto *viewport = required<QScrollArea>(&window,"contentViewport");
     QCOMPARE(viewport->verticalScrollBar()->maximum(),0);
     QVERIFY(required<QLabel>(page,"chargeMetricUnit")->width() >= 24);
-    saveScreenshotIfRequested(&window,"pulse-charging-390x844.png");
-    QTest::mouseClick(chart,Qt::LeftButton,Qt::NoModifier,QPoint(chart->width()/2,80));
+    if (!missingSamples) saveScreenshotIfRequested(&window,"pulse-charging-390x844.png");
+    QTest::mouseClick(chart,Qt::LeftButton,Qt::NoModifier,
+        QPoint(missingSamples ? chart->width()*3/4 : chart->width()/2,80));
     QVERIFY(!chart->followingLatest());
     QVERIFY(chart->reading(0).has_value());
     QCOMPARE(required<QLabel>(page,"chargeMeter")->text(),QString::number(chart->reading(0)->energy,'f',3));
     QCOMPARE(required<QLabel>(page,"chargeSecondaryMetric")->text(),QStringLiteral("¥ 16.85"));
-    saveScreenshotIfRequested(&window,"pulse-cursor-390x844.png");
+    if (!missingSamples) saveScreenshotIfRequested(&window,"pulse-cursor-390x844.png");
+    if (missingSamples) {
+        for (const double seconds : {100.0, 750.0}) {
+            chart->setCursorSeconds(seconds);
+            QVERIFY(!chart->reading(0).has_value());
+            QCOMPARE(required<QLabel>(page,"chargePower")->text(),QStringLiteral("—"));
+            QCOMPARE(required<QLabel>(page,"chargeMeter")->text(),QStringLiteral("—"));
+            QCOMPARE(required<QLabel>(page,"chargeSecondaryMetric")->text(),QStringLiteral("¥ 16.85"));
+        }
+    }
     required<QPushButton>(page,"chargeLiveButton")->click();
     QVERIFY(chart->followingLatest());
     QCOMPARE(required<QLabel>(page,"chargeMeter")->text(),QStringLiteral("12.480"));
@@ -1418,7 +1447,7 @@ void MobileUiTest::pulseSamplingAndCursorPreserveAuthoritativeActions()
     auto *stop = required<QPushButton>(page,"chargeStopButton");
     viewport->ensureWidgetVisible(stop,0,8);
     QVERIFY(fullyInsideViewport(stop,viewport));
-    saveScreenshotIfRequested(&window,"pulse-charging-390x720.png");
+    if (!missingSamples) saveScreenshotIfRequested(&window,"pulse-charging-390x720.png");
 }
 
 QTEST_MAIN(MobileUiTest)

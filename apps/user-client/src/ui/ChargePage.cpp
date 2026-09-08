@@ -794,7 +794,9 @@ void ChargePage::renderTelemetry()
     sampleTime_->setText(ev::ui::PulseChart::elapsed(powerChart_->cursorSeconds()));
     if(live) {
         metricCaption_->setText(powerChart_->followingLatest()?QStringLiteral("本次已充电"):QStringLiteral("游标累计电量"));
-        meter_->setText(!powerChart_->followingLatest()&&reading?QString::number(reading->energy,'f',3):QString::number(order_->energyKwh,'f',3));
+        // 回看缺失区间时，整单总量不能冒充所选时刻的累计电量。
+        meter_->setText(powerChart_->followingLatest() ? QString::number(order_->energyKwh,'f',3)
+            : reading ? QString::number(reading->energy,'f',3) : QStringLiteral("—"));
     }
     const bool stale=telemetry_&&!telemetry_->samples.isEmpty()
         && QDateTime::fromString(telemetry_->samples.last().recordedAt,Qt::ISODateWithMs).secsTo(QDateTime::currentDateTimeUtc())>15;

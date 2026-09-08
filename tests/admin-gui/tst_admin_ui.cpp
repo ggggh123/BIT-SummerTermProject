@@ -428,6 +428,46 @@ private slots:
         QVERIFY(!restart->isEnabled());
     }
 
+    void fleetCodesFollowActualLabelWidthWithoutNewSnapshots()
+    {
+        FleetStatusPage page;
+        const QString fullCode = QStringLiteral("CHARGER-ALPHA-007");
+        QJsonArray devices;
+        for(int station=1;station<=2;++station) for(int index=0;index<4;++index)
+            devices.append(QJsonObject{{"id",(station-1)*4+7+index},{"code",fullCode},
+                {"stationId",station},{"stationName",QStringLiteral("编号回归站点")},
+                {"status","idle"},{"ratedPowerKw",60}});
+        const QJsonObject data{{"stations",QJsonArray{
+            QJsonObject{{"id",1},{"name",QStringLiteral("编号回归站点")}},
+            QJsonObject{{"id",2},{"name",QStringLiteral("编号回归站点")}}}},
+            {"chargers",devices}};
+        page.setData(data); // 特意在首次显示、布局稳定前接入快照。
+        page.resize(1100,720);
+        page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        auto *tile=page.findChild<QPushButton *>("fleetDevice7");
+        QVERIFY(tile);
+        auto *code=tile->findChild<QLabel *>("fleetDeviceCode");
+        QVERIFY(code);
+        auto expected=[&] {
+            return code->fontMetrics().elidedText(fullCode,Qt::ElideRight,code->contentsRect().width());
+        };
+        QTRY_COMPARE(code->text(),expected());
+        const QString narrow=code->text();
+        page.selectCharger(7);
+        page.resize(2400,720); // 没有新设备状态；单靠实际控件变宽也必须恢复完整编号。
+        QTRY_COMPARE(code->text(),expected());
+        QTRY_COMPARE(code->text(),fullCode);
+        QVERIFY(code->text()!=narrow);
+        page.setData(data); // 相同快照不重建控件，不得丢失选择或回退省略宽度。
+        QCOMPARE(page.findChild<QPushButton *>("fleetDevice7"),tile);
+        QCOMPARE(page.selectedChargerId(),7);
+        QCOMPARE(code->text(),fullCode);
+        page.resize(1100,720);
+        QTRY_COMPARE(code->text(),expected());
+        QCOMPARE(code->text(),narrow);
+    }
+
     void fleetRestartConfirmationAndAuthoritativeTransition()
     {
         QTemporaryDir directory;
