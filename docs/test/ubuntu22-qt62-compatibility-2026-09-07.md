@@ -178,7 +178,7 @@ sudo apt install -y libqt6webenginecore6-bin libqt6svg6
 1. 桌面 WebEngine 场景无法用腾讯控制台的域名白名单有效限制（无固定 Referer），Key 实际上对拿到它的人开放；
 2. 若仓库转为公开或发现配额异常消耗，应在腾讯位置服务控制台调整配额并**轮换** `UserAppConfig::bundledTencentMapKey()` 中的值（单点修改，env/ini 覆盖机制不变）。
 
-**⚠️ 口径分歧待对齐（2026-09-08 记录）**：dev 合入的 [22.04 开发指南](../development/ubuntu22.md) §5 写明"公共源码、CI 和报告均不内置真实 Key；此前包含默认 Key 的私下发行包是另一种交付物，不应提交 Git"。`feat/data` 当前按 #4 决策保留了源码内置默认 Key（服务私有发行渠道：离线环境、无法访问 GitHub 的成员、tar 安装包）。两种口径的差异需在站会与 #2/#3 对齐：要么更新指南承认内置 Key 的发行渠道定位，要么改为"源码不含 Key、由打包脚本在产出安装包时注入"。在完成对齐前，`feat/user`、`feat/server` 等分支合并时请勿无意删除该功能。
+**✅ 口径已对齐（2026-09-08）**：经 #4 与组员确认，该 Key 为腾讯位置服务**公共免费测试 Key**，允许内置进源码；`feat/data` 保留 `UserAppConfig::bundledTencentMapKey()` 内置默认值，无需更改。[22.04 开发指南](../development/ubuntu22.md) §5 的旧表述已同步更新。仍保留 env/ini 覆盖能力作为换 Key 通道；若将来配额异常，仅需轮换该函数中的值。
 
 ## 13. 参考虚拟机环境清单（经验证的依赖）
 

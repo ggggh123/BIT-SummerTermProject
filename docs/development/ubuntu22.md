@@ -67,7 +67,7 @@ ctest --preset ubuntu22-test
 
 三端冷启动、黄金数据副本、停止与基本冒烟见[演示操作手册](../release/core-demo-runbook.md)。使用新日常构建时，把手册中的 build 路径替换为当前 clone 下 `build/ubuntu22` 的绝对路径；例如 start 的参数为 `--build-dir "$PWD/build/ubuntu22"`。
 
-用户端地图 Key 保存在各机已忽略的 `config.local.ini` 或 `EV_TENCENT_MAP_KEY`；服务端与模拟器 token 必须匹配。公共源码、CI 和报告均不内置真实 Key。此前包含默认 Key 的私下发行包是另一种交付物，不应提交 Git。程序编译成功也不代表在线地图权限、配额及网络已通过验证。
+用户端地图 Key：团队已确认所用腾讯地图 Key 为**公共免费测试 Key**，源码内置默认值（`UserAppConfig::bundledTencentMapKey()`），克隆后零配置即可使用地图；仍可用已忽略的 `config.local.ini` 的 `tencent/mapKey` 或 `EV_TENCENT_MAP_KEY` 覆盖。服务端与模拟器 token 必须匹配。程序编译成功也不代表在线地图权限、配额及网络已通过验证；若 Key 配额异常，在腾讯控制台处理后仅需轮换 `bundledTencentMapKey()` 中的内置值（2026-09-08 团队确认，取代此前"源码不内置真实 Key"的口径）。
 
 ## 6. 常见错误定位
 
