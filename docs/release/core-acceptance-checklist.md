@@ -1,15 +1,15 @@
 # 核心验收清单
 
-> 版本：2026-09-04 core profile｜适用：9 月 10 日核心 GO/NO-GO
+> 版本：2026-09-08 最终交付对齐｜适用：9 月 10 日现场准备。用户已确认本机最终版验收通过，见[最终交付说明](final-2026-09-08.md)；以下勾选仍由实际执行者登记，不代签双彩排、换机或真实地图验证。
 >
 > 原则：每个勾选项均须记录同一候选提交 SHA、执行日期/人员、命令或操作、日志/截图位置、结果与缺陷编号。任何 P0 开放、数据矛盾、人工直接改运行库或两次彩排不一致均为 **NO-GO**。
 
 ## A. 环境与构建
 
 - [ ] 在 Linux 原生文件系统的干净 build 目录完成 core profile 环境检查；不要求 Node/npm 或 ML 科学计算包。
-- [ ] 完整 CMake configure/build 成功，Qt Core/Network/Widgets/WebEngine/Charts/Test 和核心 Python/pytest 依赖可用。
+- [ ] 完整 CMake configure/build 成功，Qt Core/Gui/Network/Widgets/Sql/WebEngine/Test、SQLite/SVG/TLS 运行插件和核心 Python/pytest 依赖可用；图表为原生绘制，不要求 Qt Charts。
 - [ ] 核心 CTest、数据库测试和服务端专属测试均有通过计数；分别记录，不用任一项替代其他项。
-- [ ] 启动用户端、管理/服务端和模拟器所需配置已记录，且不含真实腾讯 Key。
+- [ ] 启动三端所需配置已记录；除团队已批准的内置测试 Key 外，不发布个人覆盖配置、其他凭据或活动运行库。
 
 ## B. 黄金库与数据一致性
 

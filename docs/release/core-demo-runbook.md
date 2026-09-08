@@ -1,6 +1,6 @@
 # 核心项目演示与交付操作手册
 
-> 2026-09-06：本手册为整项目收尾中的操作基准，不是已完成的两次彩排报告。当前共享基线为 dev@97c6da1，后续候选必须记录新的准确提交。本文不操作人工维护的需求矩阵。
+> 2026-09-08 更新：用户已确认最终版，统一版本和交付入口见[最终交付说明](final-2026-09-08.md)。本手册保留四入口、数值核对与现场演示方法，不是已完成的两次彩排报告，也不代替人员签字或人工需求矩阵。请记录实际运行的完整 SHA，不再把旧 `97c6da1` 当作当前版本。
 
 ## 1. 演示边界
 
@@ -92,14 +92,14 @@ python3 database/create_runtime_copy.py \
   --db runtime/rehearsal-01/core.db --host 127.0.0.1 --port 9100
 ```
 
-等待服务正常监听，再启动模拟器和用户端。模拟器服务 token 使用本地演示配置，不将其输出到演示证据；用户端地图 Key 沿用本地配置：
+等待服务正常监听，再启动模拟器和用户端。模拟器服务 token 使用本地演示配置，不将其输出到演示证据；用户端地图 Key 可由本地配置覆盖：
 
 ```bash
 # 终端 2：EV_SIMULATOR_TOKEN 由本地配置提供。
 /path/to/native-build/simulator/ev_charger_simulator \
   --host 127.0.0.1 --port 9100 --token "$EV_SIMULATOR_TOKEN"
 
-# 终端 3：地图 Key 来自 config.local.ini 或 EV_TENCENT_MAP_KEY。
+# 终端 3：默认使用团队测试 Key；可由 config.local.ini 或 EV_TENCENT_MAP_KEY 覆盖。
 EV_SERVER_HOST=127.0.0.1 EV_SERVER_PORT=9100 \
   /path/to/native-build/apps/user-client/ev_user_client
 ```
@@ -110,7 +110,7 @@ EV_SERVER_HOST=127.0.0.1 EV_SERVER_PORT=9100 \
 
 ### 在线复位与冷复位的区别
 
-在线 `demo.reset` 在本机后续分支实现，使用前以[本批服务端最终审查记录](../test/server-delivery-closeout-2026-09-06.md)确认候选状态，不能假定旧 dev 二进制已有此入口。管理“系统健康”页提供明确确认，取消不变更数据；确认会丢失当前业务演示状态，恢复批准黄金内容。
+最终版包含在线 `demo.reset`。管理「系统健康」页提供明确的二次确认，取消不变更数据；确认会清除本轮业务状态并恢复批准的黄金内容。此操作与开启新轮次不同，不在正常功能演示过程中随意点击。历史实现审查见[服务端记录](../test/server-delivery-closeout-2026-09-06.md)。
 
 在线复位由数据库工作线程执行事务，不替换运行库文件。相同请求重试只恢复未完阶段或重放原结果，不再次清库；界面提示快照写入警告时，数据库复位已经完成，不能讲成“全部回滚”。默认使用仓库封存 core 黄金库，自定义 `--golden` 与 `--golden-hash` 必须成对提供。
 

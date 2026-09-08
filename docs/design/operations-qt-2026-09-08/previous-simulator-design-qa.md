@@ -1,7 +1,7 @@
 # 能量脉冲 · 模拟器与管理页面主题验收
 
 日期：2026-09-08。双端主画面的设计对照已获用户通过，其完整报告保存在
-[已通过的双端报告](docs/design/energy-pulse-qt-2026-09-08/approved-dual-ui-design-qa.md)。
+[已通过的双端报告](../energy-pulse-qt-2026-09-08/approved-dual-ui-design-qa.md)。
 本次新增范围是模拟器桌面 UI；服务端其他管理页只核实既有改造范围，没有声称逐页重新设计。
 
 ## 来源与状态

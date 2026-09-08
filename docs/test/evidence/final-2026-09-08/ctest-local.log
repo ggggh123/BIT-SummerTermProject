@@ -1,0 +1,88 @@
+[OUTPUT]
+Internal ctest changing into directory: /home/hushengyuan/ev-release/build-energy-pulse
+
+[HANDLER_OUTPUT]
+Test project /home/hushengyuan/ev-release/build-energy-pulse
+
+      Start  4: user_api
+      Start 36: demo_runtime_unit
+      Start  6: user_chargepage
+      Start  7: user_recommendation
+ 1/36 Test  #7: user_recommendation ..............   Passed   10.73 sec
+      Start 15: server_threads
+ 2/36 Test #15: server_threads ...................   Passed    7.05 sec
+      Start  8: user_mobileui
+ 3/36 Test  #6: user_chargepage ..................   Passed   19.80 sec
+      Start  3: user_tcpjsonclient
+ 4/36 Test #36: demo_runtime_unit ................   Passed   22.00 sec
+      Start 22: server_tcp_demo_reset
+ 5/36 Test  #8: user_mobileui ....................   Passed    6.71 sec
+      Start 26: admin_window_refresh
+ 6/36 Test  #3: user_tcpjsonclient ...............   Passed    5.70 sec
+      Start 33: core_workflow
+ 7/36 Test #22: server_tcp_demo_reset ............   Passed    4.95 sec
+      Start 24: server_tcp_p0_Asia_Shanghai
+ 8/36 Test #26: admin_window_refresh .............   Passed    3.83 sec
+      Start 23: server_tcp_p0_UTC
+ 9/36 Test #33: core_workflow ....................   Passed    5.04 sec
+      Start  5: user_tencentmap
+10/36 Test #24: server_tcp_p0_Asia_Shanghai ......   Passed    3.85 sec
+      Start 10: simulator_client
+11/36 Test #23: server_tcp_p0_UTC ................   Passed    3.82 sec
+      Start 27: admin_ui
+12/36 Test #10: simulator_client .................   Passed    3.63 sec
+      Start 13: database_worker
+13/36 Test #13: database_worker ..................   Passed    0.94 sec
+      Start 11: simulator_runtime_status
+14/36 Test #11: simulator_runtime_status .........   Passed    0.53 sec
+      Start 34: environment_tools
+15/36 Test  #5: user_tencentmap ..................   Passed    5.46 sec
+      Start  1: user_formatters
+16/36 Test #34: environment_tools ................   Passed    0.28 sec
+      Start 28: admin_login_style
+17/36 Test #28: admin_login_style ................   Passed    0.18 sec
+      Start 25: admin_runtime
+18/36 Test #25: admin_runtime ....................   Passed    0.13 sec
+      Start 12: simulator_window
+19/36 Test #27: admin_ui .........................   Passed    4.44 sec
+      Start 14: demo_reset
+20/36 Test #12: simulator_window .................   Passed    0.15 sec
+      Start 32: pulsechart
+21/36 Test #32: pulsechart .......................   Passed    0.03 sec
+      Start 31: jsonenvelope
+22/36 Test #31: jsonenvelope .....................   Passed    0.01 sec
+      Start 20: dashboard_service
+23/36 Test #20: dashboard_service ................   Passed    0.01 sec
+      Start 21: telemetry_service
+24/36 Test  #1: user_formatters ..................   Passed    0.70 sec
+      Start 19: admin_service
+25/36 Test #19: admin_service ....................   Passed    0.01 sec
+      Start 18: user_flow
+26/36 Test #21: telemetry_service ................   Passed    0.02 sec
+      Start 16: admin_auth
+27/36 Test #18: user_flow ........................   Passed    0.01 sec
+      Start 17: request_log
+28/36 Test #16: admin_auth .......................   Passed    0.01 sec
+      Start  2: user_webengine_runtime
+29/36 Test #17: request_log ......................   Passed    0.01 sec
+      Start 30: framecodec
+30/36 Test  #2: user_webengine_runtime ...........   Passed    0.01 sec
+      Start  9: simulator_engine
+31/36 Test #30: framecodec .......................   Passed    0.00 sec
+      Start 29: contracts
+32/36 Test  #9: simulator_engine .................   Passed    0.01 sec
+      Start 35: source_delivery_tools
+33/36 Test #14: demo_reset .......................   Passed    0.17 sec
+34/36 Test #29: contracts ........................   Passed    0.01 sec
+35/36 Test #35: source_delivery_tools ............   Passed    0.34 sec
+36/36 Test  #4: user_api .........................   Passed   39.94 sec
+
+100% tests passed, 0 tests failed out of 36
+
+Label Time Summary:
+core           =  22.63 sec*proc (3 tests)
+environment    =   0.28 sec*proc (1 test)
+release        =   0.34 sec*proc (1 test)
+runtime        =  22.00 sec*proc (1 test)
+
+Total Test time (real) =  39.94 sec

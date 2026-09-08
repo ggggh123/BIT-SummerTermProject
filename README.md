@@ -2,15 +2,15 @@
 
 充电桩管理与演示平台小学期项目。
 
-## 当前团队入口（2026-09-08）
+## 最终版入口（2026-09-08 验收确认）
 
-> 本地候选分支 `feat/energy-pulse-qt-ui` 已按选定方案 2 实现双端“能量脉冲”UI；效果、采样边界和本机验证见[实现记录](docs/design/energy-pulse-qt-2026-09-08/README.md)，视觉对照见 [design-qa.md](design-qa.md)。基于 `dev@7bbfc0e`，并不表示此候选已合入远端；旧发行包和启动入口尚未替换。
+用户已确认当前版本验收通过，作为最终交付版本整理。本版本包含三端「能量脉冲」主题、管理端设备阵列与系统健康、个人用电统计和账号管理，以及预约成功、冻结提示、结算反馈等实测修订。最终版功能、启动方式、验证证据和边界统一见[最终交付说明](docs/release/final-2026-09-08.md)。
 
-> 同日候选 UI 增量：模拟器已完成同主题控制台；电桩状态与系统健康已完成结构级改造，见[设备阵列与故障处置](docs/design/operations-qt-2026-09-08/README.md)。其余管理页保持主题统一后的既有布局，不宣称全部逐页重做。
+集成来源：保留远端 `dev@a15e088` 的全部内容，包括 [PR #11](https://github.com/ggggh123/BIT-SummerTermProject/pull/11) 的 Ubuntu 22.04 基线和 [PR #12](https://github.com/ggggh123/BIT-SummerTermProject/pull/12) 的快速部署、源码安装包、默认地图配置与队友文档。远端检查和整合依据见[发布前审计](docs/review/dev-final-delivery-2026-09-08.md)。团队统一通过 `feat/* → dev → main` 集成；是否已合入、对应 SHA 及 CI 结果以 GitHub 为准。
 
 **默认 Ubuntu 22.04 / Qt 6.2 / GCC 11 / CMake 3.22。** 本机 25.04 / Qt 6.8 不再作为默认安装教程。先阅读 [22.04 开发指南](docs/development/ubuntu22.md)，不要为编译项目升级整个系统。
 
-`dev` 已于 2026-09-07 更新到快照 `6360bd1`，包含三端 UI、运行入口、管理端日志分页和健康分区。`fix/ubuntu22-team-baseline` 已整合该快照，通过 [PR #11](https://github.com/ggggh123/BIT-SummerTermProject/pull/11) 补齐 22.04 构建/CI、启动鉴权与便携发行修复，并修正新增页面的集成问题；不是把队友快照覆盖成旧版本。PR 是否合并以 GitHub 为准。旧报告及下方 9 月 6 日状态作为历史记录保留，不用来判断最新代码或人工验收状态。
+9 月 6 日以来的旧报告、原设计与逐轮截图继续保留为过程记录，不能用旧报告中的「尚未实现／未提交」判断本版状态。9 月 7 日的便携二进制包也不会因本次源码更新自动变成最终版。
 
 在 Ubuntu 22.04 的独立 clone 根目录执行：
 
@@ -25,16 +25,19 @@ cmake --build --preset ubuntu22
 
 ### 快速开始（新环境一键部署）
 
-不想逐步执行上面流程的成员/新用户，用一键脚本（内部等价于 bootstrap → 环境检查 → `ubuntu22-test` 构建，可选 `--start` 拉起三端）：
+成员／新用户可用一键脚本（按需安装全局依赖 → 环境检查 → `ubuntu22` 三程序构建，可选 `--start` 拉起三端）：
 
 ```bash
-python3 scripts/quickstart.py          # 依赖安装 → 环境检查 → 配置 → 全量编译
+python3 scripts/quickstart.py          # 依赖安装 → 环境检查 → 配置 → 只编译三端，默认并行 2
 python3 scripts/quickstart.py --start  # 同上，完成后自动拉起三端演示
+python3 scripts/quickstart.py --start --jobs 1  # 低内存虚拟机
 ```
 
 - 依赖安装按需触发（apt 系统包无法随文件夹分发，脚本自动检测缺失并调用 `scripts/bootstrap.sh` 安装）；非 22.04 的 Ubuntu（如 25.04）会自动透传 `--allow-other-ubuntu`，属尽力兼容而非验证基线；
 - 自动处理 Windows 复制导致的 shell 脚本 CRLF 换行问题；
-- `--start` 成功后应看到管理端、用户端、模拟器三个窗口；腾讯地图 Key 已内置，无需配置；
+- `--start` 成功后应看到管理端、用户端、模拟器三个窗口；团队测试地图 Key 已内置，也可用本机配置覆盖。在线导航仍依赖权限、配额和网络，不把离线测试当作在线验证；
+- 完整测试编译显式选择 `--preset ubuntu22-test`，再运行 `ctest --preset ubuntu22-test`；不让日常演示默认承担整套测试的编译成本；
+- `scripts/release/make_installer.py` 生成的是**需要安装依赖和编译的源码包**，不是免编译便携包；个人配置、缓存和活动数据库不入包，受校验的黄金库保留；
 - 环境兼容性问题与解决方法详见 [环境兼容性汇总](docs/test/ubuntu22-qt62-compatibility-2026-09-07.md)。
 
 ### 历史集成记录（不是当前环境要求）
@@ -59,6 +62,8 @@ python3 scripts/quickstart.py --start  # 同上，完成后自动拉起三端演
 
 ## 当前文档入口
 
+- [最终交付说明与启动入口](docs/release/final-2026-09-08.md) 与 [远端 dev 发布前审计](docs/review/dev-final-delivery-2026-09-08.md)
+- [最后一轮 UI 实测反馈及截图](docs/design/ui-feedback-followup-2026-09-08/README.md)、[客户端统计／账号管理／结算反馈](docs/design/client-feedback-2026-09-08/README.md)
 - [Ubuntu 22.04 团队开发指南](docs/development/ubuntu22.md) 与 [环境基线](docs/management/environment-matrix.md)
 - [2026-09-08 dev 更新与 PR 冲突整合记录](docs/test/dev-pr-refresh-2026-09-08.md)
 - [便携发行说明](docs/release/portable-release.md)（与源码编译分开；含私有配置的发行包不上传 Git）

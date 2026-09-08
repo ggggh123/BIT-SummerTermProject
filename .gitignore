@@ -25,6 +25,10 @@ dashboard/runtime/
 *.db-wal
 *.db-shm
 *.log
+# 已审阅的 Qt 回归日志作为文档证据入库，活动运行日志仍排除。
+!docs/design/client-feedback-2026-09-08/ctest-*.log
+!docs/design/ui-feedback-followup-2026-09-08/*.log
+!docs/test/evidence/final-2026-09-08/*.log
 config.local.ini
 .env
 
