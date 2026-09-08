@@ -2,11 +2,11 @@
 
 充电桩管理与演示平台小学期项目。
 
-## 当前团队入口（2026-09-07）
+## 当前团队入口（2026-09-08）
 
 **默认 Ubuntu 22.04 / Qt 6.2 / GCC 11 / CMake 3.22。** 本机 25.04 / Qt 6.8 不再作为默认安装教程。先阅读 [22.04 开发指南](docs/development/ubuntu22.md)，不要为编译项目升级整个系统。
 
-本轮 `fix/ubuntu22-team-baseline` 包含后续服务端、三端 UI、运行入口与 Qt 6.2 兼容修复，通过 PR 面向 `dev` 集成；分支成果不自动代表 `main` 或 `dev` 已更新。2026-09-07 整理时远端 `dev` 为 `97c6da1`。旧报告及下方 9 月 6 日状态作为历史记录保留，不用来判断最新代码或人工验收状态。
+`dev` 已于 2026-09-07 更新到快照 `6360bd1`，包含三端 UI、运行入口、管理端日志分页和健康分区。`fix/ubuntu22-team-baseline` 已整合该快照，通过 [PR #11](https://github.com/ggggh123/BIT-SummerTermProject/pull/11) 补齐 22.04 构建/CI、启动鉴权与便携发行修复，并修正新增页面的集成问题；不是把队友快照覆盖成旧版本。PR 是否合并以 GitHub 为准。旧报告及下方 9 月 6 日状态作为历史记录保留，不用来判断最新代码或人工验收状态。
 
 在 Ubuntu 22.04 的独立 clone 根目录执行：
 
@@ -42,6 +42,7 @@ cmake --build --preset ubuntu22
 ## 当前文档入口
 
 - [Ubuntu 22.04 团队开发指南](docs/development/ubuntu22.md) 与 [环境基线](docs/management/environment-matrix.md)
+- [2026-09-08 dev 更新与 PR 冲突整合记录](docs/test/dev-pr-refresh-2026-09-08.md)
 - [便携发行说明](docs/release/portable-release.md)（与源码编译分开；含私有配置的发行包不上传 Git）
 - [当前核心交付架构](docs/design/core-system-architecture.html)
 - [范围基线 v2](docs/management/scope-baseline.md) 与 [2026-09-04 范围变更记录](docs/management/scope-change-2026-09-04.md)

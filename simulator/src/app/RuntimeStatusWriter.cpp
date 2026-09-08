@@ -107,7 +107,21 @@ bool RuntimeStatusWriter::writeState(const QString &sessionState,
                                     .arg(filePath_, file.errorString());
         return failWrite(message);
     }
+    // 提交前检查 flush 的缓冲写错误；保留提交后的错误检查与队友新增的回读校验。
+    // commit 后文件已经发布，首次发布校验失败也必须撤销，不只撤销旧 ready 文件。
     hasPublished_ = true;
+    if (file.error() != QFileDevice::NoError) {
+        const QString message = QStringLiteral("运行状态文件写入被系统拒绝 %1：%2")
+                                    .arg(filePath_, file.errorString());
+        return failWrite(message);
+    }
+    QFile verify(filePath_);
+    if (!verify.open(QIODevice::ReadOnly) || verify.readAll() != contents) {
+        verify.close();
+        const QString message = QStringLiteral("运行状态文件落盘校验失败 %1")
+                                    .arg(filePath_);
+        return failWrite(message);
+    }
     return true;
 }
 

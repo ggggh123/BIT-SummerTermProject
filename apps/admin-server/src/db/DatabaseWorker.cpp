@@ -126,7 +126,7 @@ void DatabaseWorker::query(quint64 sequence, AdminView view, const QString &toke
     case AdminView::Stations: rows = s.dashboard->stationRows(); break;
     case AdminView::Chargers: rows = s.dashboard->chargerRows(p.value("stationId").toInt(), p.value("status").toString()); break;
     case AdminView::Users: rows = s.dashboard->userRows(p.value("mobileLike").toString(), p.value("limit").toInt(20), p.value("offset").toInt()); break;
-    case AdminView::RequestLog: result = s.log->list({},50,0,&data); break;
+    case AdminView::RequestLog: result = s.log->list(p.value("requestId").toString(), p.value("limit").toInt(50), p.value("offset").toInt(), &data); break;
     default: result = Result::failure("INVALID_REQUEST", "未知管理视图"); break;
     }
     QJsonArray array;

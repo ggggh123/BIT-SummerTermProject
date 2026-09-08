@@ -23,6 +23,8 @@ target_link_libraries(ev_charger_simulator PRIVATE simulator_core Qt6::Widgets)
 # --- tests ---
 if(BUILD_TESTING)
 find_package(Qt6 6.2 REQUIRED COMPONENTS Test)
+add_executable(qsave_probe EXCLUDE_FROM_ALL tests/tools/qsave_probe.cpp)
+target_link_libraries(qsave_probe PRIVATE Qt6::Core)
 add_executable(tst_simulator_engine tests/tst_telemetryengine.cpp)
 target_link_libraries(tst_simulator_engine PRIVATE simulator_core Qt6::Test)
 add_test(NAME simulator_engine COMMAND tst_simulator_engine)

@@ -19,15 +19,18 @@ QString statusText(const QString &code)
         {"charging",QStringLiteral("充电中")},{"fault",QStringLiteral("故障")},
         {"restarting",QStringLiteral("重启中")},{"active",QStringLiteral("正常")},
         {"frozen",QStringLiteral("已冻结")},{"fast",QStringLiteral("快充")},
-        {"slow",QStringLiteral("慢充")},{"OK",QStringLiteral("成功")}};
+        {"slow",QStringLiteral("慢充")},{"OK",QStringLiteral("成功")},
+        {"ready",QStringLiteral("就绪")},{"degraded",QStringLiteral("降级")},
+        {"unverified",QStringLiteral("未验证")},{"disabled",QStringLiteral("未启用")}};
     return labels.value(code);
 }
 
 QColor statusColor(const QString &code)
 {
-    if(code=="fault" || code=="frozen") return QColor("#B94B43");
+    if(code=="fault" || code=="frozen" || code=="degraded") return QColor("#B94B43");
     if(code=="reserved" || code=="restarting") return QColor("#A86619");
     if(code=="charging" || code=="fast") return QColor("#477991");
+    if(code=="unverified" || code=="disabled") return QColor("#718078");
     return QColor("#00856A");
 }
 

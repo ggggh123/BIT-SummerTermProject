@@ -4,7 +4,7 @@
 
 ## 1. 统一源码版本
 
-此轮修正在 `fix/ubuntu22-team-baseline`，通过面向 `dev` 的 PR 集成。PR 合并前需要试用本轮成果时，在无未提交改动的独立 clone 中执行：
+此轮修正在 `fix/ubuntu22-team-baseline`，通过面向 `dev` 的 PR #11 集成；2026-09-08 已吸收队友新快照 `dev@6360bd1`，不是旧 dev 的替代副本。PR 合并前需要试用本轮成果时，在无未提交改动的独立 clone 中执行：
 
 ```bash
 git fetch origin

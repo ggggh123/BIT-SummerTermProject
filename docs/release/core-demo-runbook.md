@@ -29,7 +29,7 @@ Web/ML 的代码和成果保留，默认演示不启动它们。不宣称真实�
 先按下节手动方法中的命令完成构建。以下示例将`/path/to/source`、`/path/to/native-build`替换为实际路径；run ID 每轮必须新建。地图 Key 由本地 `config.local.ini` 的 `[tencent] mapKey` 或 `EV_TENCENT_MAP_KEY` 注入；环境变量即使为空也优先，空值会在启动任何进程前失败。不要在报告中回显 Key。
 
 ```bash
-# 既有服务端接受的开发演示值；不要把自定义环境token当作服务端配置入口。
+# 服务端在启动时读取此配置并固定本次进程的 token；模拟器必须使用同一个值。
 export EV_SIMULATOR_TOKEN=demo-simulator-token
 /path/to/source/scripts/reset_demo.sh --run-id demo-01
 /path/to/source/scripts/start_demo.sh --run-id demo-01 --build-dir /path/to/native-build
