@@ -14,3 +14,8 @@ target_compile_definitions(tst_jsonenvelope PRIVATE
     TEST_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/shared/protocol/fixtures"
 )
 add_test(NAME jsonenvelope COMMAND tst_jsonenvelope)
+
+add_executable(tst_pulsechart tst_pulsechart.cpp)
+target_link_libraries(tst_pulsechart PRIVATE Qt6::Test ev_pulse_ui)
+add_test(NAME pulsechart COMMAND tst_pulsechart)
+set_tests_properties(pulsechart PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

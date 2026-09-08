@@ -24,6 +24,7 @@ public:
 
 private:
     QWidget *createDashboardPage();
+    QWidget *createRevenuePage();
     QWidget *createPileStatusPage();
     QWidget *createChargerManagementPage();
     QWidget *createStationManagementPage();
@@ -34,7 +35,7 @@ private:
     void registerPageRefresh(QWidget *page, std::function<void()> refresh);
     void refreshCurrentPage();
     void queryView(AdminView view, const QJsonObject &parameters, QObject *receiver,
-                   std::function<void(QJsonObject)> callback);
+                   std::function<void(QJsonObject)> callback, std::function<void(QString)> onError = {});
     void queryRows(AdminView view, const QJsonObject &parameters, QTableWidget *table);
     void mutate(const QString &action, const QJsonObject &payload, const QList<QWidget *> &controls,
                 std::function<void()> callback);

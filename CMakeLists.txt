@@ -12,6 +12,7 @@ include(CTest)
 message(STATUS "Team baseline: Ubuntu 22.04 / Qt 6.2 / CMake 3.22 / C++17")
 
 add_subdirectory(shared/protocol)
+add_subdirectory(shared/ui)
 add_subdirectory(apps/admin-server)
 add_subdirectory(apps/user-client)
 add_subdirectory(simulator)

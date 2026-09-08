@@ -110,6 +110,71 @@ class TcpP0(unittest.TestCase):
         for (created,) in self.sql("SELECT created_at FROM request_log"):
             self.assert_time(created)
 
+    def test_personal_statistics_are_owned_read_only_and_follow_settlement(self):
+        login = self.call("auth.user_login", {"mobile": "13955550001"}, "")["data"]
+        self.token = login["token"]
+        uid = login["user"]["userId"]
+        data = self.call("user.statistics")["data"]
+        self.assertEqual(data["userId"], uid)
+        self.assertEqual(data["orderCount"], 0)
+        self.assertEqual(len(data["days"]), 7)
+        today = dt.datetime.fromisoformat(data["asOf"]).date()
+        self.assertEqual([d["date"] for d in data["days"]],
+                         [(today - dt.timedelta(days=i)).isoformat() for i in range(6, -1, -1)])
+        self.assertTrue(all(day["energyKwh"] == 0 for day in data["days"]))
+        self.assertEqual(self.call("user.statistics", {"userId": 1})["code"], "INVALID_REQUEST")
+        self.assertEqual(self.call("user.statistics", token="")["code"], "AUTH_REQUIRED")
+        self.assertEqual(self.call("user.statistics", token="sim-token")["code"], "FORBIDDEN")
+        oid = self.order()
+        self.sql("UPDATE orders SET energy_kwh=2.5, amount_fen=250 WHERE id=?", (oid,))
+        self.assertTrue(self.call("charge.stop", {"orderId": oid})["ok"])
+        before = self.sql("SELECT status, energy_kwh, amount_fen FROM orders WHERE id=?", (oid,))
+        stats = self.call("user.statistics")["data"]
+        self.assertEqual(stats["orderCount"], 1)
+        self.assertEqual(stats["completedCount"], 0)
+        self.assertEqual(stats["energyKwh"], 2.5)
+        self.assertEqual(stats["paidFen"], 0)
+        self.assertEqual(stats["pendingSettlementCount"], 1)
+        self.assertEqual(stats["pendingSettlementFen"], 250)
+        self.assertEqual(self.sql("SELECT status, energy_kwh, amount_fen FROM orders WHERE id=?", (oid,)), before)
+        other = self.call("auth.user_login", {"mobile": "13955550002"}, "")["data"]["token"]
+        self.assertEqual(self.call("user.statistics", token=other)["data"]["energyKwh"], 0)
+        self.assertTrue(self.call("wallet.recharge", {"amountFen": 1000})["ok"])
+        self.assertTrue(self.call("charge.settle", {"orderId": oid})["ok"])
+        settled = self.call("user.statistics")["data"]
+        self.assertEqual(settled["completedCount"], 1)
+        self.assertEqual(settled["paidFen"], 250)
+        self.assertEqual(settled["pendingSettlementCount"], 0)
+        self.assertEqual(settled["energyKwh"], 2.5)
+        self.sql("UPDATE users SET status='frozen' WHERE id=?", (uid,))
+        self.assertTrue(self.call("user.statistics")["ok"])
+        # 保持旧客户端的 user.get 严格响应结构兼容。
+        self.assertEqual(set(self.call("user.get")["data"]), {"user"})
+
+    def test_order_telemetry_is_owned_read_only_and_correlated(self):
+        oid = self.order()
+        current = self.call("order.current")["data"]["order"]
+        stamp = (dt.datetime.fromisoformat(current["startedAt"]) + dt.timedelta(seconds=1)).isoformat(timespec="milliseconds")
+        pushed = self.sample("curve-sample", at=stamp, energy=0.25)
+        self.assertTrue(pushed["ok"], pushed)
+        result = self.call("order.telemetry", {"orderId": oid})
+        self.assertTrue(result["ok"], result)
+        data = result["data"]
+        self.assertEqual(set(data), {"orderId", "chargerId", "ratedPowerKw", "startedAt", "samples", "truncated"})
+        self.assertEqual(data["orderId"], oid)
+        self.assertEqual(data["chargerId"], 1)
+        self.assertEqual(data["samples"], [{"recordedAt": stamp, "powerKw": 60, "energyKwh": 0.25}])
+        self.assertFalse(data["truncated"])
+        other = self.call("auth.user_login", {"mobile": "13911113333"}, "")["data"]["token"]
+        self.assertEqual(self.call("order.telemetry", {"orderId": oid}, other)["code"], "FORBIDDEN")
+        self.assertEqual(self.call("order.telemetry", {"orderId": oid}, "")["code"], "AUTH_REQUIRED")
+        self.assertEqual(self.call("order.telemetry", {"orderId": oid}, "sim-token")["code"], "FORBIDDEN")
+        self.assertEqual(self.call("order.telemetry", {"orderId": "1"})["code"], "INVALID_REQUEST")
+        self.assertEqual(self.call("order.telemetry", {"orderId": 2147483647})["code"], "ENTITY_NOT_FOUND")
+        unchanged = self.call("order.current")["data"]["order"]
+        self.assertEqual(unchanged["energyKwh"], 0.25)
+        self.assertEqual(unchanged["status"], "charging")
+
     def test_stop_preserves_telemetry_and_actual_duration(self):
         oid = self.order()
         before = self.sample()["data"]["order"]

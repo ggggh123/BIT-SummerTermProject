@@ -14,6 +14,7 @@ target_include_directories(tst_core_workflow PRIVATE ../../simulator/src)
 target_link_libraries(tst_core_workflow PRIVATE
     ev_user_client_core
     simulator_core
+    ev_pulse_ui
     ev_protocol
     Qt6::Core
     Qt6::Widgets

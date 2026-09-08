@@ -7,7 +7,7 @@
 #include <QSet>
 #include <memory>
 
-enum class AdminView { Summary, Stations, Chargers, Users, RequestLog };
+enum class AdminView { Summary, Stations, Chargers, Users, RequestLog, Energy, Operations };
 
 class DatabaseWorker : public QObject {
     Q_OBJECT

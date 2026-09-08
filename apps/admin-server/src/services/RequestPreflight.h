@@ -47,7 +47,9 @@ inline Result payload(const QString &action, const QJsonObject &p)
         return (!p.contains("limit") || integer(p.value("limit"),1,100))
             && (!p.contains("offset") || integer(p.value("offset")));
     };
-    if (action==DemoReset) {
+    if (action==UserStatistics) {
+        if (!p.isEmpty()) return invalid();
+    } else if (action==DemoReset) {
         if (!p.value("confirmation").isString() || p.value("confirmation").toString()!="RESET_DEMO")
             return Result::failure("INVALID_REQUEST","confirmation 必须为 RESET_DEMO");
     } else if (action==AuthUserLogin) {
@@ -67,7 +69,7 @@ inline Result payload(const QString &action, const QJsonObject &p)
         if (!id("stationId")) return invalid();
     } else if (action==ChargeReserve || action==AdminChargerRestart) {
         if (!id("chargerId")) return invalid();
-    } else if (action==ChargeStart || action==ChargeStop || action==ChargeSettle || action==OrderCancel) {
+    } else if (action==ChargeStart || action==ChargeStop || action==ChargeSettle || action==OrderCancel || action==OrderTelemetry) {
         if (!id("orderId")) return invalid();
     } else if (action==OrderList || action==AdminUserList) {
         if (!page()) return invalid();

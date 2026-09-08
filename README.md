@@ -4,6 +4,10 @@
 
 ## 当前团队入口（2026-09-08）
 
+> 本地候选分支 `feat/energy-pulse-qt-ui` 已按选定方案 2 实现双端“能量脉冲”UI；效果、采样边界和本机验证见[实现记录](docs/design/energy-pulse-qt-2026-09-08/README.md)，视觉对照见 [design-qa.md](design-qa.md)。基于 `dev@7bbfc0e`，并不表示此候选已合入远端；旧发行包和启动入口尚未替换。
+
+> 同日候选 UI 增量：模拟器已完成同主题控制台；电桩状态与系统健康已完成结构级改造，见[设备阵列与故障处置](docs/design/operations-qt-2026-09-08/README.md)。其余管理页保持主题统一后的既有布局，不宣称全部逐页重做。
+
 **默认 Ubuntu 22.04 / Qt 6.2 / GCC 11 / CMake 3.22。** 本机 25.04 / Qt 6.8 不再作为默认安装教程。先阅读 [22.04 开发指南](docs/development/ubuntu22.md)，不要为编译项目升级整个系统。
 
 `dev` 已于 2026-09-07 更新到快照 `6360bd1`，包含三端 UI、运行入口、管理端日志分页和健康分区。`fix/ubuntu22-team-baseline` 已整合该快照，通过 [PR #11](https://github.com/ggggh123/BIT-SummerTermProject/pull/11) 补齐 22.04 构建/CI、启动鉴权与便携发行修复，并修正新增页面的集成问题；不是把队友快照覆盖成旧版本。PR 是否合并以 GitHub 为准。旧报告及下方 9 月 6 日状态作为历史记录保留，不用来判断最新代码或人工验收状态。

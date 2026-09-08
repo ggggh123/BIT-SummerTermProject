@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>能量脉冲 · 模拟器与管理页实拍</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:28px;font:14px/1.8 "Noto Sans CJK SC",sans-serif;background:#081822;color:#eaf3f6}main{max-width:1390px;margin:auto}h1{font-size:25px;font-weight:500;margin:0}h2{font-size:19px;font-weight:500;margin:30px 0 12px}p{color:#97adbc;margin:9px 0 16px}a{color:#8be4ce}select{font:inherit;color:#dcebf1;background:#193444;padding:8px 12px;border:1px solid #355161;border-radius:6px;margin:0 0 16px 12px;max-width:80%}.shot{width:100%;height:auto;display:block;background:#102536;border:1px solid #2c4251}.note{border-left:2px solid #72ddc3;padding-left:14px}.pair{display:flex;gap:24px;width:max-content}.pair figure{margin:0}.pair img{display:block}.pair .full{width:612px;height:387px}figcaption{font-size:13px;color:#97adbc;padding:8px 0}.focus{position:relative;width:370px;height:120px;overflow:hidden;background:#102536}.focus img{position:absolute;width:1360px;height:860px;max-width:none}.source img{left:-190px;top:-181px}.implementation img{left:-252px;top:-113px}.compare{overflow:auto;padding-bottom:10px}footer{margin:30px 0;color:#97adbc}
+.pair.fullPair{width:100%;max-width:1248px}.fullPair figure{flex:1;min-width:0}.fullPair .full{width:100%;height:auto}
+</style>
+<main>
+<h1>能量脉冲 · 三端主题延展</h1>
+<p>这里展示真实 Qt 控件的测试截图，不是用网页重绘的应用。模拟器测试样本由固定种子的现有采样引擎生成；网络回执在截图测试中使用替身，真实三程序联调另行回归。</p>
+<p><a href="index.html">已通过的双端原稿对照</a> · <a href="#management">其他管理页面</a> · <a href="#theme">主题对照</a></p>
+<h2>模拟器 · 遥测实验台</h2>
+<label for="simState">查看状态</label><select id="simState">
+<option value="simulator-running-1360x860">运行中 / 所有设备 · 1360×860</option>
+<option value="simulator-selected-1360x860">选中设备 / 独立曲线 · 1360×860</option>
+<option value="simulator-fault-1360x860">故障设备 / 恢复控制 · 1360×860</option>
+<option value="simulator-empty-1360x860">首次打开 / 空数据 · 1360×860</option>
+<option value="simulator-paused-1280x720">小窗口 / 暂停 · 1280×720</option>
+<option value="simulator-compact-bottom-1280x720">小窗口 / 滚动到底部 · 1280×720</option>
+<option value="simulator-auth-error-1280x720">鉴权失败 · 1280×720</option>
+</select>
+<img class="shot" id="simShot" alt="模拟器原生 Qt 运行中截图" src="captures/simulator-running-1360x860.png">
+<p class="note">控制台复用已通过主题的深蓝底、青绿强调、大数字和原生曲线。左栏操作固定；额定功率与最新本地采样明确分列；曲线与生成条数不冒充服务端入库或订单计费。样本最多保留 600 批，日志最多 500 条。</p>
+<h2 id="management">服务端 · 其他管理页面</h2>
+<p class="note">同日后续：电桩状态与系统健康已进一步完成结构级改造，<a href="../operations-qt-2026-09-08/index.html">查看最新设备阵列与故障处置</a>。下方保留改造前的截图用于对照。</p>
+<p>这些页面沿用既有的业务布局，统一了主题、表格、表单、状态和弹窗外观；并非本轮逐页重新构图的设计稿。运营总览是结构级重做，营收统计仍保留。</p>
+<label for="adminState">查看页面</label><select id="adminState">
+<option value="chargers">充电桩管理</option><option value="status">电桩状态</option><option value="stations">充电站管理</option><option value="users">用户管理</option><option value="service">接口服务</option><option value="logs">请求日志</option><option value="health">系统健康</option><option value="overview-30-days-compact">营收统计 / 小窗口</option><option value="login">管理登录</option>
+</select>
+<img class="shot" id="adminShot" alt="服务端充电桩管理实拍" src="captures/chargers.png">
+<h2 id="theme">主题对照 · 已通过的管理端与新增模拟器</h2>
+<p>两者均为 1360×860、1× 原生截图，下方全景同比缩小（最大 45%，随预览窗口宽度适配）。这用于检查同一产品的主题与排版语言，不把不同业务页面当作逐像素复刻。</p>
+<div class="compare"><div class="pair fullPair">
+<figure><figcaption>已通过的管理端 · 主题依据</figcaption><img class="full" alt="管理端主题参考" src="captures/pulse-admin-1360x860.png"></figure>
+<figure><figcaption>新增模拟器 · 派生布局</figcaption><img class="full" alt="模拟器主题实现" src="captures/simulator-running-1360x860.png"></figure>
+</div></div>
+<h2>数字、单位与文本层次 · 1:1 局部</h2>
+<div class="compare"><div class="pair">
+<figure><figcaption>管理端 · 功率读数</figcaption><div class="focus source"><img alt="管理端数字局部" src="captures/pulse-admin-1360x860.png"></div></figure>
+<figure><figcaption>模拟器 · 功率读数</figcaption><div class="focus implementation"><img alt="模拟器数字局部" src="captures/simulator-running-1360x860.png"></div></figure>
+</div></div>
+<footer>本机实现留档 · Ubuntu 22.04 / Qt 6.2 为目标基线，截图实际来自 Ubuntu 25.04 / Qt 6.8.3。未在此页面启动真实设备控制。</footer>
+</main>
+<script>
+for(const [select,image] of [['simState','simShot'],['adminState','adminShot']]){
+ const input=document.getElementById(select),shot=document.getElementById(image);
+ input.addEventListener('change',()=>{shot.src='captures/'+input.value+'.png';shot.alt=input.selectedOptions[0].textContent+' · Qt 实拍';});
+}
+</script>
+</html>

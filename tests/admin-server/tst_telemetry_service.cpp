@@ -1,4 +1,5 @@
 #include "services/TelemetryService.h"
+#include "services/EnergyReadModel.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -69,6 +70,62 @@ class TelemetryServiceTest : public QObject
     Q_OBJECT
 
 private slots:
+    void energyReadModelScopesOwnerOrderAndTimeWindow()
+    {
+        ScopedDatabase db;
+        QSqlQuery q(db.database());
+        const QStringList records{
+            "('2026-09-01T00:00:59+08:00',99,8,'telemetry')",
+            "('2026-09-01T00:01:00+08:00',99,8,'telemetry')",
+            "('2026-08-31T16:02:00Z',22.5,0.5,'telemetry')",
+            "('2026-09-01T00:02:30+08:00',0,8,'fault')",
+            "('2026-09-01T00:03:00+08:00',18,0.3,'telemetry')",
+            "('2026-09-01T00:04:00+08:00',60,7,'telemetry')"};
+        for (const auto &record : records)
+            QVERIFY(q.exec("INSERT INTO telemetry(charger_id,recorded_at,power_kw,energy_increment_kwh,event_type) VALUES(1,"+record.mid(1)));
+        QJsonObject data;
+        QVERIFY(EnergyReadModel::order(db.database(),1,1,&data).ok);
+        QCOMPARE(data.value("samples").toArray().size(),3); // 未结束订单的 NULL 边界。
+        QCOMPARE(EnergyReadModel::order(db.database(),1,2,&data).code,QStringLiteral("FORBIDDEN"));
+        QCOMPARE(EnergyReadModel::order(db.database(),999,1,&data).code,QStringLiteral("ENTITY_NOT_FOUND"));
+        QVERIFY(q.exec("UPDATE orders SET ended_at='2026-09-01T00:03:00+08:00' WHERE id=1"));
+        QVERIFY(EnergyReadModel::order(db.database(),1,1,&data).ok);
+        const auto samples=data.value("samples").toArray();
+        QCOMPARE(samples.size(),2);
+        QCOMPARE(samples.first().toObject().value("powerKw").toDouble(),22.5);
+        QCOMPARE(samples.last().toObject().value("energyKwh").toDouble(),0.8);
+        QVERIFY(!data.value("truncated").toBool());
+        QVERIFY(EnergyReadModel::station(db.database(),1,&data).ok);
+        QCOMPARE(data.value("stationId").toInt(),1);
+        QCOMPARE(data.value("chargers").toArray().size(),1);
+        QCOMPARE(data.value("chargers").toArray().first().toObject().value("samples").toArray().size(),5);
+        QVERIFY(q.exec("UPDATE orders SET started_at=NULL, ended_at=NULL WHERE id=1"));
+        QVERIFY(EnergyReadModel::order(db.database(),1,1,&data).ok);
+        QVERIFY(data.value("startedAt").isNull());
+        QVERIFY(data.value("samples").toArray().isEmpty());
+    }
+
+    void boundedEnergyReadRetainsEarlierCumulativeAmount()
+    {
+        ScopedDatabase db;
+        QSqlQuery q(db.database());
+        QVERIFY(db.database().transaction());
+        const auto start=QDateTime::fromString("2026-09-01T00:01:00+08:00",Qt::ISODate);
+        q.prepare("INSERT INTO telemetry(charger_id,recorded_at,power_kw,energy_increment_kwh,event_type) VALUES(1,?,60,0.01,'telemetry')");
+        for(int i=1;i<=605;++i) {
+            q.bindValue(0,start.addSecs(i).toString(Qt::ISODateWithMs));
+            QVERIFY(q.exec());
+        }
+        QVERIFY(db.database().commit());
+        QJsonObject data;
+        QVERIFY(EnergyReadModel::order(db.database(),1,1,&data).ok);
+        const auto samples=data.value("samples").toArray();
+        QCOMPARE(samples.size(),600);
+        QVERIFY(data.value("truncated").toBool());
+        QVERIFY(qAbs(samples.first().toObject().value("energyKwh").toDouble()-0.06)<1e-9);
+        QVERIFY(qAbs(samples.last().toObject().value("energyKwh").toDouble()-6.05)<1e-9);
+    }
+
     void telemetryPushAccumulatesActiveOrderAmount()
     {
         ScopedDatabase db;

@@ -10,7 +10,6 @@
 #include "ui/UiTheme.h"
 
 #include <QApplication>
-#include <QComboBox>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -846,7 +845,14 @@ void TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOfflin
     runJavaScriptAndWait(
         view->page(), QStringLiteral("window.__offlineNavigation.failNext = true"), &completed);
     QVERIFY(completed);
-    page.showRoute(origin, destination, QStringLiteral("walking"));
+    auto *driving = page.findChild<QPushButton *>("routeDrivingButton");
+    auto *walking = page.findChild<QPushButton *>("routeWalkingButton");
+    QVERIFY(driving && walking);
+    QVERIFY(driving->isCheckable() && walking->isCheckable());
+    QVERIFY(driving->isChecked());
+    QTest::mouseClick(walking, Qt::LeftButton);
+    QVERIFY(walking->isChecked());
+    QVERIFY(!driving->isChecked());
     QTRY_COMPARE_WITH_TIMEOUT(status->text(),
                               QStringLiteral("路线规划失败，请检查网络后重试"), 5'000);
     QVERIFY(retry->isVisible());
@@ -883,6 +889,14 @@ void TencentMapClientTest::realNavigationPageRunsQrcPromisePollingAndRetryOfflin
         view->page(), QStringLiteral("JSON.stringify(window.__qtOperations)"), &completed).toString();
     QVERIFY(completed);
     QVERIFY(!completionState.contains(QStringLiteral("offline map test value")));
+    QTest::mouseClick(driving, Qt::LeftButton);
+    QTRY_COMPARE_WITH_TIMEOUT(status->text(), QStringLiteral("路线规划成功"), 5'000);
+    QCOMPARE(page.lastSuccessfulRoute()->mode, QStringLiteral("driving"));
+    QVERIFY(driving->isChecked());
+    QVERIFY(!walking->isChecked());
+    page.resetForSession();
+    QVERIFY(driving->isChecked());
+    QVERIFY(!page.lastSuccessfulRoute());
 }
 
 void TencentMapClientTest::navigationFailureControlsFitPortrait()
@@ -903,7 +917,7 @@ void TencentMapClientTest::navigationFailureControlsFitPortrait()
     page.showFailure(QStringLiteral("地图暂时无法加载，请检查网络连接与地图配置后重试。原有订单不受影响，可返回站点继续查看充电桩。"));
     QTest::qWait(30);
     QCOMPARE(page.width(), 390);
-    for (const char *name : {"navigationBackButton", "routeModeBox", "navigationRetryButton", "navigationStatus"}) {
+    for (const char *name : {"navigationBackButton", "routeDrivingButton", "routeWalkingButton", "navigationRetryButton", "navigationStatus"}) {
         auto *control = page.findChild<QWidget *>(QString::fromLatin1(name));
         QVERIFY(control);
         QVERIFY2(page.rect().contains(QRect(control->mapTo(&page, QPoint()), control->size())), name);
@@ -921,8 +935,8 @@ void TencentMapClientTest::navigationFailureControlsFitPortrait()
     for (int y = 0; y < focused.height(); ++y) {
         for (int x = 0; x < focused.width(); ++x) {
             const auto color = focused.pixelColor(x, y);
-            if (qAbs(color.red()) <= 6 && qAbs(color.green() - 111) <= 6
-                && qAbs(color.blue() - 89) <= 6) ++focusPixels;
+            if (qAbs(color.red() - 162) <= 6 && qAbs(color.green() - 243) <= 6
+                && qAbs(color.blue() - 223) <= 6) ++focusPixels;
         }
     }
     QVERIFY2(focusPixels > 40, "The icon-only back button needs a visible keyboard focus ring");

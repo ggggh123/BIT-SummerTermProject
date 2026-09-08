@@ -30,6 +30,7 @@ target_link_libraries(ev_user_client_core
         Qt6::Network
         Qt6::WebEngineWidgets
         ev_protocol
+        ev_pulse_ui
 )
 
 add_executable(ev_user_client src/main.cpp resources/resources.qrc)

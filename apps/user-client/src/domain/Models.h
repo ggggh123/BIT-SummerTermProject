@@ -19,6 +19,25 @@ struct User final {
     QString registeredAt;
 };
 
+struct DailyUsage final {
+    QString date;
+    double energyKwh = 0;
+};
+
+struct UsageStatistics final {
+    qint64 userId = 0;
+    QString asOf;
+    qint64 orderCount = 0;
+    qint64 completedCount = 0;
+    double energyKwh = 0;
+    qint64 paidFen = 0;
+    qint64 durationSec = 0;
+    qint64 pendingSettlementCount = 0;
+    qint64 pendingSettlementFen = 0;
+    double monthEnergyKwh = 0;
+    QVector<DailyUsage> days;
+};
+
 struct Station final {
     qint64 stationId = 0;
     QString name;
@@ -127,6 +146,21 @@ struct CurrentOrderResult final {
     std::optional<Order> order;
 };
 
+struct PowerSample final {
+    QString recordedAt;
+    double powerKw = 0;
+    double energyKwh = 0;
+};
+
+struct OrderTelemetry final {
+    qint64 orderId = 0;
+    qint64 chargerId = 0;
+    double ratedPowerKw = 0;
+    QString startedAt;
+    QVector<PowerSample> samples;
+    bool truncated = false;
+};
+
 enum class ChargeOperation {
     Guard,
     Poll,
@@ -204,7 +238,9 @@ struct ApiError final {
 } // namespace ev::user
 
 Q_DECLARE_METATYPE(ev::user::User)
+Q_DECLARE_METATYPE(ev::user::UsageStatistics)
 Q_DECLARE_METATYPE(ev::user::Order)
+Q_DECLARE_METATYPE(ev::user::OrderTelemetry)
 Q_DECLARE_METATYPE(ev::user::CurrentOrderResult)
 Q_DECLARE_METATYPE(ev::user::ChargeOperation)
 Q_DECLARE_METATYPE(ev::user::RequestContext)

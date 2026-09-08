@@ -27,11 +27,11 @@ QString statusText(const QString &code)
 
 QColor statusColor(const QString &code)
 {
-    if(code=="fault" || code=="frozen" || code=="degraded") return QColor("#B94B43");
-    if(code=="reserved" || code=="restarting") return QColor("#A86619");
+    if(code=="fault" || code=="frozen" || code=="degraded") return QColor("#f1ae98");
+    if(code=="reserved" || code=="restarting") return QColor("#e9bc87");
     if(code=="charging" || code=="fast") return QColor("#477991");
-    if(code=="unverified" || code=="disabled") return QColor("#718078");
-    return QColor("#00856A");
+    if(code=="unverified" || code=="disabled") return QColor("#97adbc");
+    return QColor("#72ddc3");
 }
 
 void StatusDelegate::paint(QPainter *painter,const QStyleOptionViewItem &option,const QModelIndex &index) const
@@ -82,9 +82,9 @@ void RevenueChart::paintEvent(QPaintEvent *)
     const double ceiling=highest>0 ? qCeil(highest/4.0)*4.0 : 100.0;
     for(int tick=0;tick<=4;++tick) {
         const qreal y=plot.bottom()-plot.height()*tick/4.0;
-        p.setPen(QPen(QColor("#E2E8E1"),1,Qt::DashLine));
+        p.setPen(QPen(QColor("#2c4251"),1,Qt::DashLine));
         p.drawLine(QPointF(plot.left(),y),QPointF(plot.right(),y));
-        p.setPen(QColor("#718078"));
+        p.setPen(QColor("#97adbc"));
         p.drawText(QRectF(0,y-8,45,16),Qt::AlignRight|Qt::AlignVCenter,QString::number(ceiling*tick/4,'f',0));
     }
     if(m_points.isEmpty()) {
@@ -104,19 +104,19 @@ void RevenueChart::paintEvent(QPaintEvent *)
         points.append(point);
         if(i==0) line.moveTo(point); else line.lineTo(point);
         if(ticks.contains(i)) {
-            p.setPen(QColor("#718078"));
+            p.setPen(QColor("#97adbc"));
             p.drawText(QRectF(point.x()-28,plot.bottom()+9,56,20),Qt::AlignCenter,row.value("date").toString().mid(5).replace('-','/'));
         }
     }
     QPainterPath area=line;
     area.lineTo(points.last().x(),plot.bottom()); area.lineTo(plot.left(),plot.bottom()); area.closeSubpath();
-    p.fillPath(area,QColor("#E6F4EC"));
-    p.setPen(QPen(QColor("#00856A"),2.5,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+    p.fillPath(area,QColor("#1b3d4d"));
+    p.setPen(QPen(QColor("#72ddc3"),2.5,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
     p.drawPath(line);
     p.setBrush(Qt::white);
     if(m_points.size()<=7) for(const auto &point:points) p.drawEllipse(point,3.5,3.5);
     if(highest==0) {
-        p.setPen(QColor("#718078"));
+        p.setPen(QColor("#97adbc"));
         p.drawText(plot.adjusted(0,0,0,-16),Qt::AlignCenter,QStringLiteral("所选时段暂无已完成订单营收"));
     }
 }
@@ -150,9 +150,9 @@ void StateRing::paintEvent(QPaintEvent *)
         start-=span;
     }
     QFont number=font(); number.setPixelSize(30); number.setBold(true); p.setFont(number);
-    p.setPen(QColor("#18352D"));
+    p.setPen(QColor("#eaf3f6"));
     p.drawText(ring.adjusted(0,-10,0,-10),Qt::AlignCenter,QString::number(total));
-    QFont caption=font(); caption.setPixelSize(size<100 ? 11 : 12); p.setFont(caption); p.setPen(QColor("#718078"));
+    QFont caption=font(); caption.setPixelSize(size<100 ? 11 : 12); p.setFont(caption); p.setPen(QColor("#97adbc"));
     p.drawText(QRectF(ring.left(),ring.center().y()+12,ring.width(),18),Qt::AlignCenter,QStringLiteral("充电桩总数"));
 }
 }

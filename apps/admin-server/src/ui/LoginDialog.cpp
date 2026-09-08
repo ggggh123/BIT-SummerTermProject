@@ -47,7 +47,7 @@ protected:
         painter.setPen(QPen(QColor("#7FB397"), 1.5));
         painter.setBrush(QColor("#234D3D"));
         painter.drawRoundedRect(QRectF(53, 65, 35, 51), 5, 5);
-        painter.setBrush(QColor("#102D29"));
+        painter.setBrush(QColor("#0b1d2b"));
         painter.drawRoundedRect(QRectF(60, 72, 21, 17), 3, 3);
         QPainterPath bolt;
         bolt.moveTo(72, 75);
@@ -90,7 +90,7 @@ protected:
         painter.drawPath(windows);
         painter.drawLine(QPointF(165, 74), QPointF(165, 85));
         painter.setPen(QPen(QColor("#9ABEA0"), 1.5));
-        painter.setBrush(QColor("#102D29"));
+        painter.setBrush(QColor("#0b1d2b"));
         painter.drawEllipse(QRectF(134, 103, 14, 14));
         painter.drawEllipse(QRectF(187, 103, 14, 14));
         painter.setPen(QPen(QColor("#91B593"), 2, Qt::SolidLine, Qt::RoundCap));

@@ -113,6 +113,8 @@ ev::protocol::ResponseEnvelope RequestDispatcher::handleRequest(const ev::protoc
     Result userResult;
     if (request.action == ev::actions::UserGet) {
         userResult = m_userService->getUser(userId, &userData);
+    } else if (request.action == ev::actions::UserStatistics) {
+        userResult = m_userService->usageStatistics(userId, &userData);
     } else if (request.action == ev::actions::UserUpdate) {
         userResult = m_userService->updateUser(userId, request.payload, &userData);
     } else if (request.action == ev::actions::WalletRecharge) {
@@ -127,6 +129,8 @@ ev::protocol::ResponseEnvelope RequestDispatcher::handleRequest(const ev::protoc
         userResult = m_userService->currentOrder(userId, &userData);
     } else if (request.action == ev::actions::OrderList) {
         userResult = m_userService->orderList(userId, request.payload, &userData);
+    } else if (request.action == ev::actions::OrderTelemetry) {
+        userResult = m_userService->orderTelemetry(userId, request.payload, &userData);
     } else if (request.action == ev::actions::ChargeReserve) {
         userResult = m_userService->reserve(userId, request.payload, &userData);
     } else if (request.action == ev::actions::ChargeStart) {
@@ -139,9 +143,11 @@ ev::protocol::ResponseEnvelope RequestDispatcher::handleRequest(const ev::protoc
         userResult = m_userService->cancel(userId, request.payload, &userData);
     }
     if (request.action == ev::actions::UserGet || request.action == ev::actions::UserUpdate
+        || request.action == ev::actions::UserStatistics
         || request.action == ev::actions::WalletRecharge || request.action == ev::actions::StationList
         || request.action == ev::actions::StationDetail || request.action == ev::actions::ChargerList
         || request.action == ev::actions::OrderCurrent || request.action == ev::actions::OrderList
+        || request.action == ev::actions::OrderTelemetry
         || request.action == ev::actions::ChargeReserve || request.action == ev::actions::ChargeStart
         || request.action == ev::actions::ChargeStop || request.action == ev::actions::ChargeSettle
         || request.action == ev::actions::OrderCancel) {

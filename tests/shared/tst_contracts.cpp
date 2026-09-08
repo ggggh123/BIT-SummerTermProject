@@ -14,6 +14,7 @@ QStringList expectedActions()
     return {
         QStringLiteral("auth.user_login"),
         QStringLiteral("user.get"),
+        QStringLiteral("user.statistics"),
         QStringLiteral("user.update"),
         QStringLiteral("wallet.recharge"),
         QStringLiteral("station.list"),
@@ -25,6 +26,7 @@ QStringList expectedActions()
         QStringLiteral("charge.settle"),
         QStringLiteral("order.current"),
         QStringLiteral("order.list"),
+        QStringLiteral("order.telemetry"),
         QStringLiteral("order.cancel"),
         QStringLiteral("admin.login"),
         QStringLiteral("admin.dashboard"),
@@ -62,7 +64,7 @@ void ContractsTest::actionsAreStable()
     const QStringList actual = ev::actions::all();
 
     QCOMPARE(actual, expected);
-    QCOMPARE(actual.size(), 27);
+    QCOMPARE(actual.size(), 29);
 
     QSet<QString> unique;
     for (const QString &action : actual) {
@@ -70,7 +72,7 @@ void ContractsTest::actionsAreStable()
         QVERIFY2(!unique.contains(action), qPrintable(QStringLiteral("duplicate action: %1").arg(action)));
         unique.insert(action);
     }
-    QCOMPARE(unique.size(), 27);
+    QCOMPARE(unique.size(), 29);
 }
 
 void ContractsTest::statusesValidate()
@@ -139,6 +141,7 @@ void ContractsTest::permissionsAreStable()
           QStringLiteral("system.health")}},
         {QStringLiteral("user"),
          {QStringLiteral("user.get"),
+          QStringLiteral("user.statistics"),
           QStringLiteral("user.update"),
           QStringLiteral("wallet.recharge"),
           QStringLiteral("station.list"),
@@ -150,6 +153,7 @@ void ContractsTest::permissionsAreStable()
           QStringLiteral("charge.settle"),
           QStringLiteral("order.current"),
           QStringLiteral("order.list"),
+          QStringLiteral("order.telemetry"),
           QStringLiteral("order.cancel"),
           QStringLiteral("forecast.latest"),
           QStringLiteral("system.health")}},

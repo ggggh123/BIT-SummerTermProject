@@ -6,7 +6,7 @@
     <file alias="default-avatar.svg">images/default-avatar.svg</file>
   </qresource>
   <qresource prefix="/ui">
-    <file alias="login-illustration.png">ui/login-illustration.png</file>
+    <file alias="login-illustration.png">ui/login-pulse.png</file>
     <file alias="location.svg">ui/location.svg</file>
     <file alias="battery-charging.svg">ui/battery-charging.svg</file>
     <file alias="history.svg">ui/history.svg</file>

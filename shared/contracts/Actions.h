@@ -7,6 +7,7 @@ namespace ev::actions {
 
 inline const QString AuthUserLogin = QStringLiteral("auth.user_login");
 inline const QString UserGet = QStringLiteral("user.get");
+inline const QString UserStatistics = QStringLiteral("user.statistics");
 inline const QString UserUpdate = QStringLiteral("user.update");
 inline const QString WalletRecharge = QStringLiteral("wallet.recharge");
 
@@ -20,6 +21,7 @@ inline const QString ChargeStop = QStringLiteral("charge.stop");
 inline const QString ChargeSettle = QStringLiteral("charge.settle");
 inline const QString OrderCurrent = QStringLiteral("order.current");
 inline const QString OrderList = QStringLiteral("order.list");
+inline const QString OrderTelemetry = QStringLiteral("order.telemetry");
 inline const QString OrderCancel = QStringLiteral("order.cancel");
 
 inline const QString AdminLogin = QStringLiteral("admin.login");
@@ -44,6 +46,7 @@ inline QStringList all()
     return {
         AuthUserLogin,
         UserGet,
+        UserStatistics,
         UserUpdate,
         WalletRecharge,
         StationList,
@@ -55,6 +58,7 @@ inline QStringList all()
         ChargeSettle,
         OrderCurrent,
         OrderList,
+        OrderTelemetry,
         OrderCancel,
         AdminLogin,
         AdminDashboard,

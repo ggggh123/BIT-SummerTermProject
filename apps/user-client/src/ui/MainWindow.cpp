@@ -13,6 +13,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
@@ -76,7 +77,7 @@ public:
     [[nodiscard]] QSize sizeHint() const override
     {
         QSize hint = QPushButton::sizeHint();
-        hint.setHeight(qMax(64, hint.height()));
+        hint.setHeight(qMax(56, hint.height()));
         return hint;
     }
 
@@ -158,6 +159,18 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
+    auto *brandBar=new QWidget(centralWidget);
+    brandBar->setObjectName(QStringLiteral("mobileBrand"));
+    brandBar->setFixedHeight(64);
+    auto *brandLayout=new QHBoxLayout(brandBar);
+    brandLayout->setContentsMargins(23,0,23,0);
+    auto *brandName=new QLabel(QStringLiteral("东软充电"),brandBar);
+    brandName->setObjectName(QStringLiteral("mobileBrandName"));
+    auto *brandMode=new QLabel(QStringLiteral("用户端 · 补能"),brandBar);
+    brandMode->setObjectName(QStringLiteral("mobileBrandMode"));
+    brandLayout->addWidget(brandName); brandLayout->addStretch(); brandLayout->addWidget(brandMode);
+    layout->addWidget(brandBar);
+
     auto *configurationMessage = new QLabel(centralWidget);
     configurationMessage->setObjectName(QStringLiteral("configurationMessage"));
     configurationMessage->setWordWrap(true);
@@ -189,14 +202,15 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
     authenticatedNavigation_ = new QWidget(centralWidget);
     authenticatedNavigation_->setObjectName(QStringLiteral("authenticatedNavigation"));
     auto *navigationLayout = new QHBoxLayout(authenticatedNavigation_);
-    navigationLayout->setContentsMargins(4, 4, 4, 4);
+    authenticatedNavigation_->setFixedHeight(70);
+    navigationLayout->setContentsMargins(9, 7, 9, 7);
     navigationLayout->setSpacing(4);
     nearbyNavigationButton_ = new MobileTabButton(
         QStringLiteral("找桩"), QStringLiteral(":/ui/location.svg"),
         authenticatedNavigation_);
     nearbyNavigationButton_->setObjectName(QStringLiteral("nearbyNavigationButton"));
     currentOrderNavigationButton_ = new MobileTabButton(
-        QStringLiteral("当前订单"), QStringLiteral(":/ui/battery-charging.svg"),
+        QStringLiteral("当前订单"), QStringLiteral(":/ui/charger.svg"),
         authenticatedNavigation_);
     currentOrderNavigationButton_->setObjectName(QStringLiteral("currentOrderNavigationButton"));
     currentOrderNavigationButton_->setVisible(false);
@@ -384,6 +398,30 @@ MainWindow::MainWindow(UserAppConfig config, QWidget *parent)
         }
         showPage(profilePage_);
         profilePage_->refresh();
+    });
+    connect(chargePage_, &ChargePage::rechargeRequested, profileNavigationButton_, &QPushButton::click);
+    connect(profilePage_, &ProfilePage::accountExitRequested, this, [this](bool switching) {
+        if (chargeFlowBlocked_ || reconnectCurrentRequired_ || !userApi_->canLogout()) {
+            QMessageBox::information(this, QStringLiteral("暂时无法退出"),
+                QStringLiteral("请先等待正在提交的操作完成，或重新连接并核验订单/账户结果。"));
+            return;
+        }
+        QMessageBox dialog(QMessageBox::Question,
+            switching ? QStringLiteral("切换账号") : QStringLiteral("退出当前账号"),
+            QStringLiteral("将结束当前设备上的登录，返回手机号登录页。\n\n"
+                           "退出不会停止充电，也不会取消或结算订单；"
+                           "如有进行中或待结算订单，请重新登录原账号继续处理。"),
+            QMessageBox::NoButton, this);
+        dialog.setObjectName(QStringLiteral("accountExitDialog"));
+        dialog.setTextFormat(Qt::PlainText);
+        auto *confirm = dialog.addButton(switching ? QStringLiteral("确认切换") : QStringLiteral("确认退出"), QMessageBox::AcceptRole);
+        auto *cancel = dialog.addButton(QStringLiteral("留在当前账号"), QMessageBox::RejectRole);
+        dialog.setDefaultButton(cancel);
+        dialog.setEscapeButton(cancel);
+        dialog.exec();
+        if (dialog.clickedButton() != confirm) return;
+        if (chargeFlowBlocked_ || reconnectCurrentRequired_ || !userApi_->logout()) return;
+        loginPage_->prepareForAccountChange(switching);
     });
     connect(nearbyPage_, &NearbyPage::chargerSelected, this,
             [this](const ev::user::StationSelection &selection) {

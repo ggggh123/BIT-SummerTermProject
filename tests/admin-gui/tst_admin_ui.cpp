@@ -2,18 +2,27 @@
 #include "protocol/JsonEnvelope.h"
 #include "ui/MainWindow.h"
 #include "ui/LoginDialog.h"
+#include "ui/EnergyPage.h"
+#include "ui/OperationsPages.h"
+#include "ui/PulseChart.h"
+#include "../fixtures/PulseSamples.h"
 
 #include <QApplication>
 #include <QComboBox>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QStackedWidget>
 #include <QTabBar>
 #include <QTableWidget>
 #include <QTabWidget>
@@ -155,6 +164,8 @@ private slots:
         window.resize(1280,720);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
+        window.findChild<QPushButton *>("dashboardModeButton")->click();
+        QCoreApplication::processEvents();
         auto *overview=window.findChild<QTabWidget *>("adminTabs")->widget(0);
         QWidget *ring=nullptr;
         for(auto *widget:overview->findChildren<QWidget *>())
@@ -242,6 +253,315 @@ private slots:
         QCOMPARE(table->item(0,5)->text(),QStringLiteral("active"));
     }
 
+    void energySamplesAndDeviceSelectionStayLinked()
+    {
+        MainWindow window(m_context.get(),m_token);
+        window.resize(1360,860);
+        window.show();
+        auto *page = window.findChild<EnergyPage *>("adminEnergyPage");
+        QVERIFY(page);
+        QTRY_VERIFY(page->findChild<QComboBox *>("energyStationFilter")->count()>0);
+        const auto fixtureStart=QDateTime::currentDateTimeUtc().addSecs(-1600);
+        page->setData(PulseFixture::station(fixtureStart));
+        auto *chart = page->findChild<ev::ui::PulseChart *>("adminPowerChart");
+        QCOMPARE(chart->sampleCount(),34);
+        QCOMPARE(page->findChild<QLabel *>("energySelectedCode")->text(),QStringLiteral("A-01"));
+        QCOMPARE(page->findChild<QLabel *>("energySelectedPower")->text(),QStringLiteral("22.5"));
+        QCoreApplication::processEvents();
+        for(int i=0;i<8;++i) {
+            auto *device=page->findChild<QPushButton *>(QString("energyDevice%1").arg(i));
+            QVERIFY(device->height()>=56);
+            auto *caption=device->findChild<QLabel *>("energyDeviceCaption");
+            QVERIFY(caption->height()>=caption->fontMetrics().height());
+        }
+        capture(window,"pulse-admin-1360x860");
+        QTest::mouseClick(chart,Qt::LeftButton,Qt::NoModifier,QPoint(chart->width()/2,100));
+        QVERIFY(!chart->followingLatest());
+        QCOMPARE(page->findChild<QLabel *>("energySelectedPower")->text(),QString::number(chart->reading(0)->kw,'f',1));
+        const double held=chart->cursorSeconds();
+        page->setData(PulseFixture::station(fixtureStart.addSecs(100)));
+        QVERIFY(qAbs(chart->cursorSeconds()-(held-100))<0.001);
+        page->setData(PulseFixture::station(fixtureStart));
+        page->findChild<QPushButton *>("energyFollowLatest")->click();
+        page->findChild<QPushButton *>("energyDevice5")->click();
+        QCOMPARE(page->findChild<QLabel *>("energySelectedCode")->text(),QStringLiteral("A-06"));
+        QCOMPARE(page->findChild<QLabel *>("energySelectedPower")->text(),QStringLiteral("18.0"));
+        page->findChild<QPushButton *>("energyDevice1")->click();
+        QCOMPARE(page->findChild<QLabel *>("energySelectedPower")->text(),QStringLiteral("—"));
+        QVERIFY(chart->sampleCount()>0); // 无样本设备不抹掉另一台设备的有效曲线。
+        page->findChild<QPushButton *>("energyDevice0")->click();
+        window.resize(1280,720);
+        QCoreApplication::processEvents();
+        auto *viewport = window.findChild<QScrollArea *>("energyPageViewport");
+        QCOMPARE(viewport->horizontalScrollBar()->maximum(),0);
+        auto *latest = page->findChild<QPushButton *>("energyFollowLatest");
+        viewport->ensureWidgetVisible(latest);
+        QVERIFY(viewport->viewport()->rect().contains(QRect(latest->mapTo(viewport->viewport(),QPoint()),latest->size())));
+        viewport->verticalScrollBar()->setValue(0);
+        capture(window,"pulse-admin-1280x720");
+    }
+
+    void fleetFiltersAndHealthNavigationUseTheSameDevice()
+    {
+        MainWindow window(m_context.get(),m_token); window.show();
+        auto *tabs=window.findChild<QTabWidget *>("adminTabs");
+        auto *fleet=window.findChild<FleetStatusPage *>();
+        auto *health=window.findChild<SystemHealthPage *>();
+        QVERIFY(fleet&&health);
+        tabs->setCurrentIndex(7);
+        auto *faults=health->findChild<QListWidget *>("healthFaultList");
+        QTRY_VERIFY(faults->count()>0);
+        QCOMPARE(health->findChild<QLabel *>("healthListenValue")->text(),QStringLiteral("监听中"));
+        QCOMPARE(health->findChild<QLabel *>("healthDatabaseValue")->text(),QStringLiteral("可读取"));
+        QCOMPARE(health->findChild<QTableWidget *>("healthOptionalTable")->item(1,1)->text(),QString("unverified"));
+        faults->setCurrentRow(0);
+        const int id=faults->currentItem()->data(Qt::UserRole).toInt();
+        auto *locate=health->findChild<QPushButton *>("healthLocateFault");
+        QVERIFY(locate->isEnabled());
+        QCoreApplication::processEvents();
+        capture(window,"health-selected-1360x860");
+        locate->click();
+        QCOMPARE(tabs->currentIndex(),1);
+        QTRY_COMPARE(fleet->selectedChargerId(),id);
+        auto *selected=fleet->findChild<QPushButton *>(QString("fleetDevice%1").arg(id));
+        QVERIFY(selected);
+        QTRY_VERIFY(selected->isVisible());
+        QCoreApplication::processEvents();
+        auto *array=fleet->findChild<QScrollArea *>("fleetArrayViewport");
+        QTRY_VERIFY(array->viewport()->rect().contains(QRect(selected->mapTo(array->viewport(),QPoint()),selected->size())));
+        auto *restart=fleet->findChild<QPushButton *>("fleetRestartButton");
+        QVERIFY(restart->isEnabled());
+        capture(window,"fleet-selected-1360x860");
+        fleet->findChild<QPushButton *>("fleetFilter_fault")->click();
+        QCOMPARE(fleet->findChild<QTableWidget *>("pileStatusDetailTable")->rowCount(),faults->count());
+        auto *station=fleet->findChild<QComboBox *>("fleetStationFilter");
+        station->setCurrentIndex(station->findData(1)); // 黄金库故障位于站点 2。
+        QCOMPARE(fleet->findChild<QTableWidget *>("pileStatusDetailTable")->rowCount(),0);
+        QCOMPARE(fleet->selectedChargerId(),0);
+        QVERIFY(!restart->isEnabled());
+        QVERIFY(fleet->findChild<QLabel *>("fleetEmptyState")->isVisible());
+        station->setCurrentIndex(0);
+        fleet->findChild<QPushButton *>("fleetFilter_all")->click();
+        auto *toggle=fleet->findChild<QPushButton *>("fleetViewToggle"); toggle->click();
+        QVERIFY(fleet->findChild<QTableWidget *>("pileStatusDetailTable")->isVisible());
+        capture(window,"fleet-list-1360x860");
+        toggle->click();
+        window.resize(1280,720); QCoreApplication::processEvents();
+        auto *viewport=window.findChild<QScrollArea *>("fleetPageViewport");
+        QCOMPARE(window.size(),QSize(1280,720));
+        QCOMPARE(viewport->horizontalScrollBar()->maximum(),0);
+        QCOMPARE(fleet->findChild<QScrollArea *>("fleetArrayViewport")->horizontalScrollBar()->maximum(),0);
+        // 样式表的按钮高度不应挤破网格行；小窗口必须滚动而非重叠。
+        for(auto *group:fleet->findChildren<QFrame *>()) {
+            if(group->property("role").toString()!="stationGroup")continue;
+            const auto tiles=group->findChildren<QPushButton *>();
+            for(int i=0;i<tiles.size();++i) {
+                QVERIFY(tiles[i]->height()>=56);
+                for(auto *label:tiles[i]->findChildren<QLabel *>())
+                    QVERIFY(label->height()>=label->fontMetrics().height());
+                for(int j=i+1;j<tiles.size();++j) QVERIFY(!tiles[i]->geometry().intersects(tiles[j]->geometry()));
+            }
+        }
+        viewport->ensureWidgetVisible(restart);
+        QVERIFY(viewport->viewport()->rect().contains(QRect(restart->mapTo(viewport->viewport(),QPoint()),restart->size())));
+        capture(window,"fleet-compact-1280x720");
+        tabs->setCurrentIndex(7);
+        QTRY_VERIFY(!health->property("operationsPending").toBool());
+        health->findChild<QPushButton *>("healthDetailsToggle")->click();
+        QCOMPARE(health->findChild<QStackedWidget *>("healthDetailsViews")->currentIndex(),1);
+        capture(window,"health-details-1280x720");
+        auto *reset=health->resetButton();
+        QVERIFY(window.rect().contains(QRect(reset->mapTo(&window,QPoint()),reset->size())));
+    }
+
+    void operationsReadViewRequiresAdminAndKeepsStationIds()
+    {
+        auto read=[this](const QString &token) {
+            QByteArray result;
+            QEventLoop loop;
+            m_context->queryAdmin(AdminView::Operations,token,{},&loop,[&](const QByteArray &bytes){result=bytes;loop.quit();});
+            QTimer::singleShot(3000,&loop,&QEventLoop::quit);
+            loop.exec();
+            return result;
+        };
+        const auto denied=ev::protocol::parseResponse(read(QString()));
+        QVERIFY(!denied.ok); QCOMPARE(denied.code,QString("AUTH_REQUIRED"));
+        const auto accepted=ev::protocol::parseResponse(read(m_token));
+        QVERIFY(accepted.ok);
+        const auto data=accepted.data.toObject();
+        QCOMPARE(data.value("stations").toArray().size(),6);
+        QCOMPARE(data.value("chargers").toArray().size(),48);
+        QVERIFY(data.contains("latestTelemetry"));
+        QVERIFY(!data.value("readAt").toString().isEmpty());
+        for(const auto &entry:data.value("chargers").toArray()) {
+            const auto device=entry.toObject();
+            QVERIFY(device.value("stationId").toInt()>0);
+            QVERIFY(device.contains("ratedPowerKw"));
+        }
+        FleetStatusPage page;
+        // 重名站点和不同设备 ID 必须保留独立分组，不能以名字当主键。
+        const QJsonObject duplicate{{"stations",QJsonArray{
+            QJsonObject{{"id",11},{"name",QStringLiteral("同名站点")}},
+            QJsonObject{{"id",12},{"name",QStringLiteral("同名站点")}}}},
+            {"chargers",QJsonArray{
+            QJsonObject{{"id",51},{"code","A-01"},{"stationId",11},{"stationName",QStringLiteral("同名站点")},{"status","fault"},{"ratedPowerKw",60}},
+            QJsonObject{{"id",52},{"code","A-02"},{"stationId",12},{"stationName",QStringLiteral("同名站点")},{"status","idle"},{"ratedPowerKw",30}}}}};
+        page.setData(duplicate);
+        QVERIFY(page.findChild<QWidget *>("fleetStation11"));
+        QVERIFY(page.findChild<QWidget *>("fleetStation12"));
+        page.selectCharger(51);
+        QCOMPARE(page.selectedChargerId(),51);
+        auto *restart=page.findChild<QPushButton *>("fleetRestartButton");
+        QVERIFY(restart->isEnabled());
+        page.setRestartPending(true);
+        page.setData(duplicate);
+        QVERIFY(!restart->isEnabled());
+        page.setRestartPending(false);
+        QVERIFY(!restart->isEnabled()); // ACK 与新快照之间也不能重复发控制。
+        page.setData(duplicate);
+        QVERIFY(restart->isEnabled());
+        page.setReadError(QStringLiteral("测试读取失败"));
+        QVERIFY(!restart->isEnabled());
+        page.setData(QJsonObject{{"stations",QJsonArray{}},{"chargers",QJsonArray{}}});
+        QCOMPARE(page.selectedChargerId(),0);
+        QCOMPARE(page.findChild<QLabel *>("fleetTotal")->text(),QString("0"));
+        QVERIFY(!restart->isEnabled());
+    }
+
+    void fleetRestartConfirmationAndAuthoritativeTransition()
+    {
+        QTemporaryDir directory;
+        AppContext context;
+        AppContext::Options options; options.port=0;
+        options.databasePath=directory.filePath("restart.db");
+        options.snapshotPath=directory.filePath("snapshot.json");
+        QVERIFY(QFile::copy(QStringLiteral(EV_TEST_GOLDEN_DB),options.databasePath));
+        QVERIFY(context.initialize(options).ok);
+        QString token;
+        QEventLoop login;
+        context.executeLocal({1,QUuid::createUuid().toString(),"admin.login",{},{{"username","admin"},{"password","123456"}}},
+            &login,[&](const QByteArray &bytes){token=ev::protocol::parseResponse(bytes).data.toObject().value("token").toString();login.quit();});
+        QTimer::singleShot(3000,&login,&QEventLoop::quit);login.exec();QVERIFY(!token.isEmpty());
+        MainWindow window(&context,token);window.show();
+        window.findChild<QTabWidget *>("adminTabs")->setCurrentIndex(1);
+        auto *page=window.findChild<FleetStatusPage *>();
+        QTRY_VERIFY(page->findChild<QPushButton *>("fleetDevice10"));
+        page->selectCharger(10);
+        auto *button=page->findChild<QPushButton *>("fleetRestartButton");
+        auto *state=page->findChild<QLabel *>("fleetSelectedState");
+        QVERIFY(button->isEnabled());
+        bool cancelled=false, defaultNo=false;
+        QTimer::singleShot(0,&window,[&] {
+            auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+            if(!box)return;
+            defaultNo=box->defaultButton()==box->button(QMessageBox::No);
+            box->button(QMessageBox::No)->click();cancelled=true;
+        });
+        button->click();
+        QVERIFY(cancelled&&defaultNo);
+        QCOMPARE(state->text(),QStringLiteral("故障"));
+        const QString dbName=QUuid::createUuid().toString();
+        auto db=QSqlDatabase::addDatabase("QSQLITE",dbName);db.setDatabaseName(options.databasePath);QVERIFY(db.open());
+        auto requests=[&]{
+            QSqlQuery query(db);
+            if(!query.exec("SELECT COUNT(*) FROM request_log WHERE action='admin.charger_restart'")||!query.next())return -1;
+            return query.value(0).toInt();
+        };
+        QCOMPARE(requests(),0);
+        QTimer::singleShot(0,&window,[] {
+            if(auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))box->button(QMessageBox::Yes)->click();
+        });
+        button->click();
+        QVERIFY(!button->isEnabled());
+        button->click();
+        QTRY_COMPARE(requests(),1);
+        QTRY_COMPARE(state->text(),QStringLiteral("重启中"));
+        QVERIFY(!button->isEnabled());
+        capture(window,"fleet-restarting-1360x860");
+        QTRY_COMPARE_WITH_TIMEOUT(state->text(),QStringLiteral("空闲"),5000);
+        QVERIFY(!button->isEnabled());
+        QCOMPARE(requests(),1);
+        db.close();db={};QSqlDatabase::removeDatabase(dbName);
+    }
+
+    void operationsEmptyErrorsAndSnapshotCaptures()
+    {
+        MainWindow window(m_context.get(),m_token);window.show();
+        auto *tabs=window.findChild<QTabWidget *>("adminTabs");
+        auto *fleet=window.findChild<FleetStatusPage *>();
+        auto *health=window.findChild<SystemHealthPage *>();
+        QTRY_VERIFY(fleet->findChild<QPushButton *>("fleetDevice10"));
+        QTRY_VERIFY(!health->property("operationsPending").toBool());
+        for(auto *timer:window.findChildren<QTimer *>())timer->stop();
+        const QJsonObject empty{{"stations",QJsonArray{}},{"chargers",QJsonArray{}},
+            {"latestTelemetry",QJsonValue(QJsonValue::Null)},{"readAt",QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}};
+        tabs->setCurrentIndex(1);
+        QTRY_VERIFY(!fleet->property("operationsPending").toBool());
+        fleet->setData(empty); QCoreApplication::processEvents();
+        QCOMPARE(fleet->findChild<QLabel *>("fleetTotal")->text(),QString("0"));
+        QTRY_COMPARE(fleet->findChild<QScrollArea *>("fleetArrayViewport")->verticalScrollBar()->maximum(),0);
+        capture(window,"fleet-empty-1360x860");
+        fleet->setReadError("DB_ERROR"); QCoreApplication::processEvents();
+        capture(window,"fleet-read-error-1360x860");
+        tabs->setCurrentIndex(7);QTRY_VERIFY(!health->property("operationsPending").toBool());
+        health->setData(empty,m_context->healthSnapshot(),true,"127.0.0.1:9100");
+        QCOMPARE(health->findChild<QLabel *>("healthTelemetryValue")->text(),QStringLiteral("尚无记录"));
+        QCOMPARE(health->findChild<QLabel *>("healthFaultCount")->text(),QString("0"));
+        QVERIFY(!health->findChild<QPushButton *>("healthLocateFault")->isEnabled());
+        QCoreApplication::processEvents();capture(window,"health-empty-1360x860");
+        QJsonObject sampled=empty;
+        sampled["latestTelemetry"]=QJsonObject{{"chargerId",10},{"recordedAt","2026-09-08T16:00:00+08:00"},{"powerKw",22.5}};
+        health->setData(sampled,m_context->healthSnapshot(),false,"127.0.0.1:9100");
+        QCOMPARE(health->findChild<QLabel *>("healthListenValue")->text(),QStringLiteral("已停止"));
+        QCOMPARE(health->findChild<QLabel *>("healthTelemetryValue")->text(),QStringLiteral("已有记录"));
+        QCOMPARE(health->findChild<QTableWidget *>("healthOptionalTable")->item(1,1)->text(),QString("unverified"));
+        QCoreApplication::processEvents();capture(window,"health-stopped-1360x860");
+        health->setReadError("DB_ERROR");
+        QCOMPARE(health->findChild<QLabel *>("healthDatabaseValue")->text(),QStringLiteral("读取失败"));
+        QCOMPARE(health->findChild<QLabel *>("healthListenValue")->text(),QStringLiteral("待核对"));
+        QCoreApplication::processEvents();capture(window,"health-read-error-1360x860");
+    }
+
+    void healthOverviewBackgroundMatchesCard_data()
+    {
+        QTest::addColumn<QSize>("size");
+        QTest::newRow("1360x860") << QSize(1360, 860);
+        QTest::newRow("1280x720") << QSize(1280, 720);
+    }
+
+    void healthOverviewBackgroundMatchesCard()
+    {
+        QFETCH(QSize, size);
+        MainWindow window(m_context.get(), m_token);
+        window.resize(size);
+        window.show();
+        auto *navigation = window.findChild<QPushButton *>("adminNav7");
+        navigation->setFocus();
+        navigation->click();
+        auto *health = window.findChild<SystemHealthPage *>();
+        QTRY_VERIFY(!health->property("operationsPending").toBool());
+        QCoreApplication::processEvents();
+        auto *card = health->findChild<QWidget *>("healthDiagnostics");
+        auto *views = health->findChild<QStackedWidget *>("healthDetailsViews");
+        QVERIFY(card && views);
+        QCOMPARE(views->currentIndex(), 0);
+        const auto pixmap = card->grab();
+        const auto image = pixmap.toImage();
+        const qreal dpr = pixmap.devicePixelRatio();
+        const QColor cardColor = image.pixelColor(qRound(10 * dpr), qRound(30 * dpr));
+        QCOMPARE(cardColor, QColor("#193444"));
+        for (const auto &point : {QPoint(views->width() - 5, 5),
+                                  QPoint(views->width() - 5, views->height() - 5)}) {
+            const QPoint local = views->mapTo(card, point);
+            QCOMPARE(image.pixelColor(qRound(local.x() * dpr), qRound(local.y() * dpr)), cardColor);
+        }
+        capture(window, QString("health-background-%1x%2").arg(size.width()).arg(size.height()));
+        health->findChild<QPushButton *>("healthDetailsToggle")->click();
+        QCOMPARE(views->currentIndex(), 1);
+        health->findChild<QPushButton *>("healthDetailsToggle")->click();
+        QCOMPARE(views->currentIndex(), 0);
+    }
+
     void captureAllPages()
     {
         if (qEnvironmentVariableIsEmpty("EV_ADMIN_UI_CAPTURE_DIR")) QSKIP("按需截图，不写入普通测试运行");
@@ -275,6 +595,7 @@ private slots:
             capture(window,names.at(i)+"-compact");
         }
         tabs->setCurrentIndex(0);
+        window.findChild<QPushButton *>("dashboardModeButton")->click();
         window.findChild<QComboBox *>("revenueRange")->setCurrentIndex(1);
         QTRY_COMPARE(window.findChild<QTableWidget *>("revenueTrendTable")->rowCount(),30);
         capture(window,"overview-30-days-compact");

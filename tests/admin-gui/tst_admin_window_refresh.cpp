@@ -345,6 +345,7 @@ private slots:
         QVERIFY(tabs);
         auto *todayMetric = window.findChild<QLabel *>(QStringLiteral("todayRevenueMetric"));
         QVERIFY(todayMetric);
+        window.findChild<QPushButton *>(QStringLiteral("dashboardModeButton"))->click();
 
         const qint64 todayBefore = DashboardService(database).summary()
                                        .value(QStringLiteral("revenue")).toObject()

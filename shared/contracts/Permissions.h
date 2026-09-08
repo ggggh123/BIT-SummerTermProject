@@ -28,6 +28,7 @@ inline bool allows(QStringView actorType, QStringView action)
 
     if (actor == QStringLiteral("user")) {
         return actionText == ev::actions::UserGet
+            || actionText == ev::actions::UserStatistics
             || actionText == ev::actions::UserUpdate
             || actionText == ev::actions::WalletRecharge
             || actionText == ev::actions::StationList
@@ -39,6 +40,7 @@ inline bool allows(QStringView actorType, QStringView action)
             || actionText == ev::actions::ChargeSettle
             || actionText == ev::actions::OrderCurrent
             || actionText == ev::actions::OrderList
+            || actionText == ev::actions::OrderTelemetry
             || actionText == ev::actions::OrderCancel
             || actionText == ev::actions::ForecastLatest;
     }

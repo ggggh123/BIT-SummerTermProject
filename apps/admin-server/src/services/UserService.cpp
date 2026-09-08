@@ -1,6 +1,7 @@
 #include "services/UserService.h"
 #include "core/BusinessTime.h"
 #include "db/SqlTransaction.h"
+#include "services/EnergyReadModel.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -59,11 +60,70 @@ UserService::UserService(QSqlDatabase database)
 {
 }
 
+Result UserService::orderTelemetry(int userId, const QJsonObject &payload, QJsonObject *responseData) const
+{
+    int id=0;
+    if (userId<=0 || !isInteger(payload.value("orderId"),&id))
+        return Result::failure("INVALID_REQUEST",QStringLiteral("订单参数无效"));
+    return EnergyReadModel::order(m_database,id,userId,responseData);
+}
+
 Result UserService::getUser(int userId, QJsonObject *responseData) const
 {
     if (responseData) {
         responseData->insert(QStringLiteral("user"), userObject(userId));
     }
+    return Result::success();
+}
+
+Result UserService::usageStatistics(int userId, QJsonObject *responseData) const
+{
+    if (userId <= 0) return Result::failure("AUTH_REQUIRED", QStringLiteral("请先登录"));
+    const QString asOf = BusinessTime::now();
+    const QDate today = QDateTime::fromString(asOf, Qt::ISODate).date();
+    qint64 orderCount = 0, completedCount = 0, paidFen = 0, durationSec = 0;
+    qint64 pendingCount = 0, pendingFen = 0;
+    double energyKwh = 0, monthEnergyKwh = 0;
+    double daily[7]{};
+
+    // 一个 SELECT 的一致性快照；身份来自已认证 token，不接受调用者指定 userId。
+    QSqlQuery query(m_database);
+    query.setForwardOnly(true);
+    query.prepare(QStringLiteral(
+        "SELECT status, started_at, ended_at, energy_kwh, amount_fen FROM orders "
+        "WHERE user_id = ? AND status IN ('charging', 'completed') AND started_at IS NOT NULL"));
+    query.addBindValue(userId);
+    if (!query.exec()) return Result::failure("INTERNAL_ERROR", QStringLiteral("个人用电统计读取失败"));
+    while (query.next()) {
+        const QString status = query.value(0).toString();
+        const QString started = query.value(1).toString();
+        const QString ended = query.value(2).toString();
+        const double energy = query.value(3).toDouble();
+        const qint64 amount = query.value(4).toLongLong();
+        const QDate date = QDateTime::fromString(started, Qt::ISODate).toOffsetFromUtc(8 * 3600).date();
+        ++orderCount;
+        energyKwh += energy;
+        durationSec += BusinessTime::elapsed(started, ended.isEmpty() ? asOf : ended);
+        if (status == QStringLiteral("completed")) {
+            ++completedCount;
+            paidFen += amount;
+        } else if (!ended.isEmpty()) {
+            ++pendingCount;
+            pendingFen += amount;
+        }
+        if (date.year() == today.year() && date.month() == today.month()) monthEnergyKwh += energy;
+        const qint64 daysAgo = date.daysTo(today);
+        if (daysAgo >= 0 && daysAgo < 7) daily[6 - daysAgo] += energy;
+    }
+    if (query.lastError().isValid()) return Result::failure("INTERNAL_ERROR", QStringLiteral("个人用电统计读取失败"));
+    QJsonArray days;
+    for (int i = 0; i < 7; ++i) days.append(QJsonObject{
+        {"date", today.addDays(i - 6).toString(Qt::ISODate)}, {"energyKwh", daily[i]}});
+    if (responseData) *responseData = QJsonObject{
+        {"userId", userId}, {"asOf", asOf}, {"orderCount", orderCount},
+        {"completedCount", completedCount}, {"energyKwh", energyKwh}, {"paidFen", paidFen},
+        {"durationSec", durationSec}, {"pendingSettlementCount", pendingCount},
+        {"pendingSettlementFen", pendingFen}, {"monthEnergyKwh", monthEnergyKwh}, {"days", days}};
     return Result::success();
 }
 

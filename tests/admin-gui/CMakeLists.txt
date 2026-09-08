@@ -49,6 +49,10 @@ add_executable(tst_admin_window_refresh
     ../../apps/admin-server/src/services/UserService.h
     ../../apps/admin-server/src/ui/MainWindow.cpp
     ../../apps/admin-server/src/ui/MainWindow.h
+    ../../apps/admin-server/src/ui/EnergyPage.cpp
+    ../../apps/admin-server/src/ui/EnergyPage.h
+    ../../apps/admin-server/src/ui/OperationsPages.cpp
+    ../../apps/admin-server/src/ui/OperationsPages.h
     ../../apps/admin-server/src/ui/AdminTheme.cpp
     ../../apps/admin-server/src/ui/AdminTheme.h
     ../../apps/admin-server/src/ui/AdminVisuals.cpp
@@ -61,7 +65,7 @@ target_compile_definitions(tst_admin_window_refresh PRIVATE
     EV_TEST_GOLDEN_DB="${CMAKE_SOURCE_DIR}/runtime/golden/core.db"
 )
 target_link_libraries(tst_admin_window_refresh PRIVATE
-    Qt6::Test Qt6::Widgets Qt6::Network Qt6::Sql ev_protocol)
+    Qt6::Test Qt6::Widgets Qt6::Network Qt6::Sql ev_protocol ev_pulse_ui)
 add_test(NAME admin_window_refresh COMMAND tst_admin_window_refresh)
 set_tests_properties(admin_window_refresh PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
@@ -74,7 +78,7 @@ foreach(ui_test IN ITEMS admin_ui admin_login_style)
     target_compile_definitions(tst_${ui_test} PRIVATE
         EV_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
         EV_TEST_GOLDEN_DB="${CMAKE_SOURCE_DIR}/runtime/golden/core.db")
-    target_link_libraries(tst_${ui_test} PRIVATE Qt6::Test Qt6::Widgets Qt6::Network Qt6::Sql ev_protocol)
+    target_link_libraries(tst_${ui_test} PRIVATE Qt6::Test Qt6::Widgets Qt6::Network Qt6::Sql ev_protocol ev_pulse_ui)
     add_test(NAME ${ui_test} COMMAND tst_${ui_test})
     set_tests_properties(${ui_test} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endforeach()

@@ -1,6 +1,6 @@
 #include "ui/NavigationPage.h"
 
-#include <QComboBox>
+#include <QButtonGroup>
 #include <QHBoxLayout>
 #include <QFrame>
 #include <QIcon>
@@ -10,7 +10,6 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QPointer>
-#include <QSignalBlocker>
 #include <QStyle>
 #include <QTimer>
 #include <QUuid>
@@ -115,7 +114,8 @@ NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScr
     , cacheLabel_(new QLabel(QStringLiteral("暂无成功路线"), this))
     , destinationLabel_(new QLabel(QStringLiteral("选择站点后开始导航"), this))
     , retryButton_(new QPushButton(QStringLiteral("重试"), this))
-    , modeBox_(new QComboBox(this))
+    , drivingButton_(new QPushButton(QStringLiteral("驾车"), this))
+    , walkingButton_(new QPushButton(QStringLiteral("步行"), this))
     , callbackGate_(std::make_shared<CallbackGate>())
 {
     setObjectName(QStringLiteral("navigationPage"));
@@ -140,11 +140,17 @@ NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScr
     retryButton_->setProperty("role", QStringLiteral("outline"));
     view_->setObjectName(QStringLiteral("navigationWebView"));
     view_->setMinimumHeight(240);
-    modeBox_->setObjectName(QStringLiteral("routeModeBox"));
-    modeBox_->addItem(QStringLiteral("驾车"), QStringLiteral("driving"));
-    modeBox_->addItem(QStringLiteral("步行"), QStringLiteral("walking"));
-    modeBox_->setAccessibleName(QStringLiteral("出行方式"));
-    modeBox_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    drivingButton_->setObjectName(QStringLiteral("routeDrivingButton"));
+    walkingButton_->setObjectName(QStringLiteral("routeWalkingButton"));
+    auto *modeGroup = new QButtonGroup(this);
+    for (auto *button : {drivingButton_, walkingButton_}) {
+        button->setCheckable(true);
+        button->setProperty("role", QStringLiteral("routeMode"));
+        button->setAccessibleName(button->text() + QStringLiteral("导航"));
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        modeGroup->addButton(button);
+    }
+    drivingButton_->setChecked(true);
     auto *backButton = new QPushButton(this);
     backButton->setObjectName(QStringLiteral("navigationBackButton"));
     backButton->setAccessibleName(QStringLiteral("返回附近站点"));
@@ -165,7 +171,8 @@ NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScr
     auto *modeLabel = new QLabel(QStringLiteral("出行方式"), this);
     modeLabel->setProperty("role", QStringLiteral("secondary"));
     controls->addWidget(modeLabel);
-    controls->addWidget(modeBox_, 1);
+    controls->addWidget(drivingButton_, 1);
+    controls->addWidget(walkingButton_, 1);
     controls->addWidget(retryButton_);
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(20, 12, 20, 16);
@@ -227,13 +234,13 @@ NavigationPage::NavigationPage(QString mapKey, QString documentReadyBootstrapScr
                                         retry->destination.longitude}, retry->mode);
         }
     });
-    connect(modeBox_, &QComboBox::currentIndexChanged, this, [this] {
+    connect(modeGroup, &QButtonGroup::buttonClicked, this, [this](QAbstractButton *button) {
         const auto route = routeTracker_.retryRoute();
         if (route.has_value()) {
             showRoute(route->origin,
                       ev::user::Station{0, route->stationName, {}, route->destination.latitude,
                                         route->destination.longitude},
-                      modeBox_->currentData().toString());
+                      button == walkingButton_ ? QStringLiteral("walking") : QStringLiteral("driving"));
         }
     });
     view_->setUrl(pageUrl());
@@ -352,11 +359,7 @@ void NavigationPage::showRoute(ev::user::GeoPoint origin, ev::user::Station stat
     routeOperationId_ = operationId;
     destinationLabel_->setText(station.name);
     routeTracker_.begin(operationId, {origin, destination, station.name, mode, {}});
-    const int modeIndex = modeBox_->findData(mode);
-    if (modeIndex >= 0 && modeBox_->currentIndex() != modeIndex) {
-        const QSignalBlocker blocker(modeBox_);
-        modeBox_->setCurrentIndex(modeIndex);
-    }
+    (mode == QStringLiteral("walking") ? walkingButton_ : drivingButton_)->setChecked(true);
     if (!pageLoaded_ || !configured_) {
         setStatus(QStringLiteral("地图配置完成后将规划路线"));
         return;
@@ -378,6 +381,7 @@ void NavigationPage::deactivate()
 
 void NavigationPage::resetForSession()
 {
+    drivingButton_->setChecked(true);
     invalidateRouteAttempt();
     routeTracker_.resetForSession();
     routeOperationId_.clear();

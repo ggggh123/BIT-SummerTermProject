@@ -1,4 +1,6 @@
 #include "db/DatabaseWorker.h"
+#include "services/EnergyReadModel.h"
+#include "services/OperationsReadModel.h"
 #include "db/DatabaseManager.h"
 #include "services/RequestDispatcher.h"
 #include "protocol/JsonEnvelope.h"
@@ -123,6 +125,11 @@ void DatabaseWorker::query(quint64 sequence, AdminView view, const QString &toke
     Result result = Result::success();
     switch (view) {
     case AdminView::Summary: data = s.dashboard->summary(p.value("rangeDays").toInt(7)); break;
+    case AdminView::Energy: result = EnergyReadModel::station(s.database.database(),p.value("stationId").toInteger(),&data); break;
+    case AdminView::Operations:
+        result = OperationsReadModel::snapshot(s.database.database(),&data);
+        refreshHealth();
+        break;
     case AdminView::Stations: rows = s.dashboard->stationRows(); break;
     case AdminView::Chargers: rows = s.dashboard->chargerRows(p.value("stationId").toInt(), p.value("status").toString()); break;
     case AdminView::Users: rows = s.dashboard->userRows(p.value("mobileLike").toString(), p.value("limit").toInt(20), p.value("offset").toInt()); break;
