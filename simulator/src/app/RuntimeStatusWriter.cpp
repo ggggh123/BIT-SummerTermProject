@@ -96,14 +96,20 @@ bool RuntimeStatusWriter::writeState(const QString &sessionState,
         file.cancelWriting();
         return failWrite(message);
     }
+    if (!file.flush()) {
+        const QString message = QStringLiteral("无法刷新运行状态文件 %1：%2")
+                                    .arg(filePath_, file.errorString());
+        file.cancelWriting();
+        return failWrite(message);
+    }
     if (!file.commit()) {
         const QString message = QStringLiteral("无法提交运行状态文件 %1：%2")
                                     .arg(filePath_, file.errorString());
         return failWrite(message);
     }
-    // Qt 6.2 兼容：实测（RLIMIT_FSIZE=0 场景）内核拒绝写入时 write()/commit() 仍可能
-    // 返回成功，仅设备错误状态会记录"文件过大"。因此提交后必须核对错误状态，并回读
-    // 校验实际落盘内容；任何静默失败都按写入失败处理并撤销已发布状态。
+    // 提交前检查 flush 的缓冲写错误；保留提交后的错误检查与队友新增的回读校验。
+    // commit 后文件已经发布，首次发布校验失败也必须撤销，不只撤销旧 ready 文件。
+    hasPublished_ = true;
     if (file.error() != QFileDevice::NoError) {
         const QString message = QStringLiteral("运行状态文件写入被系统拒绝 %1：%2")
                                     .arg(filePath_, file.errorString());
@@ -116,7 +122,6 @@ bool RuntimeStatusWriter::writeState(const QString &sessionState,
                                     .arg(filePath_);
         return failWrite(message);
     }
-    hasPublished_ = true;
     return true;
 }
 

@@ -693,13 +693,40 @@ QWidget *MainWindow::createRequestLogPage()
 {
     auto *page = new QWidget;
     auto *layout = pageLayout(page);
+    auto *toolbar = new QHBoxLayout;
+    auto *searchEdit = new QLineEdit;
+    auto *limitSpin = new QSpinBox;
+    auto *offsetSpin = new QSpinBox;
+    auto *refreshButton = new QPushButton(QStringLiteral("查询"));
     auto *table = makeTable(
         {QStringLiteral("请求ID"), QStringLiteral("动作"), QStringLiteral("响应码"), QStringLiteral("时间")});
+    searchEdit->setAccessibleName(QStringLiteral("按请求ID精确查找"));
+    searchEdit->setClearButtonEnabled(true);
+    searchEdit->setMinimumWidth(220);
+    searchEdit->setMaximumWidth(340);
+    searchEdit->setPlaceholderText(QStringLiteral("请求ID 精确查找（留空显示全部）"));
+    searchEdit->setObjectName(QStringLiteral("requestLogSearchEdit"));
+    refreshButton->setObjectName(QStringLiteral("requestLogQueryButton"));
+    refreshButton->setProperty("role","primary");
+    refreshButton->setIcon(AdminTheme::icon("search",Qt::white));
+    limitSpin->setFixedWidth(92);
+    offsetSpin->setFixedWidth(100);
+    limitSpin->setAccessibleName(QStringLiteral("每页记录数"));
+    offsetSpin->setAccessibleName(QStringLiteral("跳过记录数"));
+    offsetSpin->setToolTip(QStringLiteral("从第几条记录之后开始查询；0 表示从第一条开始"));
+    limitSpin->setObjectName(QStringLiteral("requestLogLimitSpin"));
+    offsetSpin->setObjectName(QStringLiteral("requestLogOffsetSpin"));
     table->setObjectName(QStringLiteral("requestLogTable"));
-    auto refresh = [this, table]() {
-        queryView(AdminView::RequestLog, {}, table, [table](const QJsonObject &data) {
-            QList<QStringList> rows;
-            {
+    limitSpin->setRange(1,100);
+    limitSpin->setValue(50);
+    offsetSpin->setRange(0,100000);
+    auto *countLabel = textLabel(QStringLiteral("尚未查询"), "secondary");
+    countLabel->setObjectName(QStringLiteral("requestLogCountLabel"));
+    auto refresh = [this, table, searchEdit, limitSpin, offsetSpin, countLabel]() {
+        queryView(AdminView::RequestLog,
+            {{"requestId",searchEdit->text().trimmed()},{"limit",limitSpin->value()},{"offset",offsetSpin->value()}},
+            table, [table, countLabel](const QJsonObject &data) {
+                QList<QStringList> rows;
                 const QJsonArray items = data.value(QStringLiteral("items")).toArray();
                 for (const QJsonValue &itemValue : items) {
                     const QJsonObject item = itemValue.toObject();
@@ -710,12 +737,29 @@ QWidget *MainWindow::createRequestLogPage()
                         item.value(QStringLiteral("createdAt")).toString()
                     });
                 }
-            }
-            fillTable(table, rows);
-        });
+                fillTable(table, rows);
+                const int total = data.value(QStringLiteral("total")).toInt();
+                const int offset = data.value(QStringLiteral("offset")).toInt();
+                countLabel->setText(total == 0
+                    ? QStringLiteral("共 0 条记录")
+                    : rows.isEmpty() ? QStringLiteral("共 %1 条 · 当前页无记录，请减小跳过数量").arg(total)
+                    : QStringLiteral("共 %1 条 · 当前展示第 %2–%3 条").arg(total).arg(offset+1).arg(offset+rows.size()));
+            });
     };
-    auto *card=panel(QStringLiteral("最近服务请求"),QStringLiteral("展示请求标识、动作与响应摘要；长内容可悬停查看。"));
-    card->layout()->addWidget(table);
+    connect(refreshButton, &QPushButton::clicked, this, refresh);
+    connect(searchEdit, &QLineEdit::returnPressed, this, refresh);
+    toolbar->addWidget(searchEdit);
+    toolbar->addWidget(new QLabel(QStringLiteral("每页")));
+    toolbar->addWidget(limitSpin);
+    toolbar->addWidget(new QLabel(QStringLiteral("跳过")));
+    toolbar->addWidget(offsetSpin);
+    toolbar->addWidget(refreshButton);
+    toolbar->addStretch();
+    auto *card=panel(QStringLiteral("服务请求日志"),QStringLiteral("按请求ID精确查找并分页浏览；内容不含响应体，敏感字段已剔除。"));
+    auto *content=qobject_cast<QVBoxLayout *>(card->layout());
+    content->addLayout(toolbar);
+    content->addWidget(table,1);
+    content->addWidget(countLabel);
     layout->addWidget(card);
     registerPageRefresh(page, refresh);
     refresh();
@@ -750,27 +794,38 @@ QWidget *MainWindow::createHealthPage()
                 refreshCurrentPage();
             });
     });
-    auto *table = makeTable({QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")});
-    table->setObjectName(QStringLiteral("healthTable"));
-    auto refresh = [this, table]() {
+    auto *coreTable = makeTable({QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")});
+    coreTable->setObjectName(QStringLiteral("healthTable"));
+    auto *optionalTable = makeTable({QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")});
+    optionalTable->setObjectName(QStringLiteral("healthOptionalTable"));
+    auto refresh = [this, coreTable, optionalTable]() {
         const QJsonObject health = m_context->healthSnapshot();
-        const QString forecastState = health.value(QStringLiteral("forecastRunId")).isNull()
-            ? QStringLiteral("无活动预测批次")
-            : QStringLiteral("活动批次：") + health.value(QStringLiteral("forecastRunId")).toString();
-        fillTable(table,
-                  {{QStringLiteral("服务监听"), QStringLiteral("正常"), QStringLiteral("%1:%2").arg(m_context->host()).arg(m_context->port())},
-                   {QStringLiteral("数据库 schema"), QStringLiteral("正常"), QString::number(health.value(QStringLiteral("schemaVersion")).toInt())},
-                   {QStringLiteral("快照版本"), QStringLiteral("正常"), QString::number(health.value(QStringLiteral("snapshotVersion")).toInt())},
-                   {QStringLiteral("扩展预测"), QStringLiteral("可选模块"), QStringLiteral("不参与核心验收 · ")+forecastState},
-                   {QStringLiteral("模拟器状态"), QStringLiteral("独立监测"), QStringLiteral("请查看模拟器面板；本页尚未订阅其心跳")}});
+        const QString status = health.value(QStringLiteral("status")).toString();
+        const bool forecastActive = !health.value(QStringLiteral("forecastRunId")).toString().isEmpty();
+        const QString forecastState = forecastActive
+            ? QStringLiteral("活动批次：") + health.value(QStringLiteral("forecastRunId")).toString()
+            : QStringLiteral("无活动预测批次");
+        fillTable(coreTable,
+                  {{QStringLiteral("运行上下文"), health.contains(QStringLiteral("schemaVersion")) ? QStringLiteral("active") : QStringLiteral("unverified"), QStringLiteral("已加载服务端健康快照；完整业务仍需演示验证")},
+                   {QStringLiteral("服务监听"), QStringLiteral("active"), QStringLiteral("%1:%2").arg(m_context->host()).arg(m_context->port())},
+                   {QStringLiteral("数据库 schema"), QStringLiteral("active"), QString::number(health.value(QStringLiteral("schemaVersion")).toInt())},
+                   {QStringLiteral("快照版本"), QStringLiteral("active"), QString::number(health.value(QStringLiteral("snapshotVersion")).toInt())}});
+        fillTable(optionalTable,
+                  {{QStringLiteral("扩展预测"), forecastActive ? status : QStringLiteral("disabled"), QStringLiteral("不参与核心验收 · ")+forecastState},
+                   {QStringLiteral("模拟器状态"), QStringLiteral("unverified"), QStringLiteral("请查看模拟器面板；本页尚未订阅其心跳")}});
     };
-    table->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Fixed);
-    table->horizontalHeader()->setSectionResizeMode(1,QHeaderView::Fixed);
-    table->setColumnWidth(0,160);
-    table->setColumnWidth(1,140);
-    auto *health=panel(QStringLiteral("核心服务检查"),QStringLiteral("服务与数据状态按本机运行上下文展示，可选扩展不影响核心演示。"));
-    health->layout()->addWidget(table);
-    layout->addWidget(health,1);
+    for (auto *table : {coreTable, optionalTable}) {
+        table->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Fixed);
+        table->horizontalHeader()->setSectionResizeMode(1,QHeaderView::Fixed);
+        table->setColumnWidth(0,160);
+        table->setColumnWidth(1,140);
+    }
+    auto *core=panel(QStringLiteral("核心服务检查"),QStringLiteral("服务与数据状态按本机运行上下文展示，可选预测未启用不等同于核心服务异常。"));
+    core->layout()->addWidget(coreTable);
+    layout->addWidget(core,1);
+    auto *optional=panel(QStringLiteral("预测扩展与独立设备诊断"),QStringLiteral("预测为可选扩展；模拟器仍属核心交付，接入状态须在其独立面板确认。"));
+    optional->layout()->addWidget(optionalTable);
+    layout->addWidget(optional);
     auto *danger=panel(QStringLiteral("演示数据维护"),QStringLiteral("恢复黄金数据会清除本轮用户变更、订单、设备事件和旧请求日志。请仅在重新准备演示时操作。"));
     danger->setObjectName(QStringLiteral("adminDangerZone"));
     danger->setStyleSheet(QStringLiteral("QFrame#adminDangerZone { border:1px solid #E8C9C4; background:#FFFDFC; border-radius:14px; }"));

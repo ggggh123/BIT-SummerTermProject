@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFile>
+#include <utility>
 #ifdef Q_OS_UNIX
 #include <sys/stat.h>
 #endif
@@ -45,7 +46,8 @@ struct DatabaseWorker::State {
 DatabaseWorker::DatabaseWorker() = default;
 DatabaseWorker::~DatabaseWorker() = default;
 
-Result DatabaseWorker::start(const QString &path, const QString &snapshot, const QString &goldenPath, const QString &goldenHash)
+Result DatabaseWorker::start(const QString &path, const QString &snapshot, const QString &goldenPath,
+                             const QString &goldenHash, TokenRoles tokenRoles)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     m_state = std::make_unique<State>();
@@ -56,7 +58,7 @@ Result DatabaseWorker::start(const QString &path, const QString &snapshot, const
         return Result::failure("INVALID_REQUEST","运行库、黄金库与快照输出必须使用不同文件");
     const auto opened = s.database.open(runtime);
     if (!opened.ok) return opened;
-    s.auth = std::make_unique<AuthService>(s.database.database());
+    s.auth = std::make_unique<AuthService>(s.database.database(),std::move(tokenRoles));
     s.admin = std::make_unique<AdminService>(s.database.database());
     s.dashboard = std::make_unique<DashboardService>(s.database.database());
     s.forecast = std::make_unique<ForecastService>(s.database.database(), snapshot);
@@ -124,7 +126,7 @@ void DatabaseWorker::query(quint64 sequence, AdminView view, const QString &toke
     case AdminView::Stations: rows = s.dashboard->stationRows(); break;
     case AdminView::Chargers: rows = s.dashboard->chargerRows(p.value("stationId").toInt(), p.value("status").toString()); break;
     case AdminView::Users: rows = s.dashboard->userRows(p.value("mobileLike").toString(), p.value("limit").toInt(20), p.value("offset").toInt()); break;
-    case AdminView::RequestLog: result = s.log->list({},50,0,&data); break;
+    case AdminView::RequestLog: result = s.log->list(p.value("requestId").toString(), p.value("limit").toInt(50), p.value("offset").toInt(), &data); break;
     default: result = Result::failure("INVALID_REQUEST", "未知管理视图"); break;
     }
     QJsonArray array;

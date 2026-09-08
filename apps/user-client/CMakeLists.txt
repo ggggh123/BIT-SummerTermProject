@@ -2,7 +2,7 @@ if(NOT TARGET ev_protocol)
     message(FATAL_ERROR "apps/user-client requires the shared ev_protocol target")
 endif()
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Widgets Network WebEngineWidgets Test)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Widgets Network WebEngineWidgets)
 
 add_library(ev_user_client_core STATIC
     src/app/UserAppConfig.cpp
@@ -35,6 +35,8 @@ target_link_libraries(ev_user_client_core
 add_executable(ev_user_client src/main.cpp resources/resources.qrc)
 target_link_libraries(ev_user_client PRIVATE ev_user_client_core)
 
+if(BUILD_TESTING)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Test)
 add_executable(tst_user_formatters tests/tst_formatters.cpp)
 target_link_libraries(tst_user_formatters PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_formatters COMMAND tst_user_formatters)
@@ -78,3 +80,4 @@ set_tests_properties(user_mobileui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offsc
 add_executable(user_map_online_smoke EXCLUDE_FROM_ALL
     tests/tst_online_map_smoke.cpp resources/resources.qrc)
 target_link_libraries(user_map_online_smoke PRIVATE ev_user_client_core Qt6::Test)
+endif()

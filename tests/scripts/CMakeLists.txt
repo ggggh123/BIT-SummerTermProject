@@ -1,5 +1,9 @@
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+add_test(NAME environment_tools
+    COMMAND ${Python3_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/tests/scripts/test_environment_tools.py -q)
+set_tests_properties(environment_tools PROPERTIES TIMEOUT 60 LABELS "core;environment")
+
 add_test(NAME demo_runtime_unit
     COMMAND ${Python3_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/tests/scripts/test_demo_runtime.py -q)
 set_tests_properties(demo_runtime_unit PROPERTIES

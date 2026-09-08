@@ -20,7 +20,7 @@ Web/ML 的代码和成果保留，默认演示不启动它们。不宣称真实�
 
 `config.local.ini` 和环境变量只留本机，不提交仓库。换机验收必须在队友的独立 clone 上按文档复现，不以本机绝对源码路径可访问作为成功条件。
 
-当前有依据的交付方式是“完整源码 clone + 已安装全局依赖 + 在该 clone 重新构建”。仓库尚未提供经验证的二进制安装布局或 Qt/WebEngine 运行库部署规则；仅拷走三个可执行文件不构成独立运行包，部分资源路径仍关联编译时的源码根。换机运行是否通过必须记录实际结果，不能由静态检查代签。
+源码交付统一为“完整源码 clone + Ubuntu 22.04 全局依赖 + 在该 clone 重新构建”，见[团队开发指南](../development/ubuntu22.md)。另有[便携发行方式](portable-release.md)和独立验证边界；仅拷走三个可执行文件仍不构成完整运行包。换机图形界面与地图是否通过必须记录实际结果，不能由本机检查代签。使用新预设时，下文 `/path/to/native-build` 替换为当前 clone 的 `build/ubuntu22` 绝对路径；完整回归则使用 `build/ubuntu22-test`。
 
 ## 3. 当前可用的四个运行入口（2026-09-06）
 
@@ -29,7 +29,7 @@ Web/ML 的代码和成果保留，默认演示不启动它们。不宣称真实�
 先按下节手动方法中的命令完成构建。以下示例将`/path/to/source`、`/path/to/native-build`替换为实际路径；run ID 每轮必须新建。地图 Key 由本地 `config.local.ini` 的 `[tencent] mapKey` 或 `EV_TENCENT_MAP_KEY` 注入；环境变量即使为空也优先，空值会在启动任何进程前失败。不要在报告中回显 Key。
 
 ```bash
-# 既有服务端接受的开发演示值；不要把自定义环境token当作服务端配置入口。
+# 服务端在启动时读取此配置并固定本次进程的 token；模拟器必须使用同一个值。
 export EV_SIMULATOR_TOKEN=demo-simulator-token
 /path/to/source/scripts/reset_demo.sh --run-id demo-01
 /path/to/source/scripts/start_demo.sh --run-id demo-01 --build-dir /path/to/native-build
@@ -70,8 +70,8 @@ smoke只通过TCP查询既有黄金用户`13800138000`的登录、user.get、sta
 
 ```bash
 cmake -S . -B /path/to/native-build -G Ninja -DCMAKE_BUILD_TYPE=Debug
-cmake --build /path/to/native-build -j4
-QT_QPA_PLATFORM=offscreen ctest --test-dir /path/to/native-build --output-on-failure -j4
+cmake --build /path/to/native-build -j2
+QT_QPA_PLATFORM=offscreen ctest --test-dir /path/to/native-build --output-on-failure -j1
 python3 -m pytest database/tests -q
 ```
 

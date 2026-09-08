@@ -1,0 +1,47 @@
+name: Ubuntu 22.04 core
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ubuntu22-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official Jammy core dependencies
+        run: bash scripts/bootstrap.sh
+      - name: Verify Ubuntu 22.04 and Qt 6.2 baseline
+        run: bash scripts/check_env.sh --strict
+      - name: Configure production-only preset
+        run: cmake --preset ubuntu22
+      - name: Build three applications without test targets
+        run: cmake --build --preset ubuntu22
+      - name: Configure full regression preset
+        run: cmake --preset ubuntu22-test
+      - name: Build complete regression suite
+        run: cmake --build --preset ubuntu22-test
+      - name: Run complete Qt and real local-process regression
+        run: ctest --preset ubuntu22-test
+      - name: Run database and portable packaging regression
+        run: /usr/bin/python3 -m pytest database/tests tests/release -q
+      - name: Record exact toolchain
+        if: always()
+        run: |
+          cmake --version
+          g++ --version
+          python3 --version
+          qmake6 -query QT_VERSION

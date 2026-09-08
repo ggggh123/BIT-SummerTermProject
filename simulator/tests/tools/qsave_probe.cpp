@@ -1,15 +1,16 @@
 // qsave_probe.cpp — 诊断程序：验证 Qt 6.2.4 的 QSaveFile 在 RLIMIT_FSIZE=0 下是否上报写失败
 // 对照组：裸 QFile。输出四行关键信息。
 //
-// 背景：调查报告 docs/test/simulator-runtime-status-suite-crash-2026-09-07.md §3/§5。
+// 背景：Qt 6.2 缓冲写入错误诊断；与正式 RuntimeStatusWriter 的 flush 检查相对照。
 // 实测结论（Qt 6.2.4 / Ubuntu 22.04）：内核拒绝写入（EFBIG）时 QSaveFile::write()/
 // commit() 仍返回成功，仅 errorString() 记录"文件过大"——写失败是静默的。
 //
 // 编译（在项目根目录）：
-//   g++ -fPIC simulator/tests/tools/qsave_probe.cpp \
-//       $(pkg-config --cflags --libs Qt6Core) -o /tmp/qsave_probe
+//   cmake --preset ubuntu22-test
+//   cmake --build --preset ubuntu22-test --target qsave_probe
 // 运行：
-//   /tmp/qsave_probe /tmp/qsave-probe.json
+//   ./build/ubuntu22-test/simulator/qsave_probe /path/to/disposable/probe.json
+// 只使用新建的诊断目录；程序会覆盖指定文件。不加入默认构建或自动测试。
 #include <QCoreApplication>
 #include <QSaveFile>
 #include <QFile>

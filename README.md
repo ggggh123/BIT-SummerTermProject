@@ -2,20 +2,38 @@
 
 充电桩管理与演示平台小学期项目。
 
-## 快速开始（新环境一键部署）
+## 当前团队入口（2026-09-08）
 
-拿到项目文件夹后，在 Ubuntu 虚拟机（22.04+，Qt 6.2 基线）上只需两条命令：
+**默认 Ubuntu 22.04 / Qt 6.2 / GCC 11 / CMake 3.22。** 本机 25.04 / Qt 6.8 不再作为默认安装教程。先阅读 [22.04 开发指南](docs/development/ubuntu22.md)，不要为编译项目升级整个系统。
+
+`dev` 已于 2026-09-07 更新到快照 `6360bd1`，包含三端 UI、运行入口、管理端日志分页和健康分区。`fix/ubuntu22-team-baseline` 已整合该快照，通过 [PR #11](https://github.com/ggggh123/BIT-SummerTermProject/pull/11) 补齐 22.04 构建/CI、启动鉴权与便携发行修复，并修正新增页面的集成问题；不是把队友快照覆盖成旧版本。PR 是否合并以 GitHub 为准。旧报告及下方 9 月 6 日状态作为历史记录保留，不用来判断最新代码或人工验收状态。
+
+在 Ubuntu 22.04 的独立 clone 根目录执行：
+
+```bash
+bash scripts/bootstrap.sh
+bash scripts/check_env.sh --strict
+cmake --preset ubuntu22
+cmake --build --preset ubuntu22
+```
+
+默认只编译三个程序，Ninja 增量构建、最多并行 2。完整验证使用独立的 `ubuntu22-test` 预设；Qt Creator 配置、拉取本轮分支、内存不足和环境报错处理见[详细指南](docs/development/ubuntu22.md)。启动步骤见[演示操作手册](docs/release/core-demo-runbook.md)。
+
+### 快速开始（新环境一键部署）
+
+不想逐步执行上面流程的成员/新用户，用一键脚本（内部等价于 bootstrap → 环境检查 → `ubuntu22-test` 构建，可选 `--start` 拉起三端）：
 
 ```bash
 python3 scripts/quickstart.py          # 依赖安装 → 环境检查 → 配置 → 全量编译
 python3 scripts/quickstart.py --start  # 同上，完成后自动拉起三端演示
 ```
 
-- 依赖安装按需触发（apt 系统包无法随文件夹分发，脚本自动检测缺失并安装）；
+- 依赖安装按需触发（apt 系统包无法随文件夹分发，脚本自动检测缺失并调用 `scripts/bootstrap.sh` 安装）；非 22.04 的 Ubuntu（如 25.04）会自动透传 `--allow-other-ubuntu`，属尽力兼容而非验证基线；
 - 自动处理 Windows 复制导致的 shell 脚本 CRLF 换行问题；
 - `--start` 成功后应看到管理端、用户端、模拟器三个窗口；腾讯地图 Key 已内置，无需配置；
 - 环境兼容性问题与解决方法详见 [环境兼容性汇总](docs/test/ubuntu22-qt62-compatibility-2026-09-07.md)。
 
+### 历史集成记录（不是当前环境要求）
 
 > **2026-09-06 共享集成基线：** [PR #10](https://github.com/ggggh123/BIT-SummerTermProject/pull/10) 已合入 `dev@97c6da1`。本机后续分支 `feat/core-delivery-20260906` 已实现 DB worker、在线 reset 和恢复加固；用户批准容量补充后，`6863b36` [限定评审](docs/review/server-delivery-review-2026-09-06.md)已关闭 I1/N1。`a867ca6` 继续落实[充电与结算竖屏 UI](docs/test/user-charge-ui-2026-09-06.md)，完整构建、CTest **29/29**、数据库 **15/15** 通过。这些后续提交仍是本机候选，尚未共享合入 dev。
 >
@@ -28,7 +46,7 @@ python3 scripts/quickstart.py --start  # 同上，完成后自动拉起三端演
 ## 三条核心交付线
 
 1. **Qt 用户端（#3 PRL）**：11 位手机号登录/自动注册、查站查桩、腾讯地图 Web API 地址解析与 QWebEngineView 驾车/步行导航，以及预约到结算的用户流程。
-2. **Qt 管理/服务端（#2 TL）**：长度前缀 JSON/TCP、业务状态机、唯一运行时 SQLite 写入、管理统计、故障重启与用户管理；原始 P0 修复已合入 dev，线程隔离与在线复位在后续本机分支收尾，尚不能把本机候选当作共享发布版。
+2. **Qt 管理/服务端（#2 TL）**：长度前缀 JSON/TCP、业务状态机、唯一运行时 SQLite 写入、管理统计、故障重启与用户管理；本分支包含线程隔离、在线复位和桌面 UI 精修，远端集成状态以 PR 为准。
 3. **SQLite 与 Qt 模拟器（#4 SCML）**：版本化 Schema、受校验黄金库、模拟器状态/遥测/故障和数据一致性。
 
 ## Web 与 ML：保留的可选参考成果
@@ -37,6 +55,9 @@ python3 scripts/quickstart.py --start  # 同上，完成后自动拉起三端演
 
 ## 当前文档入口
 
+- [Ubuntu 22.04 团队开发指南](docs/development/ubuntu22.md) 与 [环境基线](docs/management/environment-matrix.md)
+- [2026-09-08 dev 更新与 PR 冲突整合记录](docs/test/dev-pr-refresh-2026-09-08.md)
+- [便携发行说明](docs/release/portable-release.md)（与源码编译分开；含私有配置的发行包不上传 Git）
 - [当前核心交付架构](docs/design/core-system-architecture.html)
 - [范围基线 v2](docs/management/scope-baseline.md) 与 [2026-09-04 范围变更记录](docs/management/scope-change-2026-09-04.md)
 - [仓库进展审计（2026-09-04）](docs/review/repository-progress-audit-2026-09-04.md)

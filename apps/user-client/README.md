@@ -2,7 +2,7 @@
 
 ## 前置环境
 
-- CMake 3.25+、Ninja 和支持 C++17 的编译器。
+- 默认 Ubuntu 22.04，CMake 3.22+、Ninja、GCC 11 / C++17，先按[团队开发指南](../../docs/development/ubuntu22.md)安装。
 - Qt 6.2+，包含 Core、Gui、Widgets、Network、WebEngineWidgets 和 Test 组件。
 - Node.js 18+，仅用于本地导航 HTML 合同测试。
 - 运行中的项目 Qt 服务端。腾讯地图 Key 已内置团队申请的默认值，**零配置即可使用**；
@@ -24,10 +24,14 @@ mapKey=<your-local-tencent-map-key>
 ## 构建、运行与测试
 
 ```bash
-cmake --preset debug
-cmake --build --preset debug
-./build/debug/apps/user-client/ev_user_client
-ctest --preset debug -R '^user_' --output-on-failure
+cmake --preset ubuntu22
+cmake --build --preset ubuntu22
+./build/ubuntu22/apps/user-client/ev_user_client
+# 完整测试版与日常三程序构建分开。
+cmake --preset ubuntu22-test
+cmake --build --preset ubuntu22-test
+ctest --preset ubuntu22-test -R '^user_' --output-on-failure
+# 下行是独立可选检查，需另备 Node 18+；不是核心编译前提。
 node --test apps/user-client/tests/test_navigation_html.mjs
 ```
 
@@ -40,7 +44,7 @@ UI 工作分支采用 Linux 原生 Qt 的手机式单列布局：默认以390×8
 ```bash
 EV_UI_SCREENSHOT_DIR="$PWD/runtime/mobile-ui-captures" \
 QT_SCALE_FACTOR=2.18718 \
-ctest --preset debug -R '^user_mobileui$' --output-on-failure
+ctest --preset ubuntu22-test -R '^user_mobileui$' --output-on-failure
 ```
 
 该缩放比例用于将390逻辑像素窗口捕获为约853像素宽，方便与已批准的设计稿对照，不改变产品的逻辑布局。截图中的站点、账号、余额属于受控测试数据，不能作为真实服务端联调证据。地图HTML的Node测试仍需单独执行，不能只运行CTest后就声称所有客户端测试已通过。
@@ -71,10 +75,11 @@ ctest --preset debug -R '^user_mobileui$' --output-on-failure
 该测试复用真实 `MainWindow` 和内嵌腾讯地图，通过本地 TCP 测试响应完成登录与站桩查询，腾讯地址解析、驾车/步行和恢复重试均访问真实服务。业务数据在界面中明确标注为模拟数据，**不能作为真实服务端、数据库或充电结算联调证据**。
 
 ```bash
-cmake --build --preset debug --target user_map_online_smoke
+cmake --preset ubuntu22-test
+cmake --build --preset ubuntu22-test --target user_map_online_smoke
 # 先通过已忽略的 config.local.ini 或 EV_TENCENT_MAP_KEY 配置本机 Key。
 EV_MAP_SMOKE_OUTPUT_DIR="$PWD/runtime/map-smoke" \
-  ./build/debug/apps/user-client/user_map_online_smoke
+  ./build/ubuntu22-test/apps/user-client/user_map_online_smoke
 ```
 
 在可用的图形会话中运行；离屏自动化不替代截图检查。Linux 虚拟机可按实际环境使用 `QT_QPA_PLATFORM=xcb`。测试显式构建、显式运行，不加入默认 CTest，不自动消耗腾讯额度。单次正常执行包含一次地址解析、驾车/步行各一次、解除本地网络阻断后的驾车重试一次；SDK 底图资源请求不计入这一应用层次数。

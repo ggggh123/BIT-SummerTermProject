@@ -4,10 +4,10 @@
 
 ## 启动
 
-在仓库根目录完成 CMake 构建后运行：
+默认 Ubuntu 22.04 / Qt 6.2，先按[团队开发指南](../../docs/development/ubuntu22.md)安装。仓库根目录执行 `cmake --preset ubuntu22` 和 `cmake --build --preset ubuntu22`，将下例 `/path/to/build` 替换为 `build/ubuntu22` 的绝对路径后运行：
 
 ```bash
-cmake --build /path/to/build -j4
+cmake --build /path/to/build --parallel 2
 /path/to/build/apps/admin-server/ev_admin_server --server \
   --host 127.0.0.1 --port 9100 \
   --db /path/to/runtime/core.db \
@@ -58,11 +58,13 @@ SQLite 的创建、迁移、种子、服务创建、SQL 和销毁均在 DB worke
 
 ## 验证
 
+先配置并构建 `ubuntu22-test`；下例 build 路径须为完整测试版目录，不能用关闭测试的日常版代替。
+
 ```bash
 QT_QPA_PLATFORM=offscreen ctest --test-dir /path/to/build \
   -R 'database_worker|server_threads|admin_window_refresh|core_workflow|server_tcp_p0' \
   --output-on-failure
-QT_QPA_PLATFORM=offscreen ctest --test-dir /path/to/build --output-on-failure -j4
+QT_QPA_PLATFORM=offscreen ctest --test-dir /path/to/build --output-on-failure -j1
 ```
 
 `database_worker` 用临时库锁复现原主线程阻塞，并核对健康响应、计时器、充值一次和逐字节重放；`server_threads` 覆盖帧、容量、权限、独立上下文、重启、断线重放和正常关闭；GUI 测试实际点击登录及管理按钮并检查管理员日志。原 UTC／上海 TCP P0 与程序化 `core_workflow` 继续作为兼容门禁。
@@ -76,6 +78,7 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir /path/to/build --output-on-failure -j
 - 站点主列表压缩为核心字段，站名和地址的悬停提示／帮助文本仍可查看原始坐标；右侧新增站点表单可滚动。“可用比例”按非故障电桩计算，并非网络在线率。
 - 登录支持必填提示、密码隐藏、行内失败反馈和 Enter 重试。冻结／解冻、故障重启、演示复位使用中文确认弹窗，默认及 Esc 均为取消。
 - 系统健康页将预测标为可选扩展，并如实说明本页未订阅模拟器心跳；没有将其伪装成实时在线监控。
+- 2026-09-08 整合 dev：请求日志支持请求 ID 精确查找、每页 1–100 条及 offset 分页，超出结果范围时提示当前页为空；不显示响应体或 token。健康页分开显示运行上下文/监听/版本与可选预测/未验证的模拟器状态；没有预测不等同于核心服务失败，完整业务仍需人工演示验证。
 - 全部控件样式与图标资源在本地，不依赖网页 CDN 或设计工具运行。主题与原生绘图分别位于 `src/ui/AdminTheme.*`、`src/ui/AdminVisuals.*`。
 
 专项验证：

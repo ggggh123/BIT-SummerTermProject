@@ -8,18 +8,22 @@ fault events through the frozen v1 TCP protocol to the Qt admin/server.
 The simulator is an in-memory state machine only. It **never** opens SQLite and
 never submits authoritative order amounts or wallet balances.
 
-## Build & test (on the Ubuntu host)
+## 构建与测试（默认 Ubuntu 22.04 / Qt 6.2）
+
+依赖安装见[团队开发指南](../docs/development/ubuntu22.md)。日常版与完整测试版分开：
 
 ```bash
-cmake --preset debug
-cmake --build --preset debug --target ev_charger_simulator
-ctest --preset debug -R "simulator_" --output-on-failure
+cmake --preset ubuntu22
+cmake --build --preset ubuntu22 --target ev_charger_simulator
+cmake --preset ubuntu22-test
+cmake --build --preset ubuntu22-test
+ctest --preset ubuntu22-test -R "simulator_" --output-on-failure
 ```
 
 ## Run (offscreen smoke)
 
 ```bash
-QT_QPA_PLATFORM=offscreen timeout 5s build/debug/simulator/ev_charger_simulator \
+QT_QPA_PLATFORM=offscreen timeout 5s build/ubuntu22/simulator/ev_charger_simulator \
   --host 127.0.0.1 --port 9100 --seed 20260901 --interval-ms 3000 \
   --token sim-token
 ```
