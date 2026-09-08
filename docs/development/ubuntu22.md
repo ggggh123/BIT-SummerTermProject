@@ -31,6 +31,8 @@ bash scripts/check_env.sh --strict
 
 `--strict` 要求 Ubuntu 22.04 和 Qt 6.2 系列；普通 `check_env.sh` 在较新系统上给出警告但允许继续检查。非 22.04 Ubuntu 若确需安装系统依赖，须显式使用 `bootstrap.sh --allow-other-ubuntu`，它不会把该系统变成 22.04。
 
+新用户/不想逐步执行的成员可用一键入口 `python3 scripts/quickstart.py --start`（内部即本节 bootstrap → 预检 → `ubuntu22-test` 构建，可选拉起三端）。集成验证期间发现的环境兼容问题（WebEngine 辅助进程、VMware GPU、Qt 6.2 API 差异等）与解决方法汇总见[环境兼容性汇总](../test/ubuntu22-qt62-compatibility-2026-09-07.md)。
+
 ## 3. 日常编译：只构建三个程序
 
 ```bash

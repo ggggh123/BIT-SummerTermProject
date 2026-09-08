@@ -3,14 +3,15 @@
 
 新用户拿到项目文件夹后，在 Ubuntu 虚拟机上只需：
 
-    python3 scripts/quickstart.py          # 部署 + 编译
-    python3 scripts/quickstart.py --start  # 部署 + 编译 + 自动拉起三端演示
+    python3 scripts/quickstart.py --start   # 部署 + 编译 + 自动拉起三端演示
 
 设计说明：
 - 入口用 Python 而非 shell：文件夹从 Windows 复制过来时 shell 脚本可能带 CRLF
   换行（bash 直接报错），Python 解释器不受影响，且脚本会顺手把所有 .sh 修好；
-- 依赖安装只在环境检查发现缺失时触发（apt 系统包无法打包进项目文件夹，
-  脚本化安装即是"开箱即用"的标准做法）；
+- 依赖安装委托团队统一的 scripts/bootstrap.sh（按需触发：环境检查发现缺失才安装；
+  apt 系统包无法打包进项目文件夹，脚本化安装即是"开箱即用"的标准做法）；
+- 团队验证基线是 Ubuntu 22.04；其他 Ubuntu 版本（如 25.04）自动透传
+  --allow-other-ubuntu 尽力兼容，但不等于 22.04 兼容验证；
 - 全程幂等：重复运行安全，已完成的步骤自动跳过或无害重跑。
 """
 import argparse
@@ -22,13 +23,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# 核心验收所需的最小依赖集（与 scripts/check_env.sh 的核心检查项对齐）。
-CORE_PACKAGES = [
-    "build-essential", "cmake", "ninja-build", "pkg-config",
-    "qt6-base-dev", "qt6-base-dev-tools", "qt6-tools-dev", "qt6-charts-dev",
-    "qt6-webengine-dev", "libqt6webenginecore6-bin", "libqt6svg6",
-    "python3-pytest",
-]
+# 与 dev 基线对齐：默认使用完整测试构建预设；二进制目录随预设变化。
+DEFAULT_PRESET = "ubuntu22-test"
+PRESET_BUILD_DIRS = {
+    "ubuntu22": "build/ubuntu22",
+    "ubuntu22-test": "build/ubuntu22-test",
+    "debug": "build/debug",
+    "release": "build/release",
+}
 
 
 def run(cmd, **kwargs):
@@ -54,8 +56,19 @@ def normalize_shell_scripts():
     print(f"  shell 脚本换行规范化：修正 {fixed} 个文件（CRLF → LF）")
 
 
+def ubuntu_version():
+    """读取 /etc/os-release 的 VERSION_ID；无法识别时返回 None。"""
+    os_release = Path("/etc/os-release")
+    if not os_release.is_file():
+        return None
+    for line in os_release.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("VERSION_ID="):
+            return line.split("=", 1)[1].strip().strip('"')
+    return None
+
+
 def check_env():
-    """运行 scripts/check_env.sh，返回 (是否通过, 输出文本)。"""
+    """运行 scripts/check_env.sh（现为薄壳，内部为 check_env.py），返回 (是否通过, 输出)。"""
     result = subprocess.run(
         ["bash", "scripts/check_env.sh"], cwd=ROOT,
         capture_output=True, text=True,
@@ -64,23 +77,31 @@ def check_env():
 
 
 def install_dependencies():
-    print("  缺少依赖，执行 apt 安装（需要 sudo 密码，仅首次）……", flush=True)
-    if run(["sudo", "apt-get", "update"]) != 0:
-        return False
-    if run(["sudo", "apt-get", "install", "-y", *CORE_PACKAGES]) != 0:
+    """委托团队统一的 bootstrap.sh 安装依赖。
+
+    bootstrap 默认仅接受团队基线 Ubuntu 22.04；检测到其他版本（如 25.04）
+    时自动透传 --allow-other-ubuntu（尽力兼容，不等于基线验证）。
+    """
+    version = ubuntu_version()
+    cmd = ["bash", "scripts/bootstrap.sh"]
+    if version is not None and version != "22.04":
+        print(f"  检测到 Ubuntu {version}（团队基线为 22.04），"
+              f"透传 --allow-other-ubuntu 尽力兼容。", flush=True)
+        cmd.append("--allow-other-ubuntu")
+    if run(cmd) != 0:
         return False
     return True
 
 
-def configure_and_build(cpus):
-    if run(["cmake", "--preset", "debug"]) != 0:
+def configure_and_build(preset, cpus):
+    if run(["cmake", "--preset", preset]) != 0:
         return False
-    if run(["cmake", "--build", "--preset", "debug", "-j", cpus]) != 0:
+    if run(["cmake", "--build", "--preset", preset, "-j", cpus]) != 0:
         return False
     return True
 
 
-def start_demo(run_id):
+def start_demo(run_id, build_dir):
     env = os.environ.copy()
     env.setdefault("EV_SIMULATOR_TOKEN", "demo-simulator-token")
     env.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
@@ -89,7 +110,7 @@ def start_demo(run_id):
     for action in ("reset", "start"):
         cmd = cli + [action, "--run-id", run_id]
         if action == "start":
-            cmd += ["--build-dir", "build/debug", "--port", "9100",
+            cmd += ["--build-dir", build_dir, "--port", "9100",
                     "--interval-ms", "3000", "--timeout-seconds", "20"]
         print(f"  + {' '.join(cmd)}", flush=True)
         result = subprocess.run(cmd, cwd=ROOT, env=env)
@@ -102,6 +123,8 @@ def main():
     parser = argparse.ArgumentParser(description="项目一键部署脚本（Ubuntu 虚拟机）")
     parser.add_argument("--start", action="store_true",
                         help="编译完成后自动拉起三端演示（服务端/管理端、模拟器、用户端）")
+    parser.add_argument("--preset", default=DEFAULT_PRESET,
+                        help=f"CMake 构建预设（默认 {DEFAULT_PRESET}；可选 ubuntu22/debug/release）")
     parser.add_argument("--run-id", default=None,
                         help="演示运行轮次标识（默认 quickstart-时间戳，--start 时生效）")
     parser.add_argument("--skip-install", action="store_true",
@@ -111,14 +134,19 @@ def main():
     if os.name == "nt":
         print("本脚本面向 Ubuntu 虚拟机；Windows 请使用 WSL 或参照 README 手动配置。")
         return 1
+    build_dir = PRESET_BUILD_DIRS.get(args.preset)
+    if build_dir is None:
+        print(f"未知预设 {args.preset}；可选：{', '.join(PRESET_BUILD_DIRS)}")
+        return 1
 
     total = 4
     print(f"BIT-SummerTermProject 一键部署（项目根：{ROOT}）", flush=True)
+    print(f"构建预设：{args.preset}（输出目录 {build_dir}）", flush=True)
 
     banner(1, total, "规范化 shell 脚本换行（防 Windows CRLF 坑）")
     normalize_shell_scripts()
 
-    banner(2, total, "环境检查（scripts/check_env.sh）")
+    banner(2, total, "环境检查（scripts/check_env.sh → check_env.py）")
     ok, output = check_env()
     if not ok:
         print(output.rstrip())
@@ -138,9 +166,9 @@ def main():
             return 1
     print("  环境检查通过。")
 
-    banner(3, total, "CMake 配置与全量编译（首次约数分钟）")
+    banner(3, total, f"CMake 配置与全量编译（预设 {args.preset}，首次约数分钟）")
     cpus = str(os.cpu_count() or 2)
-    if not configure_and_build(cpus):
+    if not configure_and_build(args.preset, cpus):
         print("  配置或编译失败，请把上方输出反馈给团队。")
         return 1
     print("  编译完成。")
@@ -153,9 +181,9 @@ def main():
     ]
     missing = False
     for name in binaries:
-        present = (ROOT / name).is_file()
+        present = (ROOT / build_dir / name).is_file()
         missing = missing or not present
-        print(f"  {'OK ' if present else '缺失'} {name}")
+        print(f"  {'OK ' if present else '缺失'} {build_dir}/{name}")
     if missing:
         print("  预期二进制缺失，编译可能不完整，请把上方输出反馈给团队。")
         return 1
@@ -163,7 +191,7 @@ def main():
     if args.start:
         run_id = args.run_id or f"quickstart-{time.strftime('%m%d-%H%M%S')}"
         print(f"\n拉起三端演示（run-id: {run_id}）……")
-        if not start_demo(run_id):
+        if not start_demo(run_id, build_dir):
             print("  三端启动失败，请把上方输出反馈给团队。")
             return 1
         print("\n三端已就绪：应能看到管理端、用户端、模拟器三个窗口。")
@@ -175,8 +203,8 @@ def main():
     print('  export QTWEBENGINE_CHROMIUM_FLAGS="--ignore-gpu-blocklist"')
     print("  export EV_SIMULATOR_TOKEN=demo-simulator-token")
     print("  python3 scripts/demo_cli.py reset --run-id demo-1")
-    print("  python3 scripts/demo_cli.py start --run-id demo-1 \\")
-    print("    --build-dir build/debug --port 9100 --interval-ms 3000 --timeout-seconds 20")
+    print(f"  python3 scripts/demo_cli.py start --run-id demo-1 \\")
+    print(f"    --build-dir {build_dir} --port 9100 --interval-ms 3000 --timeout-seconds 20")
     return 0
 
 
