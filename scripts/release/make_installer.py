@@ -36,6 +36,13 @@ EXCLUDE_DIRS = {
 }
 EXCLUDE_PATTERNS = ("*.pyc", "*.moc", "*.o", "*.tar.gz")
 
+# runtime/ 整体排除，但 demo_cli 启动三端必需的黄金库必须随包
+# （demo_runtime.py 启动时读取并校验哈希，缺它则编译完成后启动失败）。
+GOLDEN_WHITELIST = (
+    "runtime/golden/core.db",
+    "runtime/golden/core.db.sha256",
+)
+
 
 def git_commit():
     try:
@@ -49,8 +56,10 @@ def git_commit():
 
 
 def excluded(path: Path) -> bool:
-    rel = path.relative_to(ROOT)
-    parts = rel.parts
+    rel = path.relative_to(ROOT).as_posix()
+    if rel in GOLDEN_WHITELIST:
+        return False
+    parts = Path(rel).parts
     if any(part in EXCLUDE_DIRS for part in parts):
         return True
     name = path.name
