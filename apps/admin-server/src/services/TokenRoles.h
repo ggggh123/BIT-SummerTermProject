@@ -4,6 +4,7 @@
 #include <QString>
 #include <utility>
 
+// token → 角色映射：登录会话在内存中登记；模拟器/ML 用配置的固定 token 识别。
 class TokenRoles
 {
 public:

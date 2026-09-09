@@ -14,6 +14,7 @@ DashboardService::DashboardService(QSqlDatabase database)
 {
 }
 
+// 管理首页聚合统计：收入（按日/按月）、订单数、桩状态分布、活跃用户等一次查齐打包 JSON。
 QJsonObject DashboardService::summary(int rangeDays, const QDateTime &now) const
 {
     const int idle = countChargersByStatus(QStringLiteral("idle"));

@@ -74,6 +74,7 @@ RequestLogService::RequestLogService(QSqlDatabase database)
 {
 }
 
+// request_log 建表与旧库列迁移（旧封存库只有 3 个字段，启动时补齐 action/code/actor 等）。
 Result RequestLogService::ensureSchema() const
 {
     QSqlQuery query(m_database);
@@ -107,6 +108,8 @@ Result RequestLogService::ensureSchema() const
     return Result::success();
 }
 
+// 写操作外层事务：按 requestId 幂等——同一 requestId 重复请求直接返回首次的响应；
+// 首次请求则执行业务（business 回调）并把结果写入审计日志。token 永不入日志。
 QByteArray RequestLogService::execute(const ev::protocol::RequestEnvelope &request, const QString &actor,
                                     const std::function<ev::protocol::ResponseEnvelope()> &business,
                                     bool twoPhase) const
@@ -155,6 +158,7 @@ QByteArray RequestLogService::execute(const ev::protocol::RequestEnvelope &reque
     return responseBytes;
 }
 
+// 只读请求的轻量日志：INSERT OR IGNORE 记录一次即可，不做幂等拦截。
 Result RequestLogService::record(const QString &requestId, const QString &action, const ev::protocol::ResponseEnvelope &response) const
 {
     const Result schemaResult = ensureSchema();
@@ -177,6 +181,7 @@ Result RequestLogService::record(const QString &requestId, const QString &action
     return Result::success();
 }
 
+// 审计日志查询：分页列出 request_id/action/code/时间，供管理界面追溯。
 Result RequestLogService::list(const QString &requestIdFilter, int limit, int offset, QJsonObject *responseData) const
 {
     const Result schemaResult = ensureSchema();

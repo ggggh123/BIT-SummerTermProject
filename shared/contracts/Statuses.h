@@ -5,6 +5,9 @@
 
 namespace ev::status {
 
+// 各实体的合法状态取值，与 schema.sql 里的 CHECK 约束一一对应，
+// 服务端和协议预检共用这份清单做校验。
+
 inline const QStringList Users = {
     QStringLiteral("active"),
     QStringLiteral("frozen")

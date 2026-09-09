@@ -62,6 +62,8 @@ Result DemoResetService::ensureSchema() const {
     return Result::success();
 }
 
+// 黄金库合法性校验：无 sidecar 残留（-wal/-shm/-journal）、与运行库不是同一文件、
+// SHA-256 与封存哈希一致，三者任一不满足即拒绝复位。
 bool DemoResetService::validGoldenFile() const {
     if (!QRegularExpression("^[0-9a-f]{64}$").match(m_goldenHash).hasMatch()) return false;
     QFileInfo golden(m_goldenPath), runtime(m_database.databaseName());
@@ -80,6 +82,8 @@ bool DemoResetService::validGoldenFile() const {
     return hash.addData(&file) && QString::fromLatin1(hash.result().toHex())==m_goldenHash;
 }
 
+// 演示复位核心：只读 ATTACH 黄金库 → integrity/外键/schema 逐表比对 → 事务内
+// 按外键逆序清空业务表、从黄金库整表复制回来 → 递增 snapshot 版本、写复位回执。
 Result DemoResetService::restore(const QString &id, const QString &actor) const {
     if (!validGoldenFile()) return invalidGolden();
     QSqlQuery q(m_database);
@@ -127,6 +131,7 @@ QByteArray DemoResetService::rejectReservedId(const ev::protocol::RequestEnvelop
         "requestId 已被复位请求使用"));
 }
 
+// 快照导出：版本号未变才写 Web snapshot 文件（防过期覆盖），失败由定时器按版本重试。
 bool DemoResetService::snapshot(qint64 version) const {
     QSqlQuery q(m_database);
     if (!q.exec("SELECT version FROM snapshot_meta WHERE id=1") || !q.next() || q.value(0).toLongLong()!=version) return false;
@@ -134,6 +139,8 @@ bool DemoResetService::snapshot(qint64 version) const {
     return SnapshotWriter(m_database).write(m_snapshotPath);
 }
 
+// demo.reset 入口：两阶段——首次请求执行 restore 并记 pending 回执；
+// 重复请求按 requestId 幂等返回；快照未就绪时先回"已复位"，稍后按版本重试补 ACK。
 QByteArray DemoResetService::execute(const ev::protocol::RequestEnvelope &request, const QString &actor) const {
     const auto fail=[&](const Result &r) { return failure(request.requestId,r); };
     const auto validation=RequestPreflight::payload(ev::actions::DemoReset,request.payload);

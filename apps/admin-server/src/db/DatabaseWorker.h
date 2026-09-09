@@ -9,6 +9,8 @@
 
 enum class AdminView { Summary, Stations, Chargers, Users, RequestLog, Energy, Operations };
 
+// 专属 DB 线程工作者：所有 SQL 在此串行执行；execute/query 由网络/UI 线程经
+// 信号槽排队调用，completed 信号把结果按 sequence 送回调用方。
 class DatabaseWorker : public QObject {
     Q_OBJECT
 public:

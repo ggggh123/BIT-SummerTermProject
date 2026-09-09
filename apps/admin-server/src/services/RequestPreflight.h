@@ -16,6 +16,7 @@
 
 // 仅含值，不持有数据库或服务。worker 发布会话副本后，入口可在容量判定前做纯校验。
 namespace RequestPreflight {
+// 鉴权：action 必须在清单内，且当前角色在权限矩阵中被允许，否则 AUTH_REQUIRED/FORBIDDEN。
 inline Result authorize(const QString &role, const ev::protocol::RequestEnvelope &request)
 {
     if (!ev::actions::all().contains(request.action)) return Result::failure("INVALID_REQUEST","未知接口动作");
@@ -111,6 +112,7 @@ inline Result payload(const QString &action, const QJsonObject &p)
     }
     return Result::success();
 }
+// 入口总检：先鉴权，再按 action 校验 payload 类型/范围/结构，脏数据在进 DB 前就被挡下。
 inline Result check(const QString &role, const ev::protocol::RequestEnvelope &request)
 {
     const auto auth=authorize(role,request);

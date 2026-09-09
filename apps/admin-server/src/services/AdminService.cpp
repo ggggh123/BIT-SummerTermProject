@@ -71,6 +71,7 @@ AdminService::AdminService(QSqlDatabase database)
 {
 }
 
+// admin.station_create：创建站点并按快/慢桩数量批量插入 chargers（一个事务内完成）。
 Result AdminService::stationCreate(const QJsonObject &payload, QJsonObject *responseData) const
 {
     const QString name = payload.value(QStringLiteral("name")).toString().trimmed();
@@ -145,6 +146,7 @@ Result AdminService::stationCreate(const QJsonObject &payload, QJsonObject *resp
     return Result::success();
 }
 
+// admin.charger_restart：仅 fault 桩可重启；置为 restarting，落定由 DatabaseWorker 定时器延迟完成。
 Result AdminService::chargerRestart(const QJsonObject &payload, QJsonObject *responseData) const
 {
     int chargerId = 0;
@@ -185,6 +187,7 @@ Result AdminService::chargerRestart(const QJsonObject &payload, QJsonObject *res
     return Result::success();
 }
 
+// 重启落定：restarting → idle，并递增快照版本、记 events（进程重启后可续做未完成的重启）。
 Result AdminService::finishRestart(int chargerId) const
 {
     SqlTransaction database(m_database);
@@ -252,6 +255,7 @@ Result AdminService::userList(const QJsonObject &payload, QJsonObject *responseD
     return Result::success();
 }
 
+// admin.user_set_status：冻结/解冻用户（冻结后不能开始新的充电）。
 Result AdminService::userSetStatus(const QJsonObject &payload, QJsonObject *responseData) const
 {
     int userId = 0;

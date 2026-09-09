@@ -5,6 +5,8 @@
 #include <QSqlDatabase>
 #include <QString>
 
+// SQLite 连接的生命周期管理者：打开库、设 PRAGMA、执行 schema、种子数据；
+// 服务端是数据库唯一 writer，本类即入口。
 class DatabaseManager
 {
 public:

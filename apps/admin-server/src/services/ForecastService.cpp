@@ -143,6 +143,7 @@ ForecastService::ForecastService(QSqlDatabase database, QString snapshotPath)
 {
 }
 
+// 系统健康：当前激活的预测批次/容量/时效状态，管理端健康页展示用。
 QJsonObject ForecastService::healthState() const
 {
     int snapshotVersion = 0;
@@ -171,6 +172,7 @@ QJsonObject ForecastService::healthState() const
     };
 }
 
+// forecast.latest：返回当前 active 预测（用户端按站点展示拥挤度预测）。
 Result ForecastService::latest(QJsonObject *responseData) const
 {
     QSqlQuery query(m_database);
@@ -201,6 +203,8 @@ Result ForecastService::latest(QJsonObject *responseData) const
     return Result::success();
 }
 
+// forecast.publish：ML 端发布预测批次——校验 payload → 插入 forecast_runs/forecasts
+// → 旧 run 置 superseded、新 run 激活（同一事务），并尝试刷新 Web snapshot。
 Result ForecastService::publish(const QString &requestId, const QJsonObject &payload, QJsonObject *responseData) const
 {
     Q_UNUSED(requestId)

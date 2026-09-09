@@ -36,6 +36,7 @@ AuthService::AuthService(QSqlDatabase database, TokenRoles tokenRoles)
 {
 }
 
+// admin.login：核对 SHA-256 密码哈希，通过后签发管理员 token 并登记会话。
 LoginResult AuthService::login(const QString &username, const QString &password) const
 {
     QSqlQuery query(m_database);
@@ -56,6 +57,7 @@ LoginResult AuthService::login(const QString &username, const QString &password)
             QJsonObject{{QStringLiteral("token"), token}, {QStringLiteral("admin"), adminObject(username.trimmed())}}};
 }
 
+// auth.user_login：手机号登录；新手机号自动注册（事务内），随后签发用户 token。
 LoginResult AuthService::loginUser(const QString &mobile) const
 {
     const QString normalized = mobile.trimmed();
