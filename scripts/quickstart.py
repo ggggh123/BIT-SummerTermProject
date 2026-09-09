@@ -111,6 +111,7 @@ def positive_jobs(value):
 
 def start_demo(run_id, build_dir):
     env = os.environ.copy()
+    env.setdefault("EV_TENCENT_MAP_KEY", "II3BZ-TK5C7-NXRXH-PCEX2-XZ365-HYFIV")
     env.setdefault("EV_SIMULATOR_TOKEN", "demo-simulator-token")
     env.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
     env.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ignore-gpu-blocklist")
