@@ -59,8 +59,11 @@ set_tests_properties(user_api PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 add_executable(tst_user_tencentmap tests/tst_tencentmap.cpp resources/resources.qrc)
 target_link_libraries(tst_user_tencentmap PRIVATE ev_user_client_core Qt6::Test)
 add_test(NAME user_tencentmap COMMAND tst_user_tencentmap)
+# 虚拟机实证：VMware SVGA + desktop GL 下真实 NavigationPage 的 WebGL 上下文
+# 会段错误（信号 11）；该套件为离线逻辑测试，不依赖 GPU 渲染，固定软件渲染。
+# 生产程序的地图 GPU 加速由 WebEngineRuntime 的 --ignore-gpu-blocklist 保证，不受影响。
 set_tests_properties(user_tencentmap PROPERTIES ENVIRONMENT
-    "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_DISABLE_SANDBOX=1")
+    "QT_QPA_PLATFORM=offscreen;QTWEBENGINE_DISABLE_SANDBOX=1;QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu")
 
 add_executable(tst_user_chargepage tests/tst_chargepage.cpp resources/resources.qrc)
 target_link_libraries(tst_user_chargepage PRIVATE ev_user_client_core Qt6::Test)

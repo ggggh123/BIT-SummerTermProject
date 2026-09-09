@@ -94,13 +94,15 @@ sudo apt install libqt6svg6
 
 **建议**：#3 放宽阈值或增加容差；或该用例标记为仅在真实显示后端运行。
 
-## 6. E6：user_tencentmap fatal error（移交 #3）
+## 6. E6：user_tencentmap 失败（已解决，两阶段）
 
-**现象**：`user_tencentmap` 的 `routeOperationCorrelation...` 收到 fatal error（9/10）。
+**第一阶段（2026-09-07 发现）**：`routeOperationCorrelation...` 用例 fatal error（9/10）。已排除网络与 Key 问题（`curl`/Python 实测地图 JS URL 返回正常加载器，Key 被正常回显）。
 
-**已排除**：虚拟机可访问国内网络（`curl`/Python 实测地图 JS URL 返回正常加载器，Key 被正常回显、版本 1.8.2.3）；网络与 Key 本身无问题。
+**第一阶段解决**：PR #13 的 UI 重构修复了该用例——2026-09-09 虚拟机复测其 PASS。
 
-**待明确**：测试使用占位符 Key 与真实腾讯 API 的交互口径；需 #3 结合日志定位。
+**第二阶段（2026-09-09 发现并解决）**：PR #13 新增的 `realNavigationPageRunsQrcPromisePollingAndRetryOffline` 用例在 VMware 虚拟机上**段错误（信号 11）**——崩溃时 WebEngine 上下文为 `GLImplementation: desktop` + `in-process-gpu` + `ignore-gpu-blocklist`，即真实 NavigationPage 创建 WebGL 上下文时在 VMware SVGA 驱动内崩溃（队友桌面环境 GPU 不同故不复现）。
+
+**实证与修复**：虚拟机对照实验证实 `--disable-gpu`（软件渲染）下整套 11/11 Passed——该套件为离线逻辑测试，不依赖 GPU 渲染。修复：`apps/user-client/CMakeLists.txt` 给 `user_tencentmap` 测试属性追加 `QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu`（仅作用于测试进程；生产程序的地图 GPU 加速由 `WebEngineRuntime` 的 `--ignore-gpu-blocklist` 保证，互不影响）。
 
 ## 7. E7：Qt 6.2 QSaveFile 写失败静默返回成功（已修复 `1a5f4c0`）
 
@@ -208,7 +210,7 @@ export QTWEBENGINE_CHROMIUM_FLAGS="--ignore-gpu-blocklist"
 | 项 | 行动 |
 |---|---|
 | E5 | 放宽 `renderedPixelsNearColor` 阈值或增加容差 |
-| E6 | 明确 `user_tencentmap` 占位 Key 与真实 API 的测试口径（注意：Key 现已内置默认值，见 E12） |
+| E6 | ~~明确 `user_tencentmap` 测试口径~~ **已解决**（2026-09-09：老 fatal 被 PR #13 修复；VMware GL 段错误已用软件渲染修复，见 §6） |
 | E10 | 按 PRL 报告 §6 复核套件上下文 SIGABRT（gdb core / 用例二分） |
 | E7 | 排查用户端是否存在同类"仅检查返回值"的写文件路径 |
 | E11 | 知悉 `check_env.sh` 新增 QtWebEngineProcess 检测（脚本行为有配套测试） |
