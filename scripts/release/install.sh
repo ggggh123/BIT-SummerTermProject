@@ -18,4 +18,9 @@ if ! command -v python3 >/dev/null 2>&1; then
   printf '%s\n' '[MISSING] python3；Ubuntu 22.04 默认自带，如缺失请先执行：sudo apt install -y python3' >&2
   exit 1
 fi
+# 团队公共测试 Key 作为默认值在调用方注入（与 quickstart 的 setdefault、
+# 用户端 UserAppConfig::bundledTencentMapKey() 口径一致）；demo_runtime 的
+# 启动契约要求显式 Key，故必须在进入 quickstart 前导出。
+export EV_TENCENT_MAP_KEY="${EV_TENCENT_MAP_KEY:-II3BZ-TK5C7-NXRXH-PCEX2-XZ365-HYFIV}"
+export EV_SIMULATOR_TOKEN="${EV_SIMULATOR_TOKEN:-demo-simulator-token}"
 exec python3 scripts/quickstart.py --start "$@"
