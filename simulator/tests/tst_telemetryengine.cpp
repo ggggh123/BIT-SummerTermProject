@@ -101,8 +101,7 @@ void TelemetryEngineTest::faultAndRecoveryIntents()
     QVERIFY(!e.requestRecovery(9999));
 }
 
-// R14 regression: recordedAt must increase strictly across fault/recovery
-// intents and interleaved telemetry, even without any tick in between.
+// R14 回归：即使两次 tick 之间穿插故障/恢复事件，recordedAt 也必须严格递增。
 void TelemetryEngineTest::intentTimestampsStrictlyIncreasing()
 {
     ChargerSnapshot c;
@@ -118,7 +117,7 @@ void TelemetryEngineTest::intentTimestampsStrictlyIncreasing()
     QCOMPARE(first.size(), 1);
     QVERIFY(first[0].recordedAt > t0());
 
-    QVERIFY(e.requestRecovery(1001));  // status stays fault until admin reset
+    QVERIFY(e.requestRecovery(1001));  // 恢复事件仅入队上报，本地状态仍为 fault，等确认后才变
     QList<FaultIntent> second = e.takePendingIntents();
     QCOMPARE(second.size(), 1);
     QVERIFY(second[0].recordedAt > first[0].recordedAt);

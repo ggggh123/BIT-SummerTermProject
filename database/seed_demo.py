@@ -1,8 +1,7 @@
-"""Deterministic demo and 90-day hourly history generator.
+"""确定性演示数据与 90 天逐小时历史生成器。
 
-Standard-library only. ``seed_database`` fills an already schema-applied
-SQLite connection with the fixed demo dataset. The same ``(seed, cutoff)``
-always yields byte-identical content.
+仅用标准库。``seed_database`` 向已按 schema 建好表的 SQLite 连接灌入固定演示
+数据集；相同的 ``(seed, cutoff)`` 永远产出逐字节一致的内容。
 """
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ FIXED_SEED = 20260901
 DEFAULT_CUTOFF = "2026-09-01T09:00:00+08:00"
 TZ = timezone(timedelta(hours=8))
 
-# Six fixed stations around one demo city, all forecast-enabled.
+# 同一演示城市周边的六个固定站点，全部开启预测。
 # (name, address, latitude, longitude, price_fen_per_kwh)
 STATIONS = [
     ("朝阳公园充电站", "北京市朝阳区朝阳公园南路1号", 39.9337, 116.4710, 150),
@@ -26,7 +25,7 @@ STATIONS = [
     ("亦庄充电站", "北京市大兴区荣华中路8号", 39.7960, 116.5060, 150),
 ]
 
-# Deterministic holidays within the 90-day history window.
+# 90 天历史窗口内的确定性节假日。
 HOLIDAYS = {"2026-07-01", "2026-08-01", "2026-08-15"}
 
 CHARGERS_PER_STATION = 8
@@ -85,7 +84,7 @@ def seed_database(conn, seed: int = FIXED_SEED,
             )
             code += 1
     summary.charger_count = 48
-    # One deterministic fault charger (station 2, code 1010).
+    # 一台确定性故障桩（2 号站，编号 1010）。
     conn.execute(
         "UPDATE chargers SET status='fault', updated_at=? WHERE code='1010'",
         (_fmt(cutoff_dt),),
@@ -103,7 +102,7 @@ def seed_database(conn, seed: int = FIXED_SEED,
         )
     summary.user_count = 30
 
-    # Charger code -> station price lookup.
+    # 桩编号 → 站点电价的查找表。
     code_to_price = {}
     code = 1001
     for station_id in range(1, len(STATIONS) + 1):

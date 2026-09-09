@@ -14,7 +14,7 @@
 
 namespace ev::simulator {
 
-// Interface used by SimulatorWindow so the panel can be driven by a fake in tests.
+// 供 SimulatorWindow 依赖的抽象接口：测试里可以用假实现驱动界面。
 class ISimulatorClient : public QObject
 {
     Q_OBJECT
@@ -28,8 +28,8 @@ public:
     virtual void sendTelemetry(const QList<TelemetrySample> &samples) = 0;
     virtual void sendFault(const FaultIntent &intent) = 0;
 
-    // R13: the panel reports its real run state so simulator.status stays
-    // truthful. The default no-op keeps fake clients in tests source-compatible.
+    // R13：面板上报真实运行状态，保证 simulator.status 不虚报；
+    // 默认空实现让测试用的假客户端无需改动即可编译。
     virtual void setRunning(bool running) { Q_UNUSED(running); }
 
 signals:
@@ -41,8 +41,6 @@ signals:
     void logMessage(const QString &message);
 };
 
-// Framed TCP client: sends simulator.status on connect, publishes telemetry
-// and fault events, and keeps a bounded queue while disconnected.
 // 帧协议 TCP 客户端：连接后先发 simulator.status 取权威快照，再上报遥测/故障事件；
 // 断线期间事件留在有界队列，重连鉴权后按原序重发（requestId 不变，防重复入库）。
 class SimulatorClient : public ISimulatorClient

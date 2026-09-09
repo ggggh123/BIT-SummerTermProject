@@ -1,6 +1,6 @@
-"""Build the immutable base golden database.
+"""构建不可变的基础黄金库。
 
-Usage::
+用法::
 
     python3 database/build_golden.py \\
         --output-dir runtime/golden --seed 20260901 \\

@@ -77,8 +77,7 @@ void SimulatorClient::onConnected()
 void SimulatorClient::setRunning(bool running)
 {
     running_ = running;
-    // Push the state change immediately so the server does not keep a stale
-    // "running" heartbeat after the panel pauses (R13).
+    // R13：暂停时立即上报状态，避免服务端残留过期的 running 心跳。
     requestStatusRefresh();
 }
 

@@ -265,7 +265,7 @@ void SimulatorClientTest::statusReportsActualRunState()
 
     QTRY_VERIFY_WITH_TIMEOUT(server.requests().size() >= 1, 3000);
     QCOMPARE(server.requests().at(0).action, QStringLiteral("simulator.status"));
-    // Telemetry is not flowing yet: the truthful initial state is "paused".
+    // 遥测尚未开始流动：真实的初始状态是 "paused"。
     QCOMPARE(server.requests().at(0).payload.value(QStringLiteral("state")).toString(),
              QStringLiteral("paused"));
 

@@ -60,7 +60,6 @@ QList<TelemetrySample> TelemetryEngine::tick()
         s.status = c.status;
 
         if (c.status == QLatin1String("charging")) {
-            // Deterministic positive increment: power * elapsed time * jitter.
             // 确定性正增量：额定功率 × 采样时长 × 0.9~1.1 随机抖动（seed 决定，可复现）。
             const double elapsedHours = intervalMs_ / 3600000.0;
             const double factor = 0.9 + rng_.generateDouble() * 0.2;
