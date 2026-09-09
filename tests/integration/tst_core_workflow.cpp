@@ -519,11 +519,11 @@ void CoreWorkflowTest::newUserCompletesRealQtWorkflow()
     firstClient.stop();
 
     window.toggleRun();
-    QCOMPARE(window.runButtonText(), QStringLiteral("Pause"));
+    QCOMPARE(window.runButtonText(), QStringLiteral("暂停模拟"));
     window.doTick();
     window.doTick();
     window.toggleRun();
-    QCOMPARE(window.runButtonText(), QStringLiteral("Run"));
+    QCOMPARE(window.runButtonText(), QStringLiteral("启动模拟"));
     QVERIFY(window.tickCount() >= 2);
     QVERIFY2(waitUntil([&client] { return client.queuedSamples() == 0; }, 20'000),
              "simulator telemetry acknowledgements did not drain");

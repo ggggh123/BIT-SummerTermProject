@@ -4,6 +4,11 @@ add_test(NAME environment_tools
     COMMAND ${Python3_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/tests/scripts/test_environment_tools.py -q)
 set_tests_properties(environment_tools PROPERTIES TIMEOUT 60 LABELS "core;environment")
 
+add_test(NAME source_delivery_tools
+    COMMAND ${Python3_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/tests/scripts/test_quickstart.py
+            ${CMAKE_SOURCE_DIR}/tests/release/test_source_installer.py -q)
+set_tests_properties(source_delivery_tools PROPERTIES TIMEOUT 60 LABELS "core;release")
+
 add_test(NAME demo_runtime_unit
     COMMAND ${Python3_EXECUTABLE} -m pytest ${CMAKE_SOURCE_DIR}/tests/scripts/test_demo_runtime.py -q)
 set_tests_properties(demo_runtime_unit PROPERTIES

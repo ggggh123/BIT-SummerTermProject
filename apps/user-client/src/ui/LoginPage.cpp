@@ -131,7 +131,7 @@ LoginPage::LoginPage(QWidget *parent)
     auto *accent = new QFrame(formCard);
     accent->setObjectName(QStringLiteral("loginTitleAccent"));
     accent->setFixedSize(48, 4);
-    accent->setStyleSheet(QStringLiteral("background: #00856A; border-radius: 2px;"));
+    accent->setStyleSheet(QStringLiteral("background: #72ddc3; border-radius: 2px;"));
     formLayout->addWidget(accent, 0, Qt::AlignLeft);
 
     auto *phoneLabel = new QLabel(QStringLiteral("手机号"), formCard);
@@ -213,4 +213,14 @@ void LoginPage::setError(const QString &message)
 {
     errorMessage_->setText(message);
     errorMessage_->setVisible(!message.isEmpty());
+}
+
+void LoginPage::prepareForAccountChange(bool switching)
+{
+    phoneEdit_->clear();
+    phoneEdit_->setPlaceholderText(switching ? QStringLiteral("请输入要切换的手机号")
+                                           : QStringLiteral("请输入11位手机号"));
+    setPending(false);
+    setError({});
+    phoneEdit_->setFocus(Qt::OtherFocusReason);
 }

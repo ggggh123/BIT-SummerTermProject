@@ -12,12 +12,14 @@ public:
     explicit UserService(QSqlDatabase database);
 
     Result getUser(int userId, QJsonObject *responseData) const;
+    Result usageStatistics(int userId, QJsonObject *responseData) const;
     Result updateUser(int userId, const QJsonObject &payload, QJsonObject *responseData) const;
     Result recharge(int userId, const QJsonObject &payload, QJsonObject *responseData) const;
     Result stationList(const QJsonObject &payload, QJsonObject *responseData) const;
     Result stationDetail(const QJsonObject &payload, QJsonObject *responseData) const;
     Result chargerList(const QJsonObject &payload, QJsonObject *responseData) const;
     Result currentOrder(int userId, QJsonObject *responseData) const;
+    Result orderTelemetry(int userId, const QJsonObject &payload, QJsonObject *responseData) const;
     Result orderList(int userId, const QJsonObject &payload, QJsonObject *responseData) const;
     Result reserve(int userId, const QJsonObject &payload, QJsonObject *responseData) const;
     Result start(int userId, const QJsonObject &payload, QJsonObject *responseData) const;

@@ -1803,6 +1803,8 @@ void RecommendationTest::authenticatedAuthRequiredExpiresSession()
         required<QPushButton>(&window, "profileNavigationButton")->click();
         expiringRequest = takeRequest(peer.data());
         QCOMPARE(expiringRequest.action, QStringLiteral("user.get"));
+        const auto statistics = takeRequest(peer.data()); // 此旧会话统计也必须在失效时取消。
+        QCOMPARE(statistics.action, QStringLiteral("user.statistics"));
     } else if (source == QStringLiteral("global-current")) {
         peer->disconnectFromHost();
         QTRY_COMPARE(peer->state(), QAbstractSocket::UnconnectedState);

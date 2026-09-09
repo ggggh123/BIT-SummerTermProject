@@ -4,11 +4,11 @@
 
 ## 1. 统一源码版本
 
-此轮修正在 `fix/ubuntu22-team-baseline`，通过面向 `dev` 的 PR #11 集成；2026-09-08 已吸收队友新快照 `dev@6360bd1`，不是旧 dev 的替代副本。PR 合并前需要试用本轮成果时，在无未提交改动的独立 clone 中执行：
+PR #11、#12 均已合入远端 `dev`。最终 UI 交付分支为 `feat/energy-pulse-qt-ui`，已整合检查时的 `dev@a15e088`；发布范围见[最终交付说明](../release/final-2026-09-08.md)。本次 PR 合并前需要试用最终版时，在无未提交改动的独立 clone 中执行：
 
 ```bash
 git fetch origin
-git switch --track origin/fix/ubuntu22-team-baseline
+git switch --track origin/feat/energy-pulse-qt-ui
 git rev-parse HEAD
 ```
 
@@ -31,7 +31,7 @@ bash scripts/check_env.sh --strict
 
 `--strict` 要求 Ubuntu 22.04 和 Qt 6.2 系列；普通 `check_env.sh` 在较新系统上给出警告但允许继续检查。非 22.04 Ubuntu 若确需安装系统依赖，须显式使用 `bootstrap.sh --allow-other-ubuntu`，它不会把该系统变成 22.04。
 
-新用户/不想逐步执行的成员可用一键入口 `python3 scripts/quickstart.py --start`（内部即本节 bootstrap → 预检 → `ubuntu22-test` 构建，可选拉起三端）。集成验证期间发现的环境兼容问题（WebEngine 辅助进程、VMware GPU、Qt 6.2 API 差异等）与解决方法汇总见[环境兼容性汇总](../test/ubuntu22-qt62-compatibility-2026-09-07.md)。
+新用户可用一键入口 `python3 scripts/quickstart.py --start`（本节 bootstrap → 预检 → `ubuntu22` 三程序构建 → 拉起三端），默认并行 2；低内存虚拟机使用 `--jobs 1`，完整回归编译显式选择 `--preset ubuntu22-test`。环境兼容问题的历史排查见[环境兼容性汇总](../test/ubuntu22-qt62-compatibility-2026-09-07.md)。
 
 ## 3. 日常编译：只构建三个程序
 

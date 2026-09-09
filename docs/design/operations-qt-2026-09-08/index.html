@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>能量脉冲 · 设备阵列与故障处置</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:28px;background:#081822;color:#eaf3f6;font:14px/1.75 "Noto Sans CJK SC",sans-serif}main{max-width:1390px;margin:auto}h1{font-size:25px;font-weight:500;margin:0}h2{font-size:19px;font-weight:500;margin:28px 0 10px}p,figcaption{color:#97adbc}p{margin:8px 0 16px}a{color:#8be4ce}select{font:inherit;color:#eaf3f6;background:#193444;border:1px solid #355161;border-radius:6px;padding:8px 12px;margin:0 0 16px 12px;max-width:80%}.shot{display:block;width:100%;height:auto;border:1px solid #2c4251}.note{padding-left:14px;border-left:2px solid #72ddc3}.pair{display:flex;gap:24px;max-width:1248px}.pair figure{margin:0;min-width:0;flex:1}.full{display:block;width:100%;height:auto}figcaption{font-size:13px;margin-bottom:8px}.focus-pair{display:flex;gap:24px;width:max-content}.focus-pair figure{margin:0}.focus{position:relative;overflow:hidden;width:320px;height:230px;background:#102536}.focus img{position:absolute;width:1360px;height:860px;max-width:none}.source img{left:-1079px;top:-280px}.fleet img{left:-1079px;top:-291px}.health img{left:-1055px;top:-178px}.compare{overflow:auto}footer{margin:30px 0;color:#97adbc}
+.focus{width:268px;height:260px}.source img{left:-1080px;top:-183px}.fleet img{left:-1070px;top:-291px}
+@media(max-width:640px){.pair,.focus-pair{flex-direction:column;gap:18px;width:100%}.focus-pair figure{min-width:0}.focus{max-width:100%}}
+</style>
+<main>
+<h1>能量脉冲 · 设备阵列与故障处置</h1>
+<p>服务端两页的结构级改造。以下是原生 Qt 控件截图，查看页不执行重启或复位操作；数据来自隔离的黄金库与测试样本，不是正式库现场运行记录。</p>
+<p><a href="../energy-pulse-qt-2026-09-08/index.html">已通过的双端对照</a> · <a href="../energy-pulse-qt-2026-09-08/simulator.html">模拟器与其他管理页</a> · <a href="#health">系统健康</a> · <a href="#theme">主题联合对照</a></p>
+<h2>电桩状态 · 从设备分布到故障操作</h2>
+<label for="fleetState">查看设备状态</label><select id="fleetState">
+<option value="fleet-selected-1360x860">已定位故障桩 · 1360×860</option>
+<option value="status">默认阵列 / 6 站点 48 台设备 · 1360×860</option>
+<option value="fleet-list-1360x860">列表模式 / 保留业务明细 · 1360×860</option>
+<option value="fleet-restarting-1360x860">实际确认操作后 / 重启中 · 1360×860</option>
+<option value="fleet-empty-1360x860">空数据库快照 · 1360×860</option>
+<option value="fleet-read-error-1360x860">读取失败 / 禁止设备操作 · 1360×860</option>
+<option value="fleet-compact-1280x720">小窗口 / 向下滚动至操作区 · 1280×720</option>
+</select>
+<img id="fleetShot" class="shot" src="captures/fleet-selected-1360x860.png" alt="电桩状态原生 Qt 截图：按站点分组，并选中故障设备 1010">
+<p class="note">站点按 ID 分组；状态筛选、设备选择和列表模式可用。右侧展示额定功率与累计使用情况，不冒充瞬时采样。只有故障状态且快照可用时才能提交重启，确认默认取消；收到回包后仍等待新快照。</p>
+<h2 id="health">系统健康 · 分项观测与待处置队列</h2>
+<label for="healthState">查看健康状态</label><select id="healthState">
+<option value="health-selected-1360x860">故障已选中 / 可定位设备 · 1360×860</option>
+<option value="health">默认运行快照 · 1360×860</option>
+<option value="health-empty-1360x860">无设备故障 / 尚无遥测 · 1360×860</option>
+<option value="health-stopped-1360x860">监听停止 / 保留已入库记录 · 1360×860</option>
+<option value="health-read-error-1360x860">读取失败 / 旧信息待核对 · 1360×860</option>
+<option value="health-compact">小窗口 / 维护按钮固定可见 · 1280×720</option>
+<option value="health-details-1280x720">小窗口 / 展开诊断明细 · 1280×720</option>
+</select>
+<img id="healthShot" class="shot" src="captures/health-selected-1360x860.png" alt="系统健康原生 Qt 截图：真实状态分布、故障队列及演示维护">
+<p class="note">监听、数据库读取、已入库遥测分别表达。模拟器未订阅进程心跳，不显示虚构在线状态；也没有虚构 CPU、内存或综合健康分。黄金数据复位仍需二次确认，且与故障处置区分开。</p>
+<h2 id="theme">联合对照 · 已通过主题与本轮延展</h2>
+<label for="comparePage">对照页面</label><select id="comparePage"><option value="fleet">电桩状态</option><option value="health">系统健康</option></select>
+<p>均为 1360×860、1× 原生截图，全景同比缩小以适应查看窗口。新页面没有独立原稿，依据已通过的主题延展；业务布局与数据不同，不宣称逐像素一致。</p>
+<div class="pair">
+<figure><figcaption>已通过运营总览 · 视觉依据</figcaption><img class="full" src="../energy-pulse-qt-2026-09-08/captures/pulse-admin-1360x860.png" alt="已通过的运营总览主题参考"></figure>
+<figure><figcaption id="compareCaption">本轮电桩状态 · 派生布局</figcaption><img id="compareShot" class="full" src="captures/fleet-selected-1360x860.png" alt="本轮原生页面全景对照"></figure>
+</div>
+<h2>侧面板层次 · 1:1 局部</h2>
+<div class="compare"><div class="focus-pair">
+<figure><figcaption>原生主题依据 · 设备信息</figcaption><div class="focus source"><img src="../energy-pulse-qt-2026-09-08/captures/pulse-admin-1360x860.png" alt="参考界面侧面板局部"></div></figure>
+<figure><figcaption>本轮页面 · 选择与处置</figcaption><div id="focusTarget" class="focus fleet"><img id="focusShot" src="captures/fleet-selected-1360x860.png" alt="新界面侧面板局部"></div></figure>
+</div></div>
+<footer>本机留档 · 目标 Ubuntu 22.04 / Qt 6.2；实际抓图 Ubuntu 25.04 / Qt 6.8.3。当前为独立工作树候选版本，未自动同步主启动目录或发行包。</footer>
+</main>
+<script>
+for(const [select,image] of [['fleetState','fleetShot'],['healthState','healthShot']]){
+ const input=document.getElementById(select),shot=document.getElementById(image);
+ input.addEventListener('change',()=>{shot.src='captures/'+input.value+'.png';shot.alt=input.selectedOptions[0].textContent+' · Qt 实拍';});
+}
+document.getElementById('comparePage').addEventListener('change',event=>{
+ const name=event.target.value,isFleet=name==='fleet',path='captures/'+(isFleet?'fleet-selected-1360x860':'health-selected-1360x860')+'.png';
+ document.getElementById('compareShot').src=path;document.getElementById('focusShot').src=path;
+ document.getElementById('focusTarget').className='focus '+name;
+ document.getElementById('compareCaption').textContent='本轮'+(isFleet?'电桩状态':'系统健康')+' · 派生布局';
+});
+</script>
+</html>

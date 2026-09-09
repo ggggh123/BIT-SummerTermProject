@@ -10,6 +10,7 @@ class QLabel;
 class QPushButton;
 class QTimer;
 class UserApi;
+namespace ev::ui { class PulseChart; }
 
 class ChargePage final : public QWidget
 {
@@ -41,6 +42,7 @@ public slots:
                                   qint64 stationId);
 
 signals:
+    void rechargeRequested();
     void backRequested(qint64 presentedOrderId);
     void currentAuthorityObserved(ev::user::RequestContext context,
                                   ev::user::CurrentOrderResult result,
@@ -63,6 +65,10 @@ signals:
 private:
     void beginPage(quint64 selectionGeneration);
     void render();
+    void clearMutationError();
+    void restoreMutationError();
+    void requestTelemetry();
+    void renderTelemetry();
     void updatePolling();
     void requestPoll();
     void requestReconciliation();
@@ -92,6 +98,9 @@ private:
     QLabel *progress_;
     QLabel *status_;
     QLabel *identity_;
+    QWidget *reservationHero_ = nullptr;
+    QLabel *reservationHint_ = nullptr;
+    QLabel *reservationTitle_ = nullptr;
     QWidget *metrics_;
     QLabel *metricCaption_;
     QLabel *meter_;
@@ -107,9 +116,28 @@ private:
     QPushButton *cancelButton_;
     QPushButton *stopButton_;
     QPushButton *settleButton_;
+    QPushButton *rechargeButton_;
     QPushButton *backButton_;
     QPushButton *retryButton_;
     QTimer *pollTimer_;
+    QTimer *telemetryTimer_ = nullptr;
+    ev::ui::PulseChart *powerChart_ = nullptr;
+    QWidget *powerPanel_ = nullptr;
+    QWidget *powerMetricGroup_ = nullptr;
+    QLabel *power_ = nullptr;
+    QLabel *powerCaption_ = nullptr;
+    QLabel *sampleTime_ = nullptr;
+    QLabel *sampleNote_ = nullptr;
+    QPushButton *liveButton_ = nullptr;
+    QPushButton *detailsButton_ = nullptr;
+    bool detailsExpanded_ = false;
+    std::optional<ev::user::OrderTelemetry> telemetry_;
+    QString telemetryRequestId_;
+    qint64 telemetryOrderId_ = 0;
+    QString telemetryError_;
+    QString mutationError_;
+    QString mutationErrorCode_;
+    std::optional<ev::user::Order> mutationErrorOrder_;
     bool connected_ = false;
     bool pageActive_ = false;
     bool reconciliationRequired_ = false;

@@ -11,6 +11,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QResizeEvent>
+#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -85,7 +86,18 @@ HistoryPage::HistoryPage(UserApi *userApi, QWidget *parent)
     list_->setObjectName(QStringLiteral("historyList"));
     list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     list_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    list_->setSelectionMode(QAbstractItemView::NoSelection);
+    list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    connect(list_, &QListWidget::itemSelectionChanged, this, [this] {
+        for (int i = 0; i < list_->count(); ++i) {
+            auto *entry = list_->item(i);
+            if (auto *card = list_->itemWidget(entry)) {
+                card->setProperty("orderSelected", entry->isSelected());
+                card->style()->unpolish(card);
+                card->style()->polish(card);
+                card->update();
+            }
+        }
+    });
     list_->setSpacing(6);
     list_->setMinimumHeight(240);
     status_->setObjectName(QStringLiteral("historyStatus"));
@@ -100,7 +112,7 @@ HistoryPage::HistoryPage(UserApi *userApi, QWidget *parent)
     connectionBanner_->setObjectName(QStringLiteral("historyConnectionBanner"));
     connectionBanner_->setWordWrap(true);
     connectionBanner_->setProperty("role", QStringLiteral("danger"));
-    connectionBanner_->setStyleSheet(QStringLiteral("color: #BE4B42;"));
+    connectionBanner_->setStyleSheet(QStringLiteral("color: #f1ae98;"));
     retryButton_->setProperty("role", QStringLiteral("outline"));
 
     emptyState_->setProperty("role", QStringLiteral("card"));
@@ -353,6 +365,9 @@ void HistoryPage::renderCommittedPage()
         entry->setForeground(Qt::transparent);
         entry->setData(Qt::AccessibleTextRole, orderText(order));
         auto *card = new QFrame;
+        card->setObjectName(QStringLiteral("historyOrderCard"));
+        card->setAttribute(Qt::WA_TransparentForMouseEvents);
+        card->setProperty("orderSelected", false);
         card->setProperty("role", QStringLiteral("card"));
         auto *body = new QVBoxLayout(card);
         body->setContentsMargins(16, 14, 16, 14);

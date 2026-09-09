@@ -2,6 +2,7 @@
 #include "services/UserService.h"
 
 #include <QJsonArray>
+#include <QDateTime>
 #include <QJsonObject>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -91,6 +92,59 @@ class UserFlowTest : public QObject
     Q_OBJECT
 
 private slots:
+    void statisticsAggregateAllOwnedOrdersAndCalendarDays()
+    {
+        ScopedDatabase db;
+        AuthService auth(db.database());
+        UserService users(db.database());
+        const auto login = auth.loginUser(QStringLiteral("13800138000"));
+        QVERIFY(login.ok);
+        const int uid = auth.userIdForToken(login.token);
+        const QDate today = QDateTime::currentDateTimeUtc().toOffsetFromUtc(8 * 3600).date();
+        const QDate yesterday = today.addDays(-1);
+        const QDate previousMonth = QDate(today.year(), today.month(), 1).addDays(-1);
+        QSqlQuery q(db.database());
+        const auto insert = [&](int user, const QString &status, const QDate &date,
+                                double energy, int amount, bool started) {
+            q.prepare("INSERT INTO orders(user_id,charger_id,status,reserved_at,started_at,ended_at,energy_kwh,amount_fen) VALUES(?,1,?,?,?,?,?,?)");
+            q.addBindValue(user); q.addBindValue(status);
+            q.addBindValue(date.toString(Qt::ISODate) + "T08:00:00+08:00");
+            q.addBindValue(started ? QVariant(date.toString(Qt::ISODate) + "T08:00:00+08:00") : QVariant());
+            q.addBindValue(date.toString(Qt::ISODate) + "T09:00:00+08:00");
+            q.addBindValue(energy); q.addBindValue(amount);
+            return q.exec();
+        };
+        QVERIFY(insert(uid, "completed", previousMonth, 3.0, 300, true));
+        QVERIFY(insert(uid, "completed", yesterday, 4.0, 400, true));
+        QVERIFY(insert(uid, "charging", today, 2.0, 200, true));
+        QVERIFY(insert(uid, "cancelled", today, 0, 0, false));
+        QVERIFY(insert(uid, "reserved", today, 0, 0, false));
+        QVERIFY(insert(uid + 1, "completed", today, 999, 99900, true));
+        QJsonObject data;
+        QVERIFY(users.usageStatistics(uid, &data).ok);
+        QCOMPARE(data.value("userId").toInt(), uid);
+        QCOMPARE(data.value("orderCount").toInt(), 3);
+        QCOMPARE(data.value("completedCount").toInt(), 2);
+        QCOMPARE(data.value("energyKwh").toDouble(), 9.0);
+        QCOMPARE(data.value("paidFen").toInt(), 700);
+        QCOMPARE(data.value("durationSec").toInt(), 10800);
+        QCOMPARE(data.value("pendingSettlementCount").toInt(), 1);
+        QCOMPARE(data.value("pendingSettlementFen").toInt(), 200);
+        QCOMPARE(data.value("monthEnergyKwh").toDouble(), yesterday.month() == today.month() ? 6.0 : 2.0);
+        const auto days = data.value("days").toArray();
+        QCOMPARE(days.size(), 7);
+        for (int i = 0; i < 7; ++i) {
+            const auto date = today.addDays(i - 6);
+            const double expected = (date == today ? 2.0 : 0) + (date == yesterday ? 4.0 : 0)
+                + (date == previousMonth ? 3.0 : 0);
+            QCOMPARE(days[i].toObject().value("date").toString(), date.toString(Qt::ISODate));
+            QCOMPARE(days[i].toObject().value("energyKwh").toDouble(), expected);
+        }
+        QVERIFY(users.usageStatistics(uid + 2, &data).ok);
+        QCOMPARE(data.value("energyKwh").toDouble(), 0.0);
+        QCOMPARE(users.usageStatistics(0, &data).code, QStringLiteral("AUTH_REQUIRED"));
+    }
+
     void userLoginCreatesTokenAndMainChargeFlowSettles()
     {
         ScopedDatabase db;

@@ -89,7 +89,8 @@ private:
     class QLabel *cacheLabel_;
     class QLabel *destinationLabel_;
     class QPushButton *retryButton_;
-    class QComboBox *modeBox_;
+    class QPushButton *drivingButton_;
+    class QPushButton *walkingButton_;
     bool pageLoaded_ = false;
     bool configurationStarted_ = false;
     bool configured_ = false;

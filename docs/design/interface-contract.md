@@ -1,5 +1,7 @@
 # Foundation v1 冻结接口合同
 
+> **2026-09-08 本分支 UI 兼容扩展（待团队合入）：** “能量脉冲”Qt 实现新增第 28 个只读动作 `order.telemetry` 和第 29 个只读动作 `user.statistics`，分别读取本订单的实际功率采样和本人用电统计。原 27 个动作、既有成功对象、身份与结算语义不变；不是把模拟曲线放入正式界面。完整约定见 7.2 第 28、29 项；使用全部新功能时客户端和服务端应同时升级。本说明不代替下面的人工签字。
+
 > **2026-09-06 已批准补充：** 用户明确同意第 5 节“命令容量准入例外”。帧、身份和基础字段检查完成后，命令容量耗尽可先返回 `SERVER_BUSY`；成功准入后继续原权威业务检查和幂等语义。本补充不改变 v1 envelope、action、字段、状态或已有成功 ACK 内容，详见[变更记录](../management/interface-amendment-2026-09-06-capacity.md)。
 
 > **2026-09-04 运行 profile 说明：** 本合同的 v1 action、字段、状态、错误码和语义保持冻结，不因交付范围重置而删除、改名或缩窄。默认 **core profile** 只要求 Qt 用户端、Qt 管理/服务端、SQLite/设备模拟器形成闭环；它不要求在线 ML 生产者或 Web 消费者。`forecast.publish` 是显式启用的 optional producer extension；`forecast.latest`、`ForecastRun`/`ForecastRecord` 与第 8 节 dashboard snapshot contract 是必须保留的兼容能力。没有 active forecast 是合法 core 状态，`forecast.latest` 必须按既有合同返回 `forecastRun: null` 与 `records: []`；Web snapshot 不进入 core release gate。启用 Web 或 ML optional profile 时，本合同全文仍完整适用，不能以 optional 身份放宽任何既有合同规则。
@@ -35,7 +37,7 @@
 | --- | --- | --- | --- |
 | `version` | integer | 是 | 必须恰为 `1`；其他数值返回 `UNSUPPORTED_VERSION`，缺失或非 number 返回 `INVALID_REQUEST` |
 | `requestId` | string | 是 | trim 后非空；变更请求以它作为幂等键 |
-| `action` | string | 是 | trim 后非空，必须是第 6 节的 27 个字符串之一 |
+| `action` | string | 是 | trim 后非空，必须是第 6 节的字符串之一（原 27 个 + 本分支只读扩展 1 个） |
 | `token` | string | 否 | 省略或空字符串表示匿名；不得记录到日志、响应或业务对象 |
 | `payload` | object | 是 | 对应 action 声明的字段必须满足精确类型；未声明字段按下述规则忽略 |
 
@@ -153,7 +155,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 - 成功准入后，第 7 节各 action 的业务检查顺序、事务原子性、历史 ACK 重放、Timestamp 和错误域均保持不变。该例外不允许未认证调用、放宽字段校验、无界扩容、前台执行 SQL 或跨线程使用数据库连接。
 - 缓存 `system.health` 不依赖数据库命令容量，仍可直接响应；连接槽位耗尽时，连接尚未接纳，仍按 `SERVER_BUSY` 的连接容量含义拒绝连接，不据此开放业务权限。
 
-## 6. 27 个 action 与权限矩阵
+## 6. action 与权限矩阵（原 27 个 + 只读扩展 2 个）
 
 `system.health` 对匿名、已知身份和未知非空身份都允许。除它之外只有下表的 allow 单元允许；空 actor 表示 anonymous。
 
@@ -161,6 +163,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | `auth.user_login` | allow | deny | deny | deny | deny | deny |
 | `user.get` | deny | allow | deny | deny | deny | deny |
+| `user.statistics` | deny | allow | deny | deny | deny | deny |
 | `user.update` | deny | allow | deny | deny | deny | deny |
 | `wallet.recharge` | deny | allow | deny | deny | deny | deny |
 | `station.list` | deny | allow | allow | deny | deny | deny |
@@ -172,6 +175,7 @@ charger 与 active order 必须作为一个耦合状态处理：
 | `charge.settle` | deny | allow | deny | deny | deny | deny |
 | `order.current` | deny | allow | deny | deny | deny | deny |
 | `order.list` | deny | allow | deny | deny | deny | deny |
+| `order.telemetry` | deny | allow | deny | deny | deny | deny |
 | `order.cancel` | deny | allow | deny | deny | deny | deny |
 | `admin.login` | allow | deny | deny | deny | deny | deny |
 | `admin.dashboard` | deny | deny | allow | deny | deny | deny |
@@ -545,6 +549,46 @@ charger 与 active order 必须作为一个耦合状态处理：
 - Qt owner：`DemoResetService`。
 - 主要失败：`INVALID_REQUEST`（confirmation 缺失/非 string 或不精确等于 `RESET_DEMO`），然后 `INTERNAL_ERROR`（核心事务提交前的黄金哈希/恢复验证失败），然后 `DB_BUSY`。提交后的 snapshot 写失败不返回失败 code。
 
+#### 28. `order.telemetry`（2026-09-08 能量脉冲只读扩展）
+
+- actor：user；只能查询本人订单，冻结账户仍可读取。
+- payload：`orderId` — integer，必填，`1..2147483647`，与现有服务端订单 ID 实现一致。
+- success data：`{orderId,chargerId,ratedPowerKw,startedAt,samples,truncated}`，恰有这 6 个字段。`startedAt` 为原订单 Timestamp 或 null；`ratedPowerKw` 是设备额定功率，只供图表纵轴参考，不能作为实际功率显示。
+- `samples`：时间升序，最多最近 600 条；每条恰为 `{recordedAt:Timestamp,powerKw:number,energyKwh:number}`。数值非负，`energyKwh` 为订单时间范围内遥测增量的累计和，截断最近记录前已计算累计；`truncated` 为 boolean。
+- 取数：现有 `telemetry` 表中的 `event_type='telemetry'`，按订单的 charger 与 `(startedAt,endedAt]` 时间范围关联；进行中没有结束上界。未开始或没有有效采样返回空数组，不造波形、不补零。时间筛选与绘图精度为毫秒；这是现有无 `order_id` 外键遥测表的只读投影，不能作为账单重算依据，账单仍以 `Order.energyKwh/amountFen` 为准。
+- Qt 用户端：完成 2 秒订单权威轮询后再读取曲线；隐藏页面、断线、核验中、提交操作中或已有采样请求时不重复请求。数据由 requestId、登录会话、订单与设备身份共同关联。
+- 状态/转换：不修改订单、余额、设备状态；仍沿用服务端正常请求日志记录。
+- 主要失败：`AUTH_REQUIRED` / `FORBIDDEN`（入口权限）、`INVALID_REQUEST`（参数）、`ENTITY_NOT_FOUND`（订单不存在）、`FORBIDDEN`（非本人订单）、一般数据库失败。
+- 兼容：不增加 schema 迁移、不启用 Web/ML；旧客户端可继续使用新服务端。新客户端连接旧服务端时曲线读取可能失败，必须明确显示错误，不能展示测试样本。
+- 管理端另通过已有认证后的 `queryAdmin(AdminView::Energy)` 从 DB worker 读取指定站点最近采样窗口，不增加管理员 TCP 动作；最多回看 30 分钟且每设备最多 600 条。
+
+#### 29. `user.statistics`（2026-09-08 个人用电统计只读扩展）
+
+- actor：user；包括冻结账户。只能读取 token 对应的本人统计。
+- payload：严格为空对象 `{}`，不接受 `userId` 或任意额外参数。
+- success data 恰有以下 11 个字段；所有计数、秒数、分值均为非负 safe integer，电量为有限非负 number。
+
+| 字段 | 类型 | 口径 |
+| --- | --- | --- |
+| `userId` | integer | 当前登录用户 ID |
+| `asOf` | Timestamp | 统计时刻，北京时间 `+08:00` |
+| `orderCount` | integer | 已开始充电的 `charging/completed` 订单数；不计预约和取消 |
+| `completedCount` | integer | 上述订单中 `completed` 的数量 |
+| `energyKwh` | number | 上述订单 `energy_kwh` 总和，包含进行中已充电量 |
+| `paidFen` | integer | 仅 `completed` 订单的 `amount_fen` 总和 |
+| `durationSec` | integer | 各订单从开始到结束的秒数之和；未结束订单取 `asOf`，不小于零 |
+| `pendingSettlementCount` | integer | `charging` 且 `endedAt` 非空的订单数量 |
+| `pendingSettlementFen` | integer | 待结算订单金额之和，不重复计入 `paidFen` |
+| `monthEnergyKwh` | number | 开始日期属于 `asOf` 当月的上述订单电量之和 |
+| `days` | array | 固定 7 项，日期连续升序，从 `asOf` 的前 6 天到当日；每项恰为 `{date:Date,energyKwh:number}` |
+
+- 七日图按订单**开始日期**（北京时间）归集整单已充电量，不代表按跨日遥测拆分的逐日账单。无订单时总量为 0、七日值均为 0；请求未成功时客户端显示未加载/失败，不伪造零值或示例数据。
+- 服务端使用单个 SELECT 快照读取本人订单，不依赖分页历史记录。客户端独立跟踪 requestId 和登录会话，刷新取消旧统计读请求；退出/切换账号后旧响应失效。
+- 状态/转换：不修改订单、余额、设备状态或数据库 schema；沿用请求审计日志。
+- 失败：入口 `AUTH_REQUIRED` / `FORBIDDEN`，参数 `INVALID_REQUEST`，一般数据库失败。
+- 兼容：不向 `user.get` 成功对象追加字段（旧客户端使用严格字段校验）。新客户端连接旧服务端时只在统计区提示升级/不可用，不阻断账户资料、余额和充值功能。
+- 账号切换/退出是本机客户端行为：清空 token 与页面缓存，不新增服务端注销协议，不停止充电、不取消或自动结算订单。写操作正在提交或结果待核验时不允许直接退出；返回原账号后重新读取当前订单。
+
 ## 8. 事务、SQLite 与 dashboard snapshot 所有权
 
 - Qt 管理/服务端是运行期 SQLite 的唯一 writer。所有业务 mutation 和 `request_log` 幂等记录都在其串行 `DatabaseWorker` 上执行，并使用事务；UI、socket worker、timer 不直接写 SQLite。
@@ -556,6 +600,8 @@ charger 与 active order 必须作为一个耦合状态处理：
 ## 9. 冻结治理、签字与 tag
 
 冻结后只允许向后兼容、可忽略的新增字段。现有字段、27 个 action、五组 status、身份权限、枚举值和语义不得改名、删除、重新解释或缩窄原有合法范围；任何兼容新增都必须同时更新本文和可执行合同测试。
+
+本分支对上述规则的增量提案仅为第 28 项独立只读动作，已同步可执行动作清单、权限测试和 TCP 回归；未改写原 27 项。团队合入前应核对双端同时更新，不把本地完成记录当作远端已合并。
 
 不得伪造签名。当前确认状态如下：
 

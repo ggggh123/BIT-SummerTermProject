@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QStringList>
+#include <QVector>
 #include <QWidget>
 
 #include "core/TelemetryEngine.h"
@@ -11,6 +12,7 @@ class QListWidget;
 class QPushButton;
 class QTableWidget;
 class QTimer;
+namespace ev::ui { class PulseChart; }
 
 namespace ev::simulator {
 
@@ -42,6 +44,10 @@ private slots:
 
 private:
     void updateChargerTable();
+    void updateRunState();
+    void updateChart();
+    void updateReading();
+    void setSessionState(const QString &text, const QString &tone);
     void drainIntents();
     int selectedChargerId() const;
 
@@ -49,10 +55,30 @@ private:
     TelemetryEngine *engine_;
     bool running_ = false;
     int tickCount_ = 0;
+    qint64 sampleCount_ = 0;
+    qint64 chartStartMs_ = 0;
+    struct Batch {
+        QDateTime recordedAt;
+        QMap<int, TelemetrySample> samples;
+    };
+    QVector<Batch> batches_;
+    QMap<int, TelemetrySample> latestSamples_;
 
     QLabel *badge_;
     QLabel *timeLabel_;
     QLabel *eventLabel_;
+    QLabel *sampleLabel_;
+    QLabel *runState_;
+    QLabel *selectedLabel_;
+    QLabel *selectedState_;
+    QLabel *selectedRated_;
+    QLabel *selectedPower_;
+    QLabel *powerLabel_;
+    QLabel *scopeLabel_;
+    QLabel *cursorLabel_;
+    QLabel *fleetLabel_;
+    QLabel *emptyLabel_;
+    QLabel *logEmptyLabel_;
     QPushButton *runButton_;
     QPushButton *faultButton_;
     QPushButton *recoverButton_;
@@ -61,6 +87,7 @@ private:
     QTableWidget *table_;
     QListWidget *logList_;
     QTimer *tickTimer_;
+    ev::ui::PulseChart *chart_;
     QStringList logLines_;
 };
 

@@ -1,0 +1,13 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>能量脉冲 · 联合视觉证据</title>
+<style>
+body{margin:0;background:#081822;color:#eaf3f6;font:14px/1.6 "Noto Sans CJK SC",sans-serif}main{width:880px;padding:16px;box-sizing:border-box}h1{font-size:20px;margin:0 0 8px}p,figcaption{font-size:12px;color:#97adbc;margin:8px 0}.pair{display:flex;gap:20px}figure{margin:0;flex:1;min-width:0}.full{width:414px;height:auto;display:block}.crop{width:268px;height:260px;position:relative;overflow:hidden}.crop img{width:1360px;height:860px;position:absolute;max-width:none}.source img{left:-1080px;top:-183px}.target img{left:-1070px;top:-291px}.target.health img{left:-1055px;top:-178px}a{color:#8be4ce}
+</style><main>
+<h1>同一主题 · 原生 Qt 联合对照</h1>
+<p><a href="?page=fleet">电桩状态</a> · <a href="?page=health">系统健康</a> · <a href="index.html">返回完整留档</a></p>
+<p>全景同为 1360×860、1×，等比缩至 414 px 宽；下方局部为 1:1。原稿只定义运营总览，新页是同主题的业务延展。</p>
+<div class="pair"><figure><figcaption>已通过运营总览 · 视觉依据</figcaption><img class="full" src="../energy-pulse-qt-2026-09-08/captures/pulse-admin-1360x860.png" alt="已通过的主题全景"></figure><figure><figcaption id="pageName">电桩状态 · 已定位故障桩</figcaption><img class="full" id="fullTarget" src="captures/fleet-selected-1360x860.png" alt="本轮页面全景"></figure></div>
+<p>局部：已通过设备面板 → 新页面选择／处置面板；比较字体、间距、前景背景关系，业务字段不要求相同。</p>
+<div class="pair"><figure><div class="crop source"><img src="../energy-pulse-qt-2026-09-08/captures/pulse-admin-1360x860.png" alt="已通过主题面板局部"></div></figure><figure><div class="crop target" id="targetCrop"><img id="cropTarget" src="captures/fleet-selected-1360x860.png" alt="新页面面板局部"></div></figure></div>
+<p>截图来自本机 Qt 测试，不是网页重绘。设备状态／重启为隔离黄金库；主题依据是此前已通过的设计测试样本。</p>
+</main><script>if(new URLSearchParams(location.search).get('page')==='health'){for(const id of ['fullTarget','cropTarget'])document.getElementById(id).src='captures/health-selected-1360x860.png';document.getElementById('targetCrop').className='crop target health';document.getElementById('pageName').textContent='系统健康 · 故障已选中';}</script></html>

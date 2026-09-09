@@ -18,7 +18,7 @@ add_executable(ev_charger_simulator
     src/ui/SimulatorWindow.cpp
     src/ui/SimulatorWindow.h
 )
-target_link_libraries(ev_charger_simulator PRIVATE simulator_core Qt6::Widgets)
+target_link_libraries(ev_charger_simulator PRIVATE simulator_core ev_pulse_ui Qt6::Widgets)
 
 # --- tests ---
 if(BUILD_TESTING)
@@ -42,7 +42,7 @@ add_executable(tst_simulator_window
     tests/tst_simulatorwindow.cpp
     src/ui/SimulatorWindow.cpp
 )
-target_link_libraries(tst_simulator_window PRIVATE simulator_core Qt6::Widgets Qt6::Test)
+target_link_libraries(tst_simulator_window PRIVATE simulator_core ev_pulse_ui Qt6::Widgets Qt6::Test)
 add_test(NAME simulator_window COMMAND tst_simulator_window)
 set_tests_properties(simulator_window PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

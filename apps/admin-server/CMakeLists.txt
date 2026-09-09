@@ -44,6 +44,10 @@ add_executable(ev_admin_server
     src/ui/LoginDialog.h
     src/ui/MainWindow.cpp
     src/ui/MainWindow.h
+    src/ui/EnergyPage.cpp
+    src/ui/EnergyPage.h
+    src/ui/OperationsPages.cpp
+    src/ui/OperationsPages.h
     src/ui/AdminTheme.cpp
     src/ui/AdminTheme.h
     src/ui/AdminVisuals.cpp
@@ -59,4 +63,5 @@ target_link_libraries(ev_admin_server PRIVATE
     Qt6::Network
     Qt6::Sql
     ev_protocol
+    ev_pulse_ui
 )

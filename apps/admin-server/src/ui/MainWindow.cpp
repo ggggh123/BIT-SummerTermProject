@@ -1,6 +1,8 @@
 #include "ui/MainWindow.h"
 #include "ui/AdminTheme.h"
 #include "ui/AdminVisuals.h"
+#include "ui/EnergyPage.h"
+#include "ui/OperationsPages.h"
 #include "protocol/JsonEnvelope.h"
 #include <QApplication>
 #include <QFrame>
@@ -9,6 +11,7 @@
 #include <QScrollArea>
 #include <QSizePolicy>
 #include <QTabBar>
+#include <QStackedWidget>
 #include <QUuid>
 #include <QStatusBar>
 
@@ -165,16 +168,16 @@ bool confirmAction(QWidget *parent,const QString &title,const QString &descripti
     QMessageBox dialog(QMessageBox::NoIcon,title,title,QMessageBox::Yes|QMessageBox::No,parent);
     dialog.setTextFormat(Qt::PlainText);
     dialog.setInformativeText(description);
-    dialog.setIconPixmap(AdminTheme::icon("alerts",QColor("#B94B43")).pixmap(36,36));
+    dialog.setIconPixmap(AdminTheme::icon("alerts",QColor("#f1ae98")).pixmap(36,36));
     dialog.setDefaultButton(QMessageBox::No);
     dialog.setEscapeButton(QMessageBox::No);
     dialog.button(QMessageBox::No)->setText(QStringLiteral("取消"));
     dialog.button(QMessageBox::Yes)->setText(action);
     dialog.button(QMessageBox::Yes)->setProperty("role","danger");
     dialog.setStyleSheet(QStringLiteral(
-        "QMessageBox { background:#FFFFFF; }"
+        "QMessageBox { background:#193444; }"
         "QLabel#qt_msgbox_label { font-size:18px; font-weight:600; }"
-        "QLabel#qt_msgbox_informativelabel { color:#718078; min-width:340px; max-width:440px; padding:8px 0 16px; }"));
+        "QLabel#qt_msgbox_informativelabel { color:#97adbc; min-width:340px; max-width:440px; padding:8px 0 16px; }"));
     return dialog.exec()==QMessageBox::Yes;
 }
 
@@ -196,30 +199,28 @@ MainWindow::MainWindow(AppContext *context, const QString &adminToken, QWidget *
     shellLayout->setSpacing(0);
     auto *sidebar=new QFrame;
     sidebar->setProperty("role","sidebar");
-    sidebar->setFixedWidth(208);
+    sidebar->setFixedWidth(164);
     auto *sideLayout=new QVBoxLayout(sidebar);
-    sideLayout->setContentsMargins(18,28,18,22);
+    sideLayout->setContentsMargins(14,28,14,22);
     sideLayout->setSpacing(6);
     auto *brand=textLabel(QStringLiteral("东软充电"),"sectionTitle");
-    brand->setStyleSheet(QStringLiteral("font-size:24px; font-weight:700; color:#FFFFFF;"));
+    brand->setStyleSheet(QStringLiteral("font-size:20px; font-weight:600; color:#eaf3f6;"));
     sideLayout->addWidget(brand);
-    sideLayout->addWidget(textLabel(QStringLiteral("运营管理平台")));
+    sideLayout->addWidget(textLabel(QStringLiteral("站点运营工作台")));
     sideLayout->addSpacing(22);
     const QStringList titles={QStringLiteral("运营总览"),QStringLiteral("电桩状态"),QStringLiteral("充电桩管理"),
         QStringLiteral("充电站管理"),QStringLiteral("用户管理"),QStringLiteral("接口服务"),QStringLiteral("请求日志"),QStringLiteral("系统健康")};
     const QStringList icons={"dashboard","chargers","bolt","stations","users","server","logs","health"};
     for(int i=0;i<titles.size();++i) {
-        if(i==0 || i==2 || i==5) {
+        if(i==5) {
             if(i>0) sideLayout->addSpacing(12);
             auto *section=textLabel(i==0 ? QStringLiteral("运营概览") : i==2 ? QStringLiteral("资产管理") : QStringLiteral("系统运维"));
-            section->setStyleSheet(QStringLiteral("font-size:11px; color:#8FAFA3; padding:6px 12px;"));
+            section->setStyleSheet(QStringLiteral("font-size:11px; color:#86a1b5; padding:6px 12px;"));
             sideLayout->addWidget(section);
         }
-        auto *button=new QPushButton(titles.at(i));
+        auto *button=new QPushButton(QStringLiteral("%1  %2").arg(i+1,2,10,QLatin1Char('0')).arg(titles.at(i)));
         button->setObjectName(QString("adminNav%1").arg(i));
         button->setProperty("role","navButton");
-        button->setIcon(AdminTheme::icon(icons.at(i),QColor("#BDD3C9")));
-        button->setIconSize(QSize(19,19));
         button->setCheckable(true);
         button->setAutoExclusive(true);
         button->setMinimumHeight(40);
@@ -229,21 +230,21 @@ MainWindow::MainWindow(AppContext *context, const QString &adminToken, QWidget *
         connect(button,&QPushButton::clicked,this,[this,i] { m_tabs->setCurrentIndex(i); });
     }
     sideLayout->addStretch();
-    sideLayout->addWidget(textLabel(QStringLiteral("ADMINISTRATOR")));
+    sideLayout->addWidget(textLabel(QStringLiteral("管理服务已连接")));
     auto *admin=textLabel(QStringLiteral("管理员 · admin"));
     admin->setStyleSheet(QStringLiteral("color:#FFFFFF; font-size:14px; padding:4px 0;"));
     sideLayout->addWidget(admin);
-    sideLayout->addWidget(textLabel(QStringLiteral("本机演示环境  /  Qt Desktop")));
+    sideLayout->addWidget(textLabel(QStringLiteral("本机运行 / Qt Desktop")));
     shellLayout->addWidget(sidebar);
 
     auto *workspace=new QWidget;
     auto *workspaceLayout=new QVBoxLayout(workspace);
-    workspaceLayout->setContentsMargins(28,24,28,16);
-    workspaceLayout->setSpacing(20);
+    workspaceLayout->setContentsMargins(29,24,29,20);
+    workspaceLayout->setSpacing(28);
     auto *heading=new QHBoxLayout;
     auto *headingText=new QVBoxLayout;
     headingText->setSpacing(5);
-    m_pageTitle=textLabel(titles.first(),"pageTitle");
+    m_pageTitle=textLabel(QStringLiteral("能量观察"),"pageTitle");
     m_pageSubtitle=textLabel(QString(),"pageSubtitle");
     headingText->addWidget(m_pageTitle);
     headingText->addWidget(m_pageSubtitle);
@@ -251,6 +252,9 @@ MainWindow::MainWindow(AppContext *context, const QString &adminToken, QWidget *
     auto *environment=textLabel(QStringLiteral("本机服务  ·  %1:%2").arg(m_context->host()).arg(m_context->port()),"statusGood");
     environment->setToolTip(QStringLiteral("当前管理窗口所属服务的监听地址"));
     heading->addWidget(environment);
+    auto *dashboardMode=new QPushButton(QStringLiteral("营收统计"));
+    dashboardMode->setObjectName(QStringLiteral("dashboardModeButton"));
+    heading->addWidget(dashboardMode);
     workspaceLayout->addLayout(heading);
 
     m_tabs = new QTabWidget;
@@ -267,6 +271,13 @@ MainWindow::MainWindow(AppContext *context, const QString &adminToken, QWidget *
                  QStringLiteral("接口服务"));
     m_tabs->addTab(createRequestLogPage(), QStringLiteral("请求日志"));
     m_tabs->addTab(createHealthPage(), QStringLiteral("系统健康"));
+    connect(dashboardMode,&QPushButton::clicked,this,[this,dashboardMode] {
+        auto *views=findChild<QStackedWidget *>(QStringLiteral("overviewViews"));
+        views->setCurrentIndex(views->currentIndex()==0?1:0);
+        dashboardMode->setText(views->currentIndex()==0?QStringLiteral("营收统计"):QStringLiteral("能量观察"));
+        m_pageTitle->setText(views->currentIndex()==0?QStringLiteral("能量观察"):QStringLiteral("营收统计"));
+        refreshCurrentPage();
+    });
 
     m_tabs->tabBar()->hide();
     workspaceLayout->addWidget(m_tabs,1);
@@ -276,9 +287,11 @@ MainWindow::MainWindow(AppContext *context, const QString &adminToken, QWidget *
         QStringLiteral("统一查看充电设备，按站点筛选并处理故障"),QStringLiteral("管理站点资产与充电资源配置"),
         QStringLiteral("查询用户资料与账户状态，敏感操作需再次确认"),QStringLiteral("本机服务配置与运行数据位置"),
         QStringLiteral("追踪服务请求与响应结果，不显示会话凭据"),QStringLiteral("核心服务运行情况与演示环境维护")};
-    connect(m_tabs, &QTabWidget::currentChanged, this, [this,titles,descriptions](int index) {
+    connect(m_tabs, &QTabWidget::currentChanged, this, [this,titles,descriptions,dashboardMode](int index) {
         for(int i=0;i<m_navigation.size();++i) m_navigation.at(i)->setChecked(i==index);
-        m_pageTitle->setText(titles.value(index));
+        const auto *views=findChild<QStackedWidget *>(QStringLiteral("overviewViews"));
+        m_pageTitle->setText(index==0?(views->currentIndex()==0?QStringLiteral("能量观察"):QStringLiteral("营收统计")):titles.value(index));
+        dashboardMode->setVisible(index==0);
         m_pageSubtitle->setText(descriptions.value(index));
         refreshCurrentPage();
     });
@@ -293,6 +306,30 @@ MainWindow::MainWindow(AppContext *context, const QString &adminToken, QWidget *
 }
 
 QWidget *MainWindow::createDashboardPage()
+{
+    auto *views=new QStackedWidget;
+    views->setObjectName(QStringLiteral("overviewViews"));
+    auto *energy=new EnergyPage;
+    energy->setMinimumHeight(660);
+    auto *energyViewport=new QScrollArea;
+    energyViewport->setObjectName(QStringLiteral("energyPageViewport"));
+    energyViewport->setWidgetResizable(true);
+    energyViewport->setFrameShape(QFrame::NoFrame);
+    energyViewport->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    energyViewport->setWidget(energy);
+    auto *revenue=createRevenuePage();
+    views->addWidget(energyViewport);views->addWidget(revenue);
+    auto refresh=[this,views,energy,revenue]{
+        if(views->currentIndex()==0) queryView(AdminView::Energy,{{"stationId",energy->stationId()}},energy,
+            [energy](const QJsonObject &data){energy->setData(data);});
+        else if(m_pageRefreshers.contains(revenue))m_pageRefreshers.value(revenue)();
+    };
+    connect(energy,&EnergyPage::stationChanged,this,refresh);
+    registerPageRefresh(views,refresh);refresh();
+    return views;
+}
+
+QWidget *MainWindow::createRevenuePage()
 {
     auto *page=new QWidget;
     auto *layout=pageLayout(page);
@@ -309,7 +346,7 @@ QWidget *MainWindow::createDashboardPage()
         top->addWidget(textLabel(titles.at(i)));
         top->addStretch();
         auto *icon=new QLabel;
-        icon->setPixmap(AdminTheme::icon(i==2 ? "dashboard" : "orders",QColor("#00856A")).pixmap(22,22));
+        icon->setPixmap(AdminTheme::icon(i==2 ? "dashboard" : "orders",QColor("#72ddc3")).pixmap(22,22));
         top->addWidget(icon);
         cardLayout->addLayout(top);
         auto *value=textLabel(QStringLiteral("—"),"metricValue");
@@ -364,7 +401,7 @@ QWidget *MainWindow::createDashboardPage()
         rowLayout->addWidget(caption);
         rowLayout->addStretch();
         auto *number=textLabel("—");
-        number->setStyleSheet(QStringLiteral("font-weight:600; color:#18352D; font-size:12px;"));
+        number->setStyleSheet(QStringLiteral("font-weight:600; color:#eaf3f6; font-size:12px;"));
         rowLayout->addWidget(number);
         counts.insert(code,number);
         legend->addWidget(row,i/2,i%2);
@@ -407,69 +444,44 @@ QWidget *MainWindow::createDashboardPage()
 
 QWidget *MainWindow::createPileStatusPage()
 {
-    auto *page = new QWidget;
-    auto *layout = pageLayout(page);
-    auto *summaryTable = makeTable({QStringLiteral("状态"), QStringLiteral("数量"), QStringLiteral("占比")});
-    auto *detailTable = makeTable({QStringLiteral("桩ID"), QStringLiteral("编号"), QStringLiteral("所属电站"), QStringLiteral("类型"), QStringLiteral("功率(kW)"), QStringLiteral("状态"), QStringLiteral("累计次数"), QStringLiteral("累计时长(s)")});
-    summaryTable->setObjectName(QStringLiteral("pileStatusSummaryTable"));
-    detailTable->setObjectName(QStringLiteral("pileStatusDetailTable"));
-    summaryTable->verticalHeader()->setDefaultSectionSize(32);
-    auto *ring=new AdminVisuals::StateRing;
-    auto *all=new QPushButton(QStringLiteral("显示全部电桩"));
-    const QList<QPair<QString, QString>> states = {
-        {QStringLiteral("idle"), QStringLiteral("空闲")},
-        {QStringLiteral("reserved"), QStringLiteral("预约")},
-        {QStringLiteral("charging"), QStringLiteral("充电")},
-        {QStringLiteral("fault"), QStringLiteral("故障")},
-        {QStringLiteral("restarting"), QStringLiteral("重启中")}
-    };
-    auto refresh = [this, summaryTable, detailTable, states, ring]() {
-        queryView(AdminView::Summary, {}, summaryTable, [=](const QJsonObject &summary) {
-            const QJsonObject status = summary.value(QStringLiteral("statusCounts")).toObject();
-            ring->setCounts(status);
-            QList<QStringList> rows;
-            const int total = status.value(QStringLiteral("total")).toInt();
-            for (const auto &state : states) {
-                const int count = status.value(state.first).toInt();
-                rows.append({state.second, QString::number(count),
-                             total == 0 ? QStringLiteral("0%") : QStringLiteral("%1%").arg(qRound(count * 100.0 / total))});
-            }
-            fillTable(summaryTable, rows);
-            const int selectedState = summaryTable->currentRow();
-            const QString statusFilter = selectedState >= 0 && selectedState < states.size()
-                ? states.at(selectedState).first : QString();
-            queryRows(AdminView::Chargers, {{"status",statusFilter}}, detailTable);
+    auto *viewport=new QScrollArea;
+    viewport->setObjectName("fleetPageViewport");
+    viewport->setWidgetResizable(true); viewport->setFrameShape(QFrame::NoFrame);
+    viewport->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *page=new FleetStatusPage;
+    page->setMinimumHeight(660);
+    viewport->setWidget(page);
+    auto refresh=[this,page] {
+        if(page->property("operationsPending").toBool())return;
+        page->setProperty("operationsPending",true);
+        queryView(AdminView::Operations,{},page,[page](const QJsonObject &data) {
+            page->setProperty("operationsPending",false); page->setData(data);
+        },[page](const QString &error) {
+            page->setProperty("operationsPending",false); page->setReadError(error);
         });
     };
-    connect(summaryTable, &QTableWidget::cellClicked, this, [this, detailTable, states](int row, int) {
-        if (row >= 0 && row < states.size()) {
-            queryRows(AdminView::Chargers, {{"status",states.at(row).first}}, detailTable);
-        }
+    connect(page,&FleetStatusPage::refreshRequested,this,refresh);
+    connect(page,&FleetStatusPage::logsRequested,this,[this]{m_tabs->setCurrentIndex(6);});
+    connect(page,&FleetStatusPage::restartRequested,this,[this,page,refresh](int id) {
+        if(id<=0)return;
+        if(!confirmAction(this,QStringLiteral("确认重启故障电桩"),
+            QStringLiteral("即将重启设备 #%1。操作会先进入重启中，再由服务端完成状态转换。请确认故障目标。").arg(id),
+            QStringLiteral("确认重启")))return;
+        page->setRestartPending(true);
+        m_context->executeLocal({1,QUuid::createUuid().toString(QUuid::WithoutBraces),
+            "admin.charger_restart",m_adminToken,{{"chargerId",id}}},page,
+            [this,page,refresh](const QByteArray &bytes) {
+                const auto response=ev::protocol::parseResponse(bytes);
+                page->setRestartPending(false);
+                if(!response.ok)QMessageBox::warning(this,QStringLiteral("重启未完成"),response.code+"："+response.message);
+                else statusBar()->showMessage(QStringLiteral("重启已提交；等待服务端更新设备状态"),6000);
+                refresh();
+                if(response.ok)QTimer::singleShot(1700,page,refresh);
+            });
     });
-    connect(all,&QPushButton::clicked,this,[summaryTable,refresh] {
-        summaryTable->clearSelection(); summaryTable->setCurrentItem(nullptr); refresh();
-    });
-    auto *top=new QHBoxLayout;
-    top->setSpacing(16);
-    auto *ringCard=panel(QStringLiteral("设备分布"));
-    ringCard->setMaximumWidth(260);
-    ringCard->layout()->addWidget(ring);
-    auto *summaryCard=panel(QStringLiteral("状态统计"));
-    summaryCard->layout()->addWidget(summaryTable);
-    top->addWidget(ringCard,1);
-    top->addWidget(summaryCard,3);
-    layout->addLayout(top,2);
-    auto *details=panel();
-    auto *detailLayout=qobject_cast<QVBoxLayout *>(details->layout());
-    auto *heading=new QHBoxLayout;
-    heading->addWidget(textLabel(QStringLiteral("电桩运行明细"),"sectionTitle"));
-    heading->addStretch(); heading->addWidget(all);
-    detailLayout->addLayout(heading);
-    detailLayout->addWidget(detailTable,1);
-    layout->addWidget(details,3);
-    registerPageRefresh(page, refresh);
+    registerPageRefresh(viewport,refresh);
     refresh();
-    return page;
+    return viewport;
 }
 
 QWidget *MainWindow::createChargerManagementPage()
@@ -768,11 +780,9 @@ QWidget *MainWindow::createRequestLogPage()
 
 QWidget *MainWindow::createHealthPage()
 {
-    auto *page = new QWidget;
-    auto *layout = pageLayout(page);
-    auto *reset = new QPushButton(QStringLiteral("恢复演示黄金数据"));
-    reset->setObjectName(QStringLiteral("demoResetButton"));
-    reset->setProperty("role","danger");
+    auto *page=new SystemHealthPage;
+    auto *reset=page->resetButton();
+    // 保留已有复位的确认、单次在途和失败 ACK 同 requestId 重试语义。
     connect(reset,&QPushButton::clicked,this,[this,reset] {
         if (!confirmAction(this,QStringLiteral("确认复位演示数据"),
             QStringLiteral("此操作将丢失当前演示业务状态（用户变更、订单、设备事件及旧请求日志），并恢复批准的黄金数据。请仅在重新准备演示时执行。"),
@@ -794,48 +804,25 @@ QWidget *MainWindow::createHealthPage()
                 refreshCurrentPage();
             });
     });
-    auto *coreTable = makeTable({QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")});
-    coreTable->setObjectName(QStringLiteral("healthTable"));
-    auto *optionalTable = makeTable({QStringLiteral("检查项"), QStringLiteral("状态"), QStringLiteral("说明")});
-    optionalTable->setObjectName(QStringLiteral("healthOptionalTable"));
-    auto refresh = [this, coreTable, optionalTable]() {
-        const QJsonObject health = m_context->healthSnapshot();
-        const QString status = health.value(QStringLiteral("status")).toString();
-        const bool forecastActive = !health.value(QStringLiteral("forecastRunId")).toString().isEmpty();
-        const QString forecastState = forecastActive
-            ? QStringLiteral("活动批次：") + health.value(QStringLiteral("forecastRunId")).toString()
-            : QStringLiteral("无活动预测批次");
-        fillTable(coreTable,
-                  {{QStringLiteral("运行上下文"), health.contains(QStringLiteral("schemaVersion")) ? QStringLiteral("active") : QStringLiteral("unverified"), QStringLiteral("已加载服务端健康快照；完整业务仍需演示验证")},
-                   {QStringLiteral("服务监听"), QStringLiteral("active"), QStringLiteral("%1:%2").arg(m_context->host()).arg(m_context->port())},
-                   {QStringLiteral("数据库 schema"), QStringLiteral("active"), QString::number(health.value(QStringLiteral("schemaVersion")).toInt())},
-                   {QStringLiteral("快照版本"), QStringLiteral("active"), QString::number(health.value(QStringLiteral("snapshotVersion")).toInt())}});
-        fillTable(optionalTable,
-                  {{QStringLiteral("扩展预测"), forecastActive ? status : QStringLiteral("disabled"), QStringLiteral("不参与核心验收 · ")+forecastState},
-                   {QStringLiteral("模拟器状态"), QStringLiteral("unverified"), QStringLiteral("请查看模拟器面板；本页尚未订阅其心跳")}});
+    auto refresh=[this,page] {
+        if(page->property("operationsPending").toBool())return;
+        page->setProperty("operationsPending",true);
+        queryView(AdminView::Operations,{},page,[this,page](const QJsonObject &data) {
+            page->setProperty("operationsPending",false);
+            page->setData(data,m_context->healthSnapshot(),
+                m_context->apiServer()&&m_context->apiServer()->isListening(),
+                QStringLiteral("%1:%2").arg(m_context->host()).arg(m_context->port()));
+        },[page](const QString &error) {
+            page->setProperty("operationsPending",false); page->setReadError(error);
+        });
     };
-    for (auto *table : {coreTable, optionalTable}) {
-        table->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Fixed);
-        table->horizontalHeader()->setSectionResizeMode(1,QHeaderView::Fixed);
-        table->setColumnWidth(0,160);
-        table->setColumnWidth(1,140);
-    }
-    auto *core=panel(QStringLiteral("核心服务检查"),QStringLiteral("服务与数据状态按本机运行上下文展示，可选预测未启用不等同于核心服务异常。"));
-    core->layout()->addWidget(coreTable);
-    layout->addWidget(core,1);
-    auto *optional=panel(QStringLiteral("预测扩展与独立设备诊断"),QStringLiteral("预测为可选扩展；模拟器仍属核心交付，接入状态须在其独立面板确认。"));
-    optional->layout()->addWidget(optionalTable);
-    layout->addWidget(optional);
-    auto *danger=panel(QStringLiteral("演示数据维护"),QStringLiteral("恢复黄金数据会清除本轮用户变更、订单、设备事件和旧请求日志。请仅在重新准备演示时操作。"));
-    danger->setObjectName(QStringLiteral("adminDangerZone"));
-    danger->setStyleSheet(QStringLiteral("QFrame#adminDangerZone { border:1px solid #E8C9C4; background:#FFFDFC; border-radius:14px; }"));
-    auto *actions=new QHBoxLayout;
-    actions->addWidget(textLabel(QStringLiteral("此操作需二次确认")));
-    actions->addStretch();
-    actions->addWidget(reset);
-    qobject_cast<QVBoxLayout *>(danger->layout())->addLayout(actions);
-    layout->addWidget(danger);
-    registerPageRefresh(page, refresh);
+    connect(page,&SystemHealthPage::refreshRequested,this,refresh);
+    connect(page,&SystemHealthPage::logsRequested,this,[this]{m_tabs->setCurrentIndex(6);});
+    connect(page,&SystemHealthPage::locateChargerRequested,this,[this](int id) {
+        m_tabs->setCurrentIndex(1);
+        if(auto *fleet=findChild<FleetStatusPage *>())fleet->selectCharger(id);
+    });
+    registerPageRefresh(page,refresh);
     refresh();
     return page;
 }
@@ -857,7 +844,7 @@ QWidget *MainWindow::createPlaceholderTablePage(const QStringList &headers, cons
         value->setTextInteractionFlags(Qt::TextSelectableByMouse|Qt::TextSelectableByKeyboard);
         value->setFocusPolicy(Qt::StrongFocus);
         value->setAccessibleName(row.first());
-        value->setStyleSheet(QStringLiteral("color:#18352D; font-size:15px; padding:12px; background:#F5F6F2; border-radius:8px;"));
+        value->setStyleSheet(QStringLiteral("color:#eaf3f6; font-size:15px; padding:12px; background:#102536; border-radius:8px;"));
         line->addWidget(value,1);
         auto *copy=new QPushButton(QStringLiteral("复制"));
         copy->setAccessibleName(QStringLiteral("复制")+row.first());
@@ -892,14 +879,19 @@ void MainWindow::refreshCurrentPage()
     }
 }
 void MainWindow::queryView(AdminView view, const QJsonObject &parameters, QObject *receiver,
-                           std::function<void(QJsonObject)> callback)
+                           std::function<void(QJsonObject)> callback, std::function<void(QString)> onError)
 {
     const auto revision = receiver->property("refreshRevision").toULongLong() + 1;
     receiver->setProperty("refreshRevision",revision);
-    m_context->queryAdmin(view,m_adminToken,parameters,receiver,[this,receiver,revision,callback](const QByteArray &bytes) {
+    m_context->queryAdmin(view,m_adminToken,parameters,receiver,[this,receiver,revision,callback,onError](const QByteArray &bytes) {
         if (receiver->property("refreshRevision").toULongLong() != revision) return;
         const auto response = ev::protocol::parseResponse(bytes);
-        if (!response.ok) { statusBar()->showMessage(response.code + "：" + response.message,5000); return; }
+        if (!response.ok) {
+            const auto error=response.code + "：" + response.message;
+            statusBar()->showMessage(error,5000);
+            if(onError)onError(error);
+            return;
+        }
         callback(response.data.toObject());
     });
 }

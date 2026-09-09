@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""新环境一键部署：依赖安装 → 环境检查 → CMake 配置 → 全量编译 →（可选）拉起三端演示。
+"""新环境一键部署：依赖安装 → 环境检查 → 编译三端 →（可选）拉起演示。
 
 新用户拿到项目文件夹后，在 Ubuntu 虚拟机上只需：
 
@@ -19,12 +19,13 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# 与 dev 基线对齐：默认使用完整测试构建预设；二进制目录随预设变化。
-DEFAULT_PRESET = "ubuntu22-test"
+# 日常部署不构建测试副本，避免低内存虚拟机首次编译过慢或 OOM。
+DEFAULT_PRESET = "ubuntu22"
 PRESET_BUILD_DIRS = {
     "ubuntu22": "build/ubuntu22",
     "ubuntu22-test": "build/ubuntu22-test",
@@ -101,12 +102,19 @@ def configure_and_build(preset, cpus):
     return True
 
 
+def positive_jobs(value):
+    jobs = int(value)
+    if jobs < 1:
+        raise argparse.ArgumentTypeError("并行数必须大于 0")
+    return jobs
+
+
 def start_demo(run_id, build_dir):
     env = os.environ.copy()
     env.setdefault("EV_SIMULATOR_TOKEN", "demo-simulator-token")
     env.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
     env.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ignore-gpu-blocklist")
-    cli = ["python3", "scripts/demo_cli.py"]
+    cli = [sys.executable, "scripts/demo_cli.py"]
     for action in ("reset", "start"):
         cmd = cli + [action, "--run-id", run_id]
         if action == "start":
@@ -124,7 +132,10 @@ def main():
     parser.add_argument("--start", action="store_true",
                         help="编译完成后自动拉起三端演示（服务端/管理端、模拟器、用户端）")
     parser.add_argument("--preset", default=DEFAULT_PRESET,
-                        help=f"CMake 构建预设（默认 {DEFAULT_PRESET}；可选 ubuntu22/debug/release）")
+                        choices=tuple(PRESET_BUILD_DIRS),
+                        help=f"CMake 构建预设（默认 {DEFAULT_PRESET}；完整回归编译选 ubuntu22-test）")
+    parser.add_argument("--jobs", type=positive_jobs, default=2,
+                        help="编译并行数（默认 2；低内存虚拟机可用 --jobs 1）")
     parser.add_argument("--run-id", default=None,
                         help="演示运行轮次标识（默认 quickstart-时间戳，--start 时生效）")
     parser.add_argument("--skip-install", action="store_true",
@@ -166,8 +177,8 @@ def main():
             return 1
     print("  环境检查通过。")
 
-    banner(3, total, f"CMake 配置与全量编译（预设 {args.preset}，首次约数分钟）")
-    cpus = str(os.cpu_count() or 2)
+    banner(3, total, f"CMake 配置与编译（预设 {args.preset}，并行 {args.jobs}）")
+    cpus = str(args.jobs)
     if not configure_and_build(args.preset, cpus):
         print("  配置或编译失败，请把上方输出反馈给团队。")
         return 1
@@ -189,7 +200,7 @@ def main():
         return 1
 
     if args.start:
-        run_id = args.run_id or f"quickstart-{time.strftime('%m%d-%H%M%S')}"
+        run_id = args.run_id or f"quickstart-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
         print(f"\n拉起三端演示（run-id: {run_id}）……")
         if not start_demo(run_id, build_dir):
             print("  三端启动失败，请把上方输出反馈给团队。")

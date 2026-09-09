@@ -9,9 +9,14 @@
 #include "ui/LoginPage.h"
 #include "ui/MainWindow.h"
 #include "ui/NearbyPage.h"
+#include "ui/ProfilePage.h"
 #include "ui/UiTheme.h"
+#include "ui/PulseChart.h"
+#include "../../../tests/fixtures/PulseSamples.h"
+#include "../../../tests/fixtures/UsageStatistics.h"
 
 #include <QApplication>
+#include <QAction>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QImage>
@@ -20,6 +25,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
+#include <QMenu>
 #include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
@@ -28,6 +35,7 @@
 #include <QStackedWidget>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTimer>
 #include <QtEndian>
 #include <QtTest>
 
@@ -278,13 +286,197 @@ private slots:
     void authenticatedNearbyClearsExpiredSessionCopy();
     void restoredChargeMetricsAndActionsFitPortrait_data();
     void restoredChargeMetricsAndActionsFitPortrait();
+    void pulseSamplingAndCursorPreserveAuthoritativeActions_data();
+    void pulseSamplingAndCursorPreserveAuthoritativeActions();
     void accountAndHistoryPresentation_data();
     void accountAndHistoryPresentation();
+    void accountExitConfirmsAndClearsPreviousSession_data();
+    void accountExitConfirmsAndClearsPreviousSession();
+    void reservationSuccessFitsPortrait_data();
+    void reservationSuccessFitsPortrait();
+    void accountFreezeStatusSyncsWithoutDiscardingDraft_data();
+    void accountFreezeStatusSyncsWithoutDiscardingDraft();
 };
 
 void MobileUiTest::initTestCase()
 {
     UiTheme::apply(*qApp);
+}
+
+void MobileUiTest::reservationSuccessFitsPortrait_data()
+{
+    QTest::addColumn<int>("height");
+    QTest::addColumn<bool>("longText");
+    QTest::newRow("720") << 720 << false;
+    QTest::newRow("844") << 844 << false;
+    QTest::newRow("long-720") << 720 << true;
+}
+
+void MobileUiTest::reservationSuccessFitsPortrait()
+{
+    QFETCH(int, height);
+    QFETCH(bool, longText);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.resize(390, height);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer);
+    auto detail = detailFixture(longText);
+    detail.chargers.first().status = QStringLiteral("reserved");
+    --detail.station.idleCount;
+    const QJsonObject order{{"orderId", 1028}, {"userId", 42}, {"chargerId", 1001}, {"stationId", 1},
+        {"stationName", detail.station.name}, {"chargerCode", detail.chargers.first().code},
+        {"status", "reserved"}, {"reservedAt", "2026-09-08T19:30:00+08:00"},
+        {"startedAt", QJsonValue(QJsonValue::Null)}, {"endedAt", QJsonValue(QJsonValue::Null)},
+        {"energyKwh", 0.0}, {"amountFen", 0}, {"elapsedSec", 0}};
+    completeLoginWithoutOrder(window, peer.data(), order);
+    const auto facts = takeRequest(peer.data());
+    QCOMPARE(facts.action, QStringLiteral("station.detail"));
+    reply(peer.data(), facts.requestId, detailObject(detail));
+    auto *page = required<ChargePage>(&window, "chargePage");
+    auto *viewport = required<QScrollArea>(&window, "contentViewport");
+    auto *icon = required<QWidget>(&window, "reservationSuccessIcon");
+    auto *start = required<QPushButton>(&window, "chargeStartButton");
+    auto *cancel = required<QPushButton>(&window, "chargeCancelButton");
+    QVERIFY(page && viewport && icon && start && cancel);
+    QTRY_VERIFY(start->isEnabled() && cancel->isEnabled());
+    QTRY_VERIFY(icon->isVisible());
+    QCOMPARE(required<QLabel>(page, "reservationSuccessTitle")->text(), QStringLiteral("预约成功"));
+    viewport->verticalScrollBar()->setValue(0);
+    saveScreenshotIfRequested(&window, QStringLiteral("reservation-%1-390x%2.png")
+        .arg(longText ? "long" : "success").arg(height));
+    QVERIFY(fullyInsideViewport(icon, viewport));
+    QVERIFY(horizontallyInsideViewport(required<QLabel>(page, "reservationSuccessHint"), viewport));
+    const QPoint center = icon->mapTo(viewport->viewport(), icon->rect().center());
+    QVERIFY(qAbs(center.x() - viewport->viewport()->rect().center().x()) <= 10);
+    QVERIFY(icon->width() >= 150);
+    QVERIFY(renderedPixelsNearColor(icon->grab(), icon->rect(), QColor("#8ae5d0")) > 400);
+    if (!longText) {
+        QVERIFY(fullyInsideViewport(start, viewport));
+        QVERIFY(fullyInsideViewport(cancel, viewport));
+        QCOMPARE(viewport->verticalScrollBar()->maximum(), 0);
+    } else {
+        viewport->ensureWidgetVisible(cancel, 0, 8);
+        QTRY_VERIFY(fullyInsideViewport(cancel, viewport));
+    }
+    page->leavePage();
+    QVERIFY(required<QWidget>(page, "reservationSuccess")->isHidden());
+}
+
+void MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft_data()
+{
+    QTest::addColumn<int>("height");
+    QTest::newRow("720") << 720;
+    QTest::newRow("844") << 844;
+}
+
+void MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft()
+{
+    QFETCH(int, height);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.resize(390, height);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer);
+    completeLoginWithoutOrder(window, peer.data());
+    QTRY_COMPARE(required<QStackedWidget>(&window, "mainPages")->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+    auto *timer = required<QTimer>(&window, "profileStatePollTimer");
+    QVERIFY(timer);
+    QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+    QTest::qWait(20);
+    QCOMPARE(peer->bytesAvailable(), qint64{0}); // 非账户页面不产生状态轮询。
+    required<QPushButton>(&window, "profileNavigationButton")->click();
+    auto request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("user.get"));
+    reply(peer.data(), request.requestId, QJsonObject{{"user", userObject()}});
+    request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("user.statistics"));
+    reply(peer.data(), request.requestId, ev::test::usageStatistics());
+    auto *page = required<ProfilePage>(&window, "profilePage");
+    auto *badge = required<QLabel>(&window, "profileAccountState");
+    auto *notice = required<QWidget>(&window, "profileFrozenNotice");
+    auto *recharge = required<QPushButton>(&window, "rechargeButton");
+    auto *nickname = required<QLineEdit>(&window, "nicknameEdit");
+    auto *refresh = required<QPushButton>(&window, "profileStateRefreshButton");
+    QVERIFY(page && timer && badge && notice && nickname && refresh && recharge);
+    QTRY_VERIFY(recharge->isEnabled());
+    QVERIFY(notice->isHidden());
+    QCOMPARE(badge->text(), QStringLiteral("账号正常"));
+    QCOMPARE(timer->interval(), 5'000);
+    QVERIFY(timer->isActive());
+    refresh->setFocus();
+    // 驱动真实 timeout 回调；不必让每个回归样本等待五秒。
+    QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+    request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("user.get"));
+    QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+    QTest::qWait(20);
+    QCOMPARE(peer->bytesAvailable(), qint64{0}); // 单飞，不重复请求。
+    auto frozenUser = userObject();
+    frozenUser.insert("status", "frozen");
+    reply(peer.data(), request.requestId, QJsonObject{{"user", frozenUser}});
+    QTRY_COMPARE(badge->text(), QStringLiteral("账号已冻结"));
+    QVERIFY(notice->isVisible());
+    QVERIFY(!recharge->isEnabled());
+    QVERIFY(required<QPushButton>(&window, "nicknameSaveButton")->isEnabled());
+    QVERIFY(required<QPushButton>(&window, "accountMenuButton")->isEnabled());
+    auto *viewport = required<QScrollArea>(&window, "contentViewport");
+    viewport->verticalScrollBar()->setValue(0);
+    saveScreenshotIfRequested(&window, QStringLiteral("account-frozen-390x%1.png").arg(height));
+    QVERIFY(fullyInsideViewport(notice, viewport));
+    QVERIFY(horizontallyInsideViewport(notice, viewport));
+
+    nickname->setText(QStringLiteral("我尚未保存的新昵称"));
+    nickname->setModified(true);
+    nickname->setFocus();
+    QTRY_VERIFY(nickname->hasFocus());
+    QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+    QTest::qWait(20);
+    QCOMPARE(peer->bytesAvailable(), qint64{0}); // 编辑时不打断输入。
+    refresh->setFocus();
+    QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+    request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("user.get"));
+    reply(peer.data(), request.requestId, QJsonObject{{"user", userObject()}});
+    QTRY_VERIFY(recharge->isEnabled());
+    QCOMPARE(badge->text(), QStringLiteral("账号正常"));
+    QVERIFY(notice->isHidden());
+    QCOMPARE(nickname->text(), QStringLiteral("我尚未保存的新昵称"));
+
+    // 定时读取不清掉上一个充值输入错误；冻结提醒独立于底部错误区域。
+    required<QLineEdit>(&window, "rechargeEdit")->setText("0");
+    recharge->click();
+    auto *error = required<QLabel>(&window, "profileError");
+    QVERIFY(!error->text().isEmpty());
+    const auto inputError = error->text();
+    QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+    request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("user.get"));
+    reply(peer.data(), request.requestId, QJsonObject{{"user", frozenUser}});
+    QTRY_COMPARE(badge->text(), QStringLiteral("账号已冻结"));
+    QCOMPARE(error->text(), inputError);
+    QVERIFY(notice->isVisible());
+    page->setConnectionAvailable(false);
+    QVERIFY(notice->isVisible());
+    QVERIFY(badge->toolTip().contains(QStringLiteral("离线")));
+    QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+    QTest::qWait(20);
+    QCOMPARE(peer->bytesAvailable(), qint64{0});
+    page->setConnectionAvailable(true);
+    QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
+    request = takeRequest(peer.data());
+    QCOMPARE(request.action, QStringLiteral("user.get"));
+    auto *api = window.findChild<UserApi *>();
+    QVERIFY(api && api->logout()); // 在只读同步途中退出，旧回包不得恢复冻结账号数据。
+    reply(peer.data(), request.requestId, QJsonObject{{"user", frozenUser}});
+    QTest::qWait(20);
+    QVERIFY(notice->isHidden());
+    QVERIFY(badge->isHidden());
+    QVERIFY(nickname->text().isEmpty());
 }
 
 void MobileUiTest::accountAndHistoryPresentation_data()
@@ -318,6 +510,9 @@ void MobileUiTest::accountAndHistoryPresentation()
     auto user = userObject();
     if (longText) user.insert("nickname", QStringLiteral("北京理工大学充电项目测试用户昵称"));
     reply(peer.data(), request.requestId, QJsonObject{{"user", user}});
+    const auto statistics = takeRequest(peer.data());
+    QCOMPARE(statistics.action, QStringLiteral("user.statistics"));
+    reply(peer.data(), statistics.requestId, ev::test::usageStatistics());
     auto *recharge = required<QPushButton>(&window, "rechargeButton");
     QTRY_VERIFY(recharge->isEnabled());
     QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("profilePage"));
@@ -326,10 +521,23 @@ void MobileUiTest::accountAndHistoryPresentation()
     // A successful account render must not reserve an empty error row.
     QVERIFY(error->isHidden());
     QVERIFY(balance->text().contains("123.45"));
+    QTRY_COMPARE(required<QLabel>(&window, "profileTotalEnergy")->text(), QStringLiteral("42.375"));
+    QCOMPARE(required<QLabel>(&window, "profilePaidAmount")->text(), QStringLiteral("32.00"));
+    QCOMPARE(required<QLabel>(&window, "profileChargeCount")->text(), QStringLiteral("5"));
+    QVERIFY(required<QLabel>(&window, "profileSettlementHint")->text().contains(QStringLiteral("1.65")));
     QCOMPARE(required<QLineEdit>(&window, "profileMobile")->accessibleName(), QStringLiteral("手机号"));
     viewport->verticalScrollBar()->setValue(0);
     saveScreenshotIfRequested(&window, QStringLiteral("account-%1-390x%2.png")
         .arg(longText ? "long" : "standard").arg(height));
+    auto *usage = required<QWidget>(&window, "profileUsagePanel");
+    auto *chart = required<QWidget>(&window, "profileUsageChart");
+    QVERIFY(usage && chart);
+    viewport->ensureWidgetVisible(chart, 0, 8);
+    QTRY_VERIFY(fullyInsideViewport(chart, viewport));
+    QVERIFY(horizontallyInsideViewport(usage, viewport));
+    QVERIFY(chart->accessibleDescription().contains(QStringLiteral("2026-09-08：1.250 kWh")));
+    saveScreenshotIfRequested(&window, QStringLiteral("account-usage-390x%1.png").arg(height));
+    saveScreenshotIfRequested(usage, QStringLiteral("account-usage-panel.png"));
     auto *input = required<QLineEdit>(&window, "rechargeEdit");
     input->setText("12.34");
     viewport->ensureWidgetVisible(recharge, 0, 8);
@@ -350,6 +558,9 @@ void MobileUiTest::accountAndHistoryPresentation()
     recharge->click();
     QTRY_VERIFY(error->isVisible());
     QVERIFY(!error->text().isEmpty());
+    auto *walletFeedback = required<QLabel>(&window, "walletFeedback");
+    QVERIFY(walletFeedback && walletFeedback->isVisible());
+    QCOMPARE(walletFeedback->text(), error->text());
     QTRY_VERIFY(([&] {
         viewport->ensureWidgetVisible(error, 0, 8);
         QCoreApplication::processEvents();
@@ -398,8 +609,19 @@ void MobileUiTest::accountAndHistoryPresentation()
     QCOMPARE(amount->text(), QStringLiteral("¥16.85"));
     list->setFocus(Qt::TabFocusReason);
     QTRY_VERIFY(list->hasFocus());
-    QVERIFY2(renderedPixelsNearColor(list->grab(), list->rect(), QColor("#006F59")) > 40,
-             "Keyboard focus must be visibly outlined on the scrollable order list");
+    QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, list->visualItemRect(list->item(0)).center());
+    QTRY_COMPARE(list->selectedItems().size(), 1);
+    QCOMPARE(list->selectedItems().first(), list->item(0));
+    QVERIFY(firstCard->property("orderSelected").toBool());
+    QVERIFY(!list->itemWidget(list->item(1))->property("orderSelected").toBool());
+    QVERIFY(renderedPixelsNearColor(firstCard->grab(), firstCard->rect(), QColor("#72ddc3")) > 40);
+    QVERIFY2(renderedPixelsNearColor(list->grab(), QRect(0, 0, list->width(), 2), QColor("#a2f3df")) < 5,
+             "Clicking one order must not outline the entire list container");
+    QTest::keyClick(list, Qt::Key_Down);
+    QTRY_COMPARE(list->currentRow(), 1);
+    QVERIFY(!firstCard->property("orderSelected").toBool());
+    QVERIFY(list->itemWidget(list->item(1))->property("orderSelected").toBool());
+    list->setCurrentRow(0);
     list->clearFocus();
     const auto times = firstCard->findChildren<QLabel *>("historyOrderTime");
     QCOMPARE(times.size(), 3);
@@ -429,6 +651,92 @@ void MobileUiTest::accountAndHistoryPresentation()
     QCOMPARE(list->count(), 4);
     list->scrollToTop();
     saveScreenshotIfRequested(&window, QStringLiteral("history-offline-390x%1.png").arg(height));
+}
+
+void MobileUiTest::accountExitConfirmsAndClearsPreviousSession_data()
+{
+    QTest::addColumn<bool>("switching");
+    QTest::newRow("switch-account") << true;
+    QTest::newRow("logout") << false;
+}
+
+void MobileUiTest::accountExitConfirmsAndClearsPreviousSession()
+{
+    QFETCH(bool, switching);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.resize(390, 720);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer);
+    completeLoginWithoutOrder(window, peer.data());
+    auto *api = window.findChild<UserApi *>();
+    auto *pages = required<QStackedWidget>(&window, "mainPages");
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+    required<QPushButton>(&window, "profileNavigationButton")->click();
+    const auto profile = takeRequest(peer.data());
+    QCOMPARE(profile.action, QStringLiteral("user.get"));
+    reply(peer.data(), profile.requestId, QJsonObject{{"user", userObject()}});
+    const auto statistics = takeRequest(peer.data());
+    QCOMPARE(statistics.action, QStringLiteral("user.statistics"));
+    reply(peer.data(), statistics.requestId, ev::test::usageStatistics());
+    QTRY_COMPARE(required<QLabel>(&window, "profileTotalEnergy")->text(), QStringLiteral("42.375"));
+    auto *menuButton = required<QPushButton>(&window, "accountMenuButton");
+    QVERIFY(menuButton && menuButton->isVisible() && menuButton->isEnabled());
+    auto *action = window.findChild<QAction *>(switching ? "switchAccountAction" : "logoutAction");
+    QVERIFY(action);
+    bool sawDialog = false;
+    QTimer::singleShot(0, &window, [&] {
+        auto *dialog = window.findChild<QMessageBox *>("accountExitDialog");
+        if (!dialog) return;
+        sawDialog = true;
+        QVERIFY(dialog->text().contains(QStringLiteral("不会停止充电")));
+        QCOMPARE(dialog->defaultButton()->text(), QStringLiteral("留在当前账号"));
+        saveScreenshotIfRequested(dialog, QStringLiteral("account-exit-confirmation.png"));
+        dialog->defaultButton()->click();
+    });
+    action->trigger();
+    QVERIFY(sawDialog);
+    QVERIFY(api->sessionUser());
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("profilePage"));
+    const auto lateId = api->loadUsageStatistics();
+    QCOMPARE(takeRequest(peer.data()).requestId, lateId);
+    QSignalSpy statsApplied(api, &UserApi::usageStatisticsLoaded);
+    required<QLineEdit>(&window, "rechargeEdit")->setText(QStringLiteral("99.00"));
+    sawDialog = false;
+    QTimer::singleShot(0, &window, [&] {
+        auto *dialog = window.findChild<QMessageBox *>("accountExitDialog");
+        if (!dialog) return;
+        sawDialog = true;
+        for (auto *button : dialog->buttons()) {
+            if (dialog->buttonRole(button) == QMessageBox::AcceptRole) { button->click(); break; }
+        }
+    });
+    action->trigger();
+    QVERIFY(sawDialog);
+    QVERIFY(!api->sessionUser());
+    QCOMPARE(pages->currentWidget()->objectName(), QStringLiteral("loginPage"));
+    QVERIFY(required<QLineEdit>(&window, "phoneEdit")->text().isEmpty());
+    QVERIFY(required<QLineEdit>(&window, "profileMobile")->text().isEmpty());
+    QVERIFY(required<QLineEdit>(&window, "rechargeEdit")->text().isEmpty());
+    QCOMPARE(required<QLabel>(&window, "profileTotalEnergy")->text(), QStringLiteral("—"));
+    reply(peer.data(), lateId, ev::test::usageStatistics());
+    QTest::qWait(50);
+    QCOMPARE(statsApplied.size(), 0);
+    QCOMPARE(peer->bytesAvailable(), qint64{0}); // 退出不发送 charge.stop/cancel/settle。
+    required<QLineEdit>(&window, "phoneEdit")->setText(QStringLiteral("13900139000"));
+    required<QPushButton>(&window, "loginButton")->click();
+    const auto login = takeRequest(peer.data());
+    auto next = userObject(); next["userId"] = 77; next["mobile"] = "13900139000";
+    reply(peer.data(), login.requestId, QJsonObject{{"token", "next-account-token"}, {"user", next}});
+    const auto guard = takeRequest(peer.data());
+    QCOMPARE(guard.action, QStringLiteral("order.current"));
+    QCOMPARE(guard.token, QStringLiteral("next-account-token"));
+    reply(peer.data(), guard.requestId, QJsonObject{{"order", QJsonValue(QJsonValue::Null)}});
+    QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("nearbyPage"));
+    QCOMPARE(api->sessionUser()->userId, qint64{77});
+    QCOMPARE(required<QLabel>(&window, "profileTotalEnergy")->text(), QStringLiteral("—"));
 }
 
 void MobileUiTest::initialWindowSizeUsesPortraitWidthAndAvailableHeight()
@@ -567,8 +875,8 @@ void MobileUiTest::authenticatedShellStaysPortraitWithBottomNavigation()
     QVERIFY(current->isHidden());
 
     // Catches painting the resource SVG's fixed green instead of the real tab palette.
-    const QColor selectedText(QStringLiteral("#00856A"));
-    const QColor unselectedText(QStringLiteral("#61717B"));
+    const QColor selectedText(QStringLiteral("#72ddc3"));
+    const QColor unselectedText(QStringLiteral("#97adbc"));
     QCOMPARE(nearby->palette().color(QPalette::ButtonText), selectedText);
     QCOMPARE(history->palette().color(QPalette::ButtonText), unselectedText);
     const QRect nearbyIconBand(0, 0, nearby->width(), nearby->height() / 2);
@@ -616,6 +924,9 @@ void MobileUiTest::authenticatedShellStaysPortraitWithBottomNavigation()
     QCOMPARE(request.action, QStringLiteral("user.get"));
     reply(peer.data(), request.requestId,
           QJsonObject{{QStringLiteral("user"), userObject()}});
+    const auto statistics = takeRequest(peer.data());
+    QCOMPARE(statistics.action, QStringLiteral("user.statistics"));
+    reply(peer.data(), statistics.requestId, ev::test::usageStatistics());
     QTRY_COMPARE(pages->currentWidget()->objectName(), QStringLiteral("profilePage"));
     auto *nickname = required<QLineEdit>(&window, "nicknameEdit");
     auto *recharge = required<QLineEdit>(&window, "rechargeEdit");
@@ -712,12 +1023,12 @@ void MobileUiTest::unavailableChargerMetadataRemainsReadableAcrossConnectionChan
     auto *detailStatus = required<QLabel>(&page, "detailStatus");
     QVERIFY(detailStatus);
     QCOMPARE(detailStatus->property("role").toString(), QStringLiteral("danger"));
-    QCOMPARE(detailStatus->palette().color(QPalette::WindowText), QColor(QStringLiteral("#BE4B42")));
+    QCOMPARE(detailStatus->palette().color(QPalette::WindowText), QColor(QStringLiteral("#f1ae98")));
     saveScreenshotIfRequested(&page, QStringLiteral("detail-offline-390x844.png"));
     page.setConnectionAvailable(true);
     QVERIFY(!detailStatus->text().contains(QStringLiteral("连接不可用")));
     QCOMPARE(detailStatus->property("role").toString(), QStringLiteral("secondary"));
-    QCOMPARE(detailStatus->palette().color(QPalette::WindowText), QColor(QStringLiteral("#61717B")));
+    QCOMPARE(detailStatus->palette().color(QPalette::WindowText), QColor(QStringLiteral("#97adbc")));
     saveScreenshotIfRequested(&page, QStringLiteral("detail-recovered-390x844.png"));
     QVERIFY(!required<QPushButton>(&page, "chargerButton_1003")->isEnabled());
     auto *idle = required<QPushButton>(&page, "chargerButton_1001");
@@ -1022,6 +1333,121 @@ void MobileUiTest::restoredChargeMetricsAndActionsFitPortrait()
     QVERIFY(!required<QLabel>(page, "chargeStatus")->text().contains(QStringLiteral("成功")));
     QTest::qWait(30);
     QCOMPARE(peer->bytesAvailable(), qint64{0});
+    if (ended) {
+        const ev::protocol::ResponseEnvelope failure{request.requestId, false,
+            QStringLiteral("INSUFFICIENT_BALANCE"), QStringLiteral("余额不足"), QJsonObject{}};
+        const auto frame = ev::protocol::encodeFrame(ev::protocol::toJson(failure));
+        QCOMPARE(peer->write(frame), qint64{frame.size()});
+        QVERIFY(peer->flush());
+        request = takeRequest(peer.data());
+        QCOMPARE(request.action, QStringLiteral("order.current"));
+        reply(peer.data(), request.requestId, QJsonObject{{"order", order}});
+        request = takeRequest(peer.data());
+        QCOMPARE(request.action, QStringLiteral("station.detail"));
+        reply(peer.data(), request.requestId, detailObject(detail));
+        auto *recharge = required<QPushButton>(page, "chargeRechargeButton");
+        auto *error = required<QLabel>(page, "chargeError");
+        QTRY_VERIFY(recharge->isVisible() && recharge->isEnabled());
+        QVERIFY(error->isVisible());
+        QVERIFY(error->text().contains(QStringLiteral("余额不足")));
+        viewport->ensureWidgetVisible(recharge, 0, 8);
+        QTRY_VERIFY(fullyInsideViewport(recharge, viewport));
+        QVERIFY(horizontallyInsideViewport(error, viewport));
+        if (!longText) saveScreenshotIfRequested(&window, QStringLiteral("settlement-insufficient-balance-390x%1.png").arg(height));
+        recharge->click();
+        QTRY_COMPARE(required<QStackedWidget>(&window, "mainPages")->currentWidget()->objectName(), QStringLiteral("profilePage"));
+        request = takeRequest(peer.data());
+        QCOMPARE(request.action, QStringLiteral("user.get"));
+        reply(peer.data(), request.requestId, QJsonObject{{"user", userObject()}});
+        const auto stats = takeRequest(peer.data());
+        QCOMPARE(stats.action, QStringLiteral("user.statistics"));
+        reply(peer.data(), stats.requestId, ev::test::usageStatistics());
+    }
+}
+
+void MobileUiTest::pulseSamplingAndCursorPreserveAuthoritativeActions_data()
+{
+    QTest::addColumn<bool>("missingSamples");
+    QTest::newRow("complete-samples") << false;
+    QTest::newRow("truncated-start-and-gap") << true;
+}
+
+void MobileUiTest::pulseSamplingAndCursorPreserveAuthoritativeActions()
+{
+    QFETCH(bool, missingSamples);
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    MainWindow window(usableConfig(server.serverPort()));
+    window.resize(390,844);
+    window.show();
+    QScopedPointer<QTcpSocket> peer(waitForPeer(server));
+    QVERIFY(peer);
+    const auto start = QDateTime::currentDateTimeUtc().addSecs(-1600);
+    const auto order = PulseFixture::order(start);
+    auto telemetry = PulseFixture::telemetry(start);
+    auto samples = telemetry.value("samples").toArray();
+    if (missingSamples) {
+        // 缺少前 300 秒，以及 600～900 秒之间的采样，不得冒充整单电量。
+        for (int i = 0; i < 3; ++i) samples.removeAt(0);
+        samples.removeAt(4);
+        samples.removeAt(4);
+        telemetry["samples"] = samples;
+        telemetry["truncated"] = true;
+    }
+    completeLoginWithoutOrder(window,peer.data(),order);
+    const auto facts = takeRequest(peer.data());
+    QCOMPARE(facts.action,QStringLiteral("station.detail"));
+    reply(peer.data(),facts.requestId,detailObject(detailFixture()));
+    auto *page = required<ChargePage>(&window,"chargePage");
+    auto *chart = required<ev::ui::PulseChart>(page,"chargePowerChart");
+    QVERIFY(page && chart);
+    QTRY_VERIFY(page->isVisible());
+    // 曲线与权威订单轮询按 requestId 各自关联，允许两者响应交错。
+    bool sampled = false;
+    for (int i = 0; i < 3 && !sampled; ++i) {
+        const auto request = takeRequest(peer.data());
+        if (request.action == "order.current")
+            reply(peer.data(),request.requestId,QJsonObject{{"order",order}});
+        else {
+            QCOMPARE(request.action,QStringLiteral("order.telemetry"));
+            QCOMPARE(request.payload.value("orderId").toInt(),1028);
+            reply(peer.data(),request.requestId,telemetry);
+            sampled = true;
+        }
+    }
+    QVERIFY(sampled);
+    QTRY_COMPARE(chart->sampleCount(),samples.size());
+    QCOMPARE(required<QLabel>(page,"chargePower")->text(),QStringLiteral("22.5"));
+    auto *viewport = required<QScrollArea>(&window,"contentViewport");
+    QCOMPARE(viewport->verticalScrollBar()->maximum(),0);
+    QVERIFY(required<QLabel>(page,"chargeMetricUnit")->width() >= 24);
+    if (!missingSamples) saveScreenshotIfRequested(&window,"pulse-charging-390x844.png");
+    QTest::mouseClick(chart,Qt::LeftButton,Qt::NoModifier,
+        QPoint(missingSamples ? chart->width()*3/4 : chart->width()/2,80));
+    QVERIFY(!chart->followingLatest());
+    QVERIFY(chart->reading(0).has_value());
+    QCOMPARE(required<QLabel>(page,"chargeMeter")->text(),QString::number(chart->reading(0)->energy,'f',3));
+    QCOMPARE(required<QLabel>(page,"chargeSecondaryMetric")->text(),QStringLiteral("¥ 16.85"));
+    if (!missingSamples) saveScreenshotIfRequested(&window,"pulse-cursor-390x844.png");
+    if (missingSamples) {
+        for (const double seconds : {100.0, 750.0}) {
+            chart->setCursorSeconds(seconds);
+            QVERIFY(!chart->reading(0).has_value());
+            QCOMPARE(required<QLabel>(page,"chargePower")->text(),QStringLiteral("—"));
+            QCOMPARE(required<QLabel>(page,"chargeMeter")->text(),QStringLiteral("—"));
+            QCOMPARE(required<QLabel>(page,"chargeSecondaryMetric")->text(),QStringLiteral("¥ 16.85"));
+        }
+    }
+    required<QPushButton>(page,"chargeLiveButton")->click();
+    QVERIFY(chart->followingLatest());
+    QCOMPARE(required<QLabel>(page,"chargeMeter")->text(),QStringLiteral("12.480"));
+    window.resize(390,720);
+    QCoreApplication::processEvents();
+    QCOMPARE(viewport->horizontalScrollBar()->maximum(),0);
+    auto *stop = required<QPushButton>(page,"chargeStopButton");
+    viewport->ensureWidgetVisible(stop,0,8);
+    QVERIFY(fullyInsideViewport(stop,viewport));
+    if (!missingSamples) saveScreenshotIfRequested(&window,"pulse-charging-390x720.png");
 }
 
 QTEST_MAIN(MobileUiTest)

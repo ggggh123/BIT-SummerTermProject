@@ -1,0 +1,23 @@
+********* Start testing of MobileUiTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : MobileUiTest::initTestCase()
+QWARN  : MobileUiTest::reservationSuccessFitsPortrait(720) This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::reservationSuccessFitsPortrait(720) This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::reservationSuccessFitsPortrait(720)
+QWARN  : MobileUiTest::reservationSuccessFitsPortrait(844) This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::reservationSuccessFitsPortrait(844) This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::reservationSuccessFitsPortrait(844)
+QWARN  : MobileUiTest::reservationSuccessFitsPortrait(long-720) This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::reservationSuccessFitsPortrait(long-720) This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::reservationSuccessFitsPortrait(long-720)
+QWARN  : MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft(720) This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft(720) This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft(720) This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft(720)
+QWARN  : MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft(844) This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft(844) This plugin does not support propagateSizeHints()
+QWARN  : MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft(844) This plugin does not support propagateSizeHints()
+PASS   : MobileUiTest::accountFreezeStatusSyncsWithoutDiscardingDraft(844)
+PASS   : MobileUiTest::cleanupTestCase()
+Totals: 7 passed, 0 failed, 0 skipped, 0 blacklisted, 1018ms
+********* Finished testing of MobileUiTest *********

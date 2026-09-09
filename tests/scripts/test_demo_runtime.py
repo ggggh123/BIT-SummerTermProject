@@ -112,6 +112,29 @@ def test_identity_mismatch_never_signals_bystander(sleeper, field, value):
     assert sleeper.poll() is None
 
 
+def test_rebuilt_binary_keeps_owned_process_stoppable(tmp_path):
+    import demo_processes as processes
+    executable = tmp_path / "demo-binary"
+    replacement = tmp_path / "new-demo-binary"
+    shutil.copy2("/bin/sleep", executable)
+    proc = subprocess.Popen([str(executable), "30"])
+    record = processes.capture(proc.pid)
+    try:
+        shutil.copy2("/bin/sleep", replacement)
+        replacement.replace(executable)
+        assert processes.capture(proc.pid)["exe"] == record["exe"] + " (deleted)"
+        assert processes.inspect(record) == "ALIVE"
+        for field in ("starttime", "bootId", "exe"):
+            wrong = {**record, field: "different"}
+            assert processes.stop_one(wrong, .1, True) == "WRONG_PID"
+            assert proc.poll() is None
+        assert processes.stop_one(record, 1) == "EXITED"
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+        proc.wait(timeout=3)
+
+
 def test_stop_timeout_no_kill_and_force_checked():
     import demo_processes as processes
     proc = subprocess.Popen([sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); print('ready',flush=True); time.sleep(60)"], stdout=subprocess.PIPE, text=True)

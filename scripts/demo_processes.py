@@ -25,7 +25,15 @@ def inspect(record):
         return "EXITED"
     except (OSError, ValueError, KeyError, TypeError):
         return "WRONG_PID"
-    return "ALIVE" if all(current[key] == record.get(key) for key in current) else "WRONG_PID"
+    # Ninja 重新链接会替换磁盘文件，但旧进程继续运行旧 inode，Linux 在
+    # /proc/<pid>/exe 后追加「 (deleted)」。仍须匹配 PID、启动时刻和 bootId；
+    # 只接受这一精确后缀，不能放宽为文件名相同或只比较 PID。
+    identity_matches = all(current[key] == record.get(key)
+                           for key in ("pid", "starttime", "bootId"))
+    recorded_exe = record.get("exe")
+    executable_matches = isinstance(recorded_exe, str) and (
+        current["exe"] == recorded_exe or current["exe"] == recorded_exe + " (deleted)")
+    return "ALIVE" if identity_matches and executable_matches else "WRONG_PID"
 
 
 def supported():
