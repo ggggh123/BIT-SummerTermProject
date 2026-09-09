@@ -6,6 +6,7 @@
 #include <QSqlDatabase>
 #include <QString>
 
+// 模拟器协议的落地端：telemetry.push 遥测入库并计费、fault_set 故障/恢复、status 权威快照。
 class TelemetryService
 {
 public:

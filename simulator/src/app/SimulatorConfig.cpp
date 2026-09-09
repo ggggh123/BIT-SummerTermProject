@@ -53,8 +53,8 @@ SimulatorConfig configFromCommandLine(const QCoreApplication &app)
     config.seed = parser.value(seedOpt).toUInt();
     config.intervalMs = parser.value(intervalOpt).toInt();
     config.token = parser.isSet(tokenOpt)
-        ? parser.value(tokenOpt)
-        : qEnvironmentVariable("EV_SIMULATOR_TOKEN");
+        ? parser.value(tokenOpt)                 // 显式 --token（含空值）始终优先
+        : qEnvironmentVariable("EV_SIMULATOR_TOKEN");  // 未传时回退环境变量
     return config;
 }
 

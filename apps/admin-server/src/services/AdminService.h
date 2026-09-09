@@ -6,6 +6,7 @@
 #include <QSqlDatabase>
 #include <QString>
 
+// 管理端业务：站点创建、故障桩远程重启、用户列表与冻结/解冻。
 class AdminService
 {
 public:

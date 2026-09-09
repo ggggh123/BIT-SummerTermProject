@@ -15,6 +15,7 @@ struct LoginResult : Result
     QJsonObject data;
 };
 
+// 登录与鉴权：签发/校验 admin 和 user 的内存会话 token；模拟器/ML 走配置的固定 token。
 class AuthService
 {
 public:

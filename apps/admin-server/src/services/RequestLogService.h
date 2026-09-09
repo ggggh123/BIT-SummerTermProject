@@ -8,6 +8,7 @@
 #include <QString>
 #include <functional>
 
+// 请求审计：request_log 建表迁移、写操作幂等外层事务（execute）、日志记录与分页查询。
 class RequestLogService
 {
 public:

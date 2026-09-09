@@ -6,6 +6,7 @@
 #include <QSqlDatabase>
 #include <QString>
 
+// 用户端业务：资料/钱包、站点桩查询、充电闭环（预约→开始→停止→结算→取消）与订单查询。
 class UserService
 {
 public:

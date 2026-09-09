@@ -6,6 +6,7 @@
 #include <QSqlDatabase>
 #include <QString>
 
+// ML 预测（optional）：接收 forecast.publish 入库激活、forecast.latest 查询、健康页状态。
 class ForecastService
 {
 public:

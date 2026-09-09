@@ -84,7 +84,7 @@ bool RuntimeStatusWriter::writeState(const QString &sessionState,
         return false;
     };
 
-    QSaveFile file(filePath_);
+    QSaveFile file(filePath_);   // 原子写：临时文件 + commit 一次性落盘，崩溃不留半截 JSON
     if (!file.open(QIODevice::WriteOnly)) {
         const QString message = QStringLiteral("无法打开运行状态文件 %1：%2")
                                     .arg(filePath_, file.errorString());

@@ -7,6 +7,7 @@
 #include <QSqlDatabase>
 #include <QStringList>
 
+// 管理首页只读统计：收入/订单/桩状态聚合，以及界面表格用的列表行查询。
 class DashboardService
 {
 public:
