@@ -7,6 +7,8 @@ namespace ev::simulator {
 
 class ISimulatorClient;
 
+// 启动器状态文件：用原子覆盖把 starting/waiting_auth/ready/auth_failed/stopped
+// 写到 EV_SIMULATOR_STATUS_FILE 指定的本地 JSON，供启动脚本判断进程是否就绪。
 class RuntimeStatusWriter : public QObject
 {
     Q_OBJECT

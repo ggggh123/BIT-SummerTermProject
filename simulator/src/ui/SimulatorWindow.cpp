@@ -347,6 +347,7 @@ void SimulatorWindow::toggleRun()
     onLog(running_ ? QStringLiteral("模拟器已启动") : QStringLiteral("模拟器已暂停"));
 }
 
+// 采样节拍：引擎生成一批遥测 → 发给服务端 → 存入本地环形缓存（供曲线回看）。
 void SimulatorWindow::doTick()
 {
     if (!running_) return;
@@ -355,7 +356,7 @@ void SimulatorWindow::doTick()
     client_->sendTelemetry(samples);
     drainIntents();
     if (!samples.isEmpty()) {
-        Batch batch;
+        Batch batch;   // 一批 = 同一时刻所有桩的采样；只保留最近 600 批
         batch.recordedAt = samples.first().recordedAt;
         for (const auto &sample : samples) {
             batch.samples.insert(sample.chargerId, sample);
@@ -457,6 +458,7 @@ void SimulatorWindow::onSelectionChanged()
     updateChart();
 }
 
+// 设备表刷新：数据源是 engine 里的服务端权威快照；刷新前后保持选中行和滚动位置不变。
 void SimulatorWindow::updateChargerTable()
 {
     const int previousId = selectedChargerId();
@@ -496,12 +498,13 @@ void SimulatorWindow::updateChargerTable()
         else table_->setCurrentCell(-1, -1);
         table_->verticalScrollBar()->setValue(scrollPosition);
     }
-    latestSamples_ = currentSamples;
+    latestSamples_ = currentSamples;   // 只保留本轮有采样的桩，避免显示陈旧数据
     fleetLabel_->setText(QStringLiteral("%1 台  /  充电 %2  /  故障 %3").arg(chargers.size()).arg(charging).arg(faults));
     emptyLabel_->setVisible(chargers.isEmpty());
     onSelectionChanged();
 }
 
+// 曲线刷新：选中设备画单桩功率，未选中画全场合计；历史回看时按原时间戳还原光标位置。
 void SimulatorWindow::updateChart()
 {
     const int id = selectedChargerId();
@@ -516,7 +519,7 @@ void SimulatorWindow::updateChart()
         if (id > 0 && !batch.samples.contains(id)) continue;
         double power = 0;
         if (id > 0) power = batch.samples.value(id).powerKw;
-        else for (const auto &sample : batch.samples) power += sample.powerKw;
+        else for (const auto &sample : batch.samples) power += sample.powerKw;   // 合计模式：各桩求和
         series.points.append({(batch.recordedAt.toMSecsSinceEpoch() - chartStartMs_) / 1000.0, power, 0});
     }
     const double duration = batches_.isEmpty() ? 60.0

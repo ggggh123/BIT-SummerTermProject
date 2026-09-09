@@ -93,6 +93,7 @@ void SimulatorClient::requestStatusRefresh()
     sendStatus();
 }
 
+// 上报运行状态：requestId 含进程 UUID + 序号，避免重启后命中服务端缓存的旧 ACK。
 void SimulatorClient::sendStatus()
 {
     QJsonObject payload;
@@ -154,6 +155,7 @@ void SimulatorClient::flushPending()
     }
 }
 
+// 事件入队：队列有上限，满了丢最老的并记日志；本地生成条数 ≠ 服务端入库条数。
 void SimulatorClient::enqueueEvent(const QString &action,
                                    const QJsonObject &payload,
                                    const QString &requestId)
@@ -169,6 +171,7 @@ void SimulatorClient::enqueueEvent(const QString &action,
     flushPending();
 }
 
+// 收到回执即从队列移除（requestId 配对）；未确认的事件留在队列里等待重发。
 void SimulatorClient::acknowledgeEvent(const QString &requestId)
 {
     for (int i = 0; i < pendingEvents_.size(); ++i) {
@@ -179,6 +182,7 @@ void SimulatorClient::acknowledgeEvent(const QString &requestId)
     }
 }
 
+// 组装 JSON 信封（requestId/action/token/payload）→ 长度前缀帧 → TCP 发出。
 void SimulatorClient::sendRequest(const QString &action,
                                   const QJsonObject &payload,
                                   const QString &requestId)
@@ -222,7 +226,7 @@ void SimulatorClient::handleResponse(const QByteArray &json)
     const bool authenticationRejected =
         response.code == QLatin1String("AUTH_REQUIRED")
         || response.code == QLatin1String("FORBIDDEN");
-    if (authenticationRejected) {
+    if (authenticationRejected) {   // 鉴权失败：会话作废，UI 显示"鉴权失败"而非误报已接入
         sessionReady_ = false;
         statusRefreshTimer_.stop();
         statusRefreshQueued_ = false;
@@ -253,11 +257,11 @@ void SimulatorClient::handleResponse(const QByteArray &json)
                     snapshot.powerKw = c.value(QStringLiteral("powerKw")).toDouble();
                     chargers.append(snapshot);
                 }
-                engine_->replaceChargers(chargers);
+                engine_->replaceChargers(chargers);   // 服务端权威快照覆盖本地状态
                 emit chargersReceived(chargers);
-                sessionReady_ = true;
+                sessionReady_ = true;                 // 拿到权威快照才算"已接入"
                 emit sessionReady();
-                flushPending();
+                flushPending();                       // 重连后按原序补发未确认事件
             } else {
                 emit logMessage(QStringLiteral(
                     "invalid simulator.status response: chargers snapshot missing"));
@@ -269,6 +273,7 @@ void SimulatorClient::handleResponse(const QByteArray &json)
         }
     }
 
+    // 设备事件被服务端判为状态冲突（如用户先开始充电）→ 立即刷新权威快照，不靠旧状态猜测。
     if (deviceEventResponse
         && response.code == QLatin1String("ORDER_STATE_CONFLICT")) {
         requestStatusRefresh();
@@ -292,10 +297,10 @@ void SimulatorClient::onDisconnected()
     pendingStatusRequestId_.clear();
     statusRefreshQueued_ = false;
     for (PendingEvent &event : pendingEvents_)
-        event.sent = false;
+        event.sent = false;    // 未确认事件标记为未发送，重连后原 requestId 重发
     emit disconnected();
     if (!stopping_ && !reconnectTimer_.isActive())
-        reconnectTimer_.start(reconnectDelayMs(reconnectAttempt_++));
+        reconnectTimer_.start(reconnectDelayMs(reconnectAttempt_++));   // 1s/2s/4s 退避重连
 }
 
 void SimulatorClient::onReconnectTimeout()

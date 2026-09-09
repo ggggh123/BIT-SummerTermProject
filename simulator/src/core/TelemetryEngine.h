@@ -34,6 +34,8 @@ struct FaultIntent
 };
 
 // Pure, deterministic in-memory state machine. Never touches SQLite.
+// 纯内存确定性状态机：固定 seed 产出相同遥测序列，只生成数据、不碰 SQLite、
+// 不算钱——订单金额等权威状态一律由服务端决定。
 class TelemetryEngine
 {
 public:

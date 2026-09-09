@@ -43,6 +43,8 @@ signals:
 
 // Framed TCP client: sends simulator.status on connect, publishes telemetry
 // and fault events, and keeps a bounded queue while disconnected.
+// 帧协议 TCP 客户端：连接后先发 simulator.status 取权威快照，再上报遥测/故障事件；
+// 断线期间事件留在有界队列，重连鉴权后按原序重发（requestId 不变，防重复入库）。
 class SimulatorClient : public ISimulatorClient
 {
     Q_OBJECT
