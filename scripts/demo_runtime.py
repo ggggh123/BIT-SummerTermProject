@@ -158,6 +158,10 @@ class Runtime:
             except configparser.Error as exc:
                 raise DemoError("CONFIG_INVALID", "本地INI配置格式无效") from exc
             key = config.get("tencent", "mapKey", fallback="").strip().strip('"').strip()
+        if not key:
+            # 与用户端 UserAppConfig::bundledTencentMapKey() 对齐：env 与 ini 均未
+            # 配置时兜底使用团队公共测试 Key，避免直接运行 demo_cli 时 CONFIG_MISSING。
+            key = "II3BZ-TK5C7-NXRXH-PCEX2-XZ365-HYFIV"
         if not key or not token:
             raise DemoError("CONFIG_MISSING", "必须提供非空腾讯地图Key及EV_SIMULATOR_TOKEN")
         return key, token

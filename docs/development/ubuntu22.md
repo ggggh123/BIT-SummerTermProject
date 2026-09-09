@@ -29,7 +29,7 @@ bash scripts/check_env.sh --strict
 
 依赖清单可用 `bash scripts/bootstrap.sh --print-packages` 查看。安装包含编译器、Ninja、Qt Widgets/Network/WebEngine/Test、OpenGL 开发文件、SQLite/SVG/TLS 运行插件、WebEngine 辅助程序与中文字体。管理端图表由 QWidget 绘制，不需要 Qt Charts。Node/npm 和 ML 科学计算包不属于核心安装；保留的 Web/ML 代码不删除。
 
-`--strict` 要求 Ubuntu 22.04 和 Qt 6.2 系列；普通 `check_env.sh` 在较新系统上给出警告但允许继续检查。非 22.04 Ubuntu 若确需安装系统依赖，须显式使用 `bootstrap.sh --allow-other-ubuntu`，它不会把该系统变成 22.04。
+`--strict` 要求 Ubuntu 22.04 和 Qt 6.2 系列；普通 `check_env.sh` 在较新系统上给出警告但允许继续检查。非 22.04 Ubuntu（如 25.04）运行 `bootstrap.sh` 时会输出"尽力兼容"警告后**自动继续安装**，无需手动加参数（`--allow-other-ubuntu` 保留为兼容参数）；它不会把该系统变成 22.04，编译通过也不等于团队基线验证。
 
 新用户可用一键入口 `python3 scripts/quickstart.py --start`（本节 bootstrap → 预检 → `ubuntu22` 三程序构建 → 拉起三端），默认并行 2；低内存虚拟机使用 `--jobs 1`，完整回归编译显式选择 `--preset ubuntu22-test`。环境兼容问题的历史排查见[环境兼容性汇总](../test/ubuntu22-qt62-compatibility-2026-09-07.md)。
 

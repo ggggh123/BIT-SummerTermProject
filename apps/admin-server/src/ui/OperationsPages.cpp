@@ -391,6 +391,12 @@ void FleetStatusPage::render()
     m_empty->setText(loaded?QStringLiteral("当前筛选下没有设备，可切换状态或站点。"):QStringLiteral("等待站点与设备快照…"));
     m_empty->setVisible(rows.isEmpty());
     m_array->verticalScrollBar()->setValue(scroll);
+    // Qt 6.2 (Ubuntu 22.04) 布局惰性：上面同步 setValue 时滚动条 maximum 尚未更新，
+    // 重建 tile 引发的内容塌缩会把位置钳回顶部，滚动恢复失效（Qt 6.8 上侥幸正常）。
+    // 与本文件选中桩定位的做法一致，等一次事件循环布局稳定后再兜底恢复一次。
+    QTimer::singleShot(0, this, [this, scroll] {
+        m_array->verticalScrollBar()->setValue(scroll);
+    });
     updateSelection();
 }
 void FleetStatusPage::updateSelection()
