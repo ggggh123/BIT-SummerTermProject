@@ -26,6 +26,8 @@ public:
     SqlTransaction &operator=(const SqlTransaction &) = delete;
     operator QSqlDatabase() const { return m_database; }
     QSqlError lastError() const { return m_error; }
+    // 外层用 BEGIN IMMEDIATE 直接抢写锁；SQLite 不支持嵌套 BEGIN，
+    // 内层自动降级为随机命名的 SAVEPOINT。
     bool transaction()
     {
         if (m_active) return false;
@@ -38,6 +40,7 @@ public:
         m_active = false;
         return true;
     }
+    // 析构也会调用：中途 return/异常都能自动回滚，不留半截数据（RAII）。
     void rollback()
     {
         if (!m_active) return;

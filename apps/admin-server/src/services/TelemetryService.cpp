@@ -46,6 +46,7 @@ bool isNonNegativeNumber(const QJsonValue &value, double *out)
     return std::isfinite(*out) && *out >= 0.0;
 }
 
+// 遥测/事件共用的两条 INSERT 封装：prepare + ? 占位符 + 绑定参数。
 bool insertTelemetry(QSqlDatabase database, int chargerId, const QString &recordedAt, double powerKw, double energy, const QString &type)
 {
     QSqlQuery query(database);
@@ -79,6 +80,8 @@ TelemetryService::TelemetryService(QSqlDatabase database)
 {
 }
 
+// telemetry.push：模拟器采样入库。校验参数与时间戳单调性 → 比对服务端权威状态 →
+// 事务内写 telemetry 表；若桩在充电中，同时给订单累计电量并按电价重算金额。
 Result TelemetryService::telemetryPush(const QJsonObject &payload, QJsonObject *responseData) const
 {
     int chargerId = 0;
@@ -93,7 +96,7 @@ Result TelemetryService::telemetryPush(const QJsonObject &payload, QJsonObject *
         || status.isEmpty()) {
         return Result::failure(QStringLiteral("INVALID_REQUEST"), QStringLiteral("telemetry payload is invalid"));
     }
-    const QString lastEvent = lastDeviceEventAt(chargerId);
+    const QString lastEvent = lastDeviceEventAt(chargerId);   // 拒绝比最新事件更旧的采样（防乱序覆盖）
     if (!lastEvent.isEmpty() && timestampKey(recordedAt) <= timestampKey(lastEvent)) {
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("device event timestamp is stale"));
     }
@@ -105,7 +108,7 @@ Result TelemetryService::telemetryPush(const QJsonObject &payload, QJsonObject *
         return Result::failure(QStringLiteral("CHARGER_NOT_AVAILABLE"), QStringLiteral("charger not found"));
     }
     const QString currentStatus = query.value(0).toString();
-    if (currentStatus != status) {
+    if (currentStatus != status) {   // 模拟器本地状态 ≠ 服务端权威状态 → 冲突，要求重新同步快照
         return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("charger status mismatch"));
     }
 
@@ -123,7 +126,7 @@ Result TelemetryService::telemetryPush(const QJsonObject &payload, QJsonObject *
         query.prepare(QStringLiteral(
             "UPDATE orders SET energy_kwh=energy_kwh+?, "
             "amount_fen=CAST((energy_kwh+?) * (SELECT s.price_fen_per_kwh FROM chargers c JOIN stations s ON s.id=c.station_id WHERE c.id=orders.charger_id) + 0.5 AS INTEGER) "
-            "WHERE id=? AND status='charging' AND ended_at IS NULL"));
+            "WHERE id=? AND status='charging' AND ended_at IS NULL"));   // 电量累加 + 按站点电价重算金额（四舍五入到分）
         query.addBindValue(energyIncrement);
         query.addBindValue(energyIncrement);
         query.addBindValue(orderId);
@@ -143,6 +146,8 @@ Result TelemetryService::telemetryPush(const QJsonObject &payload, QJsonObject *
     return Result::success();
 }
 
+// simulator.fault_set：故障注入/恢复。校验状态机合法性（idle/reserved/charging 才能故障，
+// fault 才能恢复），事务内写 telemetry 事件、必要时终结受影响订单、更新桩状态并记 events 日志。
 Result TelemetryService::faultSet(const QJsonObject &payload, QJsonObject *responseData) const
 {
     int chargerId = 0;

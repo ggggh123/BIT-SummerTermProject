@@ -12,7 +12,9 @@
 #include <algorithm>
 
 // 只读投影。沿用现有 telemetry 表，不给订单添加新的状态，也不生成模拟曲线。
+// 能源监测页/用户端充电曲线的数据源：查库→打包 QJsonObject→界面只消费 JSON，不碰 SQL。
 namespace EnergyReadModel {
+// 单个订单的功率曲线：窗口函数现算累计电量，倒序截取最近 600 条采样。
 inline Result order(QSqlDatabase db, qint64 orderId, qint64 userId, QJsonObject *out)
 {
     QSqlQuery q(db);
@@ -56,6 +58,7 @@ inline Result order(QSqlDatabase db, qint64 orderId, qint64 userId, QJsonObject 
     return Result::success();
 }
 
+// 站点曲线：取最近采样往回 30 分钟窗口，每根桩最多 600 条；同时返回最新采样时间供界面显示数据陈旧度。
 inline Result station(QSqlDatabase db, qint64 stationId, QJsonObject *out)
 {
     QSqlQuery q(db);

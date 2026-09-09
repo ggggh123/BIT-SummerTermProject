@@ -335,16 +335,17 @@ Result UserService::reserve(int userId, const QJsonObject &payload, QJsonObject 
     return Result::success();
 }
 
+// charge.start：开始充电。写操作标准模板——参数校验→开事务→前置检查→SELECT 查现状→UPDATE 改数据→commit。
 Result UserService::start(int userId, const QJsonObject &payload, QJsonObject *responseData) const
 {
     int orderId = 0;
-    Result idResult = requirePositiveId(payload, QStringLiteral("orderId"), &orderId);
+    Result idResult = requirePositiveId(payload, QStringLiteral("orderId"), &orderId);   // 1) 参数校验
     if (!idResult.ok) {
         return idResult;
     }
-    SqlTransaction database(m_database);
+    SqlTransaction database(m_database);    // 2) 开事务（嵌套时自动降级 SAVEPOINT）
     if (!database.transaction()) return databaseFailure(database.lastError());
-    if (orderOwner(orderId) == 0) {
+    if (orderOwner(orderId) == 0) {         // 3) 前置检查：订单存在/归属/用户未冻结
         return Result::failure(QStringLiteral("ENTITY_NOT_FOUND"), QStringLiteral("order not found"));
     }
     if (orderOwner(orderId) != userId) {
@@ -354,24 +355,24 @@ Result UserService::start(int userId, const QJsonObject &payload, QJsonObject *r
         return Result::failure(QStringLiteral("USER_FROZEN"), QStringLiteral("user is frozen"));
     }
     QSqlQuery query(m_database);
-    query.prepare(QStringLiteral("SELECT o.charger_id, o.status, c.status FROM orders o JOIN chargers c ON c.id=o.charger_id WHERE o.id=?"));
-    query.addBindValue(orderId);
+    query.prepare(QStringLiteral("SELECT o.charger_id, o.status, c.status FROM orders o JOIN chargers c ON c.id=o.charger_id WHERE o.id=?"));  // 4) SELECT 查现状
+    query.addBindValue(orderId);   // ? 占位符绑定参数，防 SQL 注入
     if (!query.exec()) return databaseFailure(query.lastError());
     if (!query.next() || query.value(1).toString() != QStringLiteral("reserved") || query.value(2).toString() != QStringLiteral("reserved")) {
-        return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("order is not reserved"));
+        return Result::failure(QStringLiteral("ORDER_STATE_CONFLICT"), QStringLiteral("order is not reserved"));  // 订单和桩都必须是"已预约"
     }
     const int chargerId = query.value(0).toInt();
-    query.prepare(QStringLiteral("UPDATE orders SET status='charging', started_at=? WHERE id=?"));
+    query.prepare(QStringLiteral("UPDATE orders SET status='charging', started_at=? WHERE id=?"));   // 5) 改订单状态
     query.addBindValue(nowIso());
     query.addBindValue(orderId);
     if (!query.exec()) {
         return databaseFailure(query.lastError());
     }
-    query.prepare(QStringLiteral("UPDATE chargers SET status='charging', updated_at=? WHERE id=?"));
+    query.prepare(QStringLiteral("UPDATE chargers SET status='charging', updated_at=? WHERE id=?")); // 5) 同步改桩状态
     query.addBindValue(nowIso());
     query.addBindValue(chargerId);
     if (!query.exec()) return databaseFailure(query.lastError());
-    if (!database.commit()) return databaseFailure(database.lastError());
+    if (!database.commit()) return databaseFailure(database.lastError());   // 6) 提交；中途任何失败由析构自动回滚
     if (responseData) {
         responseData->insert(QStringLiteral("order"), orderObject(orderId));
     }
@@ -413,6 +414,7 @@ Result UserService::stop(int userId, const QJsonObject &payload, QJsonObject *re
     return Result::success();
 }
 
+// charge.settle：结算扣费。订单置 completed、从余额扣款（整数分）、桩计数+累计时长，三步在同一事务里原子完成。
 Result UserService::settle(int userId, const QJsonObject &payload, QJsonObject *responseData) const
 {
     int orderId = 0;
@@ -438,20 +440,20 @@ Result UserService::settle(int userId, const QJsonObject &payload, QJsonObject *
     const qint64 amountFen = query.value(2).toLongLong();
     const int chargerId = query.value(3).toInt();
     const qint64 duration = BusinessTime::elapsed(query.value(4).toString(), query.value(1).toString());
-    query.prepare(QStringLiteral("SELECT balance_fen FROM users WHERE id=?"));
+    query.prepare(QStringLiteral("SELECT balance_fen FROM users WHERE id=?"));   // 余额校验（整数分，避免浮点误差）
     query.addBindValue(userId);
     if (!query.exec() || !query.next()) return databaseFailure(query.lastError());
     if (query.value(0).toLongLong() < amountFen) {
         return Result::failure(QStringLiteral("INSUFFICIENT_BALANCE"), QStringLiteral("balance is insufficient"));
     }
-    query.prepare(QStringLiteral("UPDATE users SET balance_fen=balance_fen-? WHERE id=?"));
+    query.prepare(QStringLiteral("UPDATE users SET balance_fen=balance_fen-? WHERE id=?"));   // 钱包余额扣款
     query.addBindValue(amountFen);
     query.addBindValue(userId);
     if (!query.exec()) return databaseFailure(query.lastError());
-    query.prepare(QStringLiteral("UPDATE orders SET status='completed' WHERE id=?"));
+    query.prepare(QStringLiteral("UPDATE orders SET status='completed' WHERE id=?"));   // 订单完结
     query.addBindValue(orderId);
     if (!query.exec()) return databaseFailure(query.lastError());
-    query.prepare(QStringLiteral("UPDATE chargers SET status=CASE WHEN status='charging' THEN 'idle' ELSE status END, charge_count=charge_count+1, total_duration_sec=total_duration_sec+?, updated_at=? WHERE id=?"));
+    query.prepare(QStringLiteral("UPDATE chargers SET status=CASE WHEN status='charging' THEN 'idle' ELSE status END, charge_count=charge_count+1, total_duration_sec=total_duration_sec+?, updated_at=? WHERE id=?"));   // 桩：空闲+计数+累计时长
     query.addBindValue(duration);
     query.addBindValue(nowIso());
     query.addBindValue(chargerId);

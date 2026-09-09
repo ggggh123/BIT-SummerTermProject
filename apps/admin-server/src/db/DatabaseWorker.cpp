@@ -48,6 +48,8 @@ struct DatabaseWorker::State {
 DatabaseWorker::DatabaseWorker() = default;
 DatabaseWorker::~DatabaseWorker() = default;
 
+// 本对象运行在专属 DB 线程：所有 SQL 在这里串行执行，网络/UI 线程只排队发请求。
+// 启动时打开运行库并装配全部 Service + RequestDispatcher。
 Result DatabaseWorker::start(const QString &path, const QString &snapshot, const QString &goldenPath,
                              const QString &goldenHash, TokenRoles tokenRoles)
 {
@@ -57,7 +59,7 @@ Result DatabaseWorker::start(const QString &path, const QString &snapshot, const
     const auto runtime=DatabaseManager::resolvePath(path);
     const auto golden=goldenPath.isEmpty() ? QDir(QStringLiteral(EV_PROJECT_SOURCE_DIR)).filePath("runtime/golden/core.db") : goldenPath;
     if (sameFile(runtime,golden) || sameFile(snapshot,golden) || sameFile(snapshot,runtime))
-        return Result::failure("INVALID_REQUEST","运行库、黄金库与快照输出必须使用不同文件");
+        return Result::failure("INVALID_REQUEST","运行库、黄金库与快照输出必须使用不同文件"); // 防三者指向同一文件互相覆盖
     const auto opened = s.database.open(runtime);
     if (!opened.ok) return opened;
     s.auth = std::make_unique<AuthService>(s.database.database(),std::move(tokenRoles));
@@ -96,6 +98,8 @@ void DatabaseWorker::refreshHealth()
     m_health = m_state->forecast->healthState();
     emit healthChanged(m_health);
 }
+// TCP 业务请求入口：交给 Dispatcher 按 action 分发到 Service 执行 SQL，
+// sequence 用于把响应与网络线程里的请求一一配对。
 void DatabaseWorker::execute(quint64 sequence, const ev::protocol::RequestEnvelope &request)
 {
     Q_ASSERT(QThread::currentThread() == thread());
@@ -110,6 +114,8 @@ void DatabaseWorker::execute(quint64 sequence, const ev::protocol::RequestEnvelo
     refreshHealth();
     emit completed(sequence, bytes);
 }
+// 管理界面本地查询入口：先校验管理员 token，再按视图类型分发到
+// DashboardService / ReadModel，结果打包 JSON 返回（同样串行在 DB 线程）。
 void DatabaseWorker::query(quint64 sequence, AdminView view, const QString &token, const QJsonObject &p)
 {
     Q_ASSERT(QThread::currentThread() == thread());
@@ -125,9 +131,9 @@ void DatabaseWorker::query(quint64 sequence, AdminView view, const QString &toke
     Result result = Result::success();
     switch (view) {
     case AdminView::Summary: data = s.dashboard->summary(p.value("rangeDays").toInt(7)); break;
-    case AdminView::Energy: result = EnergyReadModel::station(s.database.database(),p.value("stationId").toInteger(),&data); break;
+    case AdminView::Energy: result = EnergyReadModel::station(s.database.database(),p.value("stationId").toInteger(),&data); break;   // 能源监测页（站点曲线）
     case AdminView::Operations:
-        result = OperationsReadModel::snapshot(s.database.database(),&data);
+        result = OperationsReadModel::snapshot(s.database.database(),&data);  // 运营页（桩状态/健康快照）
         refreshHealth();
         break;
     case AdminView::Stations: rows = s.dashboard->stationRows(); break;

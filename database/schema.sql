@@ -1,6 +1,10 @@
 -- EV Charging Platform — SQLite schema v1
 -- Frozen v1 data contract. See docs/design/interface-contract.md and
 -- docs/plans/2026-09-01-ev-charging-platform-design.md section 6.
+-- 约定：金额一律整数分（fen），时间一律 +08:00 的 ISO 8601 文本；
+-- 本脚本由管理端 DatabaseManager::migrate() 在首启时逐条执行。
+
+-- ========== 元数据 ==========
 
 -- schema_version: records the database version.
 CREATE TABLE schema_version (
@@ -15,6 +19,8 @@ CREATE TABLE snapshot_meta (
     version INTEGER NOT NULL CHECK (version >= 0)
 );
 
+-- ========== 账号 ==========
+
 CREATE TABLE admins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
@@ -27,10 +33,12 @@ CREATE TABLE users (
     mobile TEXT NOT NULL UNIQUE,
     nickname TEXT NOT NULL,
     avatar_path TEXT NOT NULL DEFAULT '',
-    balance_fen INTEGER NOT NULL CHECK (balance_fen >= 0),
+    balance_fen INTEGER NOT NULL CHECK (balance_fen >= 0),      -- 钱包余额（整数分）
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'frozen')),
     registered_at TEXT NOT NULL
 );
+
+-- ========== 设备 ==========
 
 CREATE TABLE stations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,7 +46,7 @@ CREATE TABLE stations (
     address TEXT NOT NULL,
     latitude REAL NOT NULL,
     longitude REAL NOT NULL,
-    price_fen_per_kwh INTEGER NOT NULL CHECK (price_fen_per_kwh >= 0),
+    price_fen_per_kwh INTEGER NOT NULL CHECK (price_fen_per_kwh >= 0),  -- 电价（分/度）
     forecast_enabled INTEGER NOT NULL DEFAULT 0
         CHECK (forecast_enabled IN (0, 1)),
     created_at TEXT NOT NULL
@@ -46,7 +54,7 @@ CREATE TABLE stations (
 
 CREATE TABLE chargers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    station_id INTEGER NOT NULL REFERENCES stations(id),
+    station_id INTEGER NOT NULL REFERENCES stations(id),   -- 外键：桩属于站点
     code TEXT NOT NULL UNIQUE,
     type TEXT NOT NULL CHECK (type IN ('fast', 'slow')),
     power_kw REAL NOT NULL CHECK (power_kw > 0),
@@ -56,6 +64,8 @@ CREATE TABLE chargers (
     total_duration_sec INTEGER NOT NULL DEFAULT 0 CHECK (total_duration_sec >= 0),
     updated_at TEXT NOT NULL
 );
+
+-- ========== 业务：订单与遥测 ==========
 
 CREATE TABLE orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +88,7 @@ CREATE UNIQUE INDEX idx_orders_one_active_per_user
 CREATE UNIQUE INDEX idx_orders_one_active_per_charger
     ON orders(charger_id) WHERE status IN ('reserved', 'charging');
 
+-- 遥测采样：模拟器每 3 秒上报的功率/电量，三端功率曲线的唯一数据源。
 CREATE TABLE telemetry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     charger_id INTEGER NOT NULL REFERENCES chargers(id),
@@ -86,6 +97,8 @@ CREATE TABLE telemetry (
     energy_increment_kwh REAL NOT NULL CHECK (energy_increment_kwh >= 0),
     event_type TEXT NOT NULL
 );
+
+-- ========== ML 预测（optional 模块，core 库允许无 active forecast） ==========
 
 CREATE TABLE station_hourly_history (
     station_id INTEGER NOT NULL REFERENCES stations(id),
@@ -127,6 +140,8 @@ CREATE TABLE forecasts (
     PRIMARY KEY (run_id, station_id, horizon_h)
 );
 
+-- ========== 日志与审计 ==========
+
 CREATE TABLE events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type TEXT NOT NULL,
@@ -136,6 +151,7 @@ CREATE TABLE events (
     created_at TEXT NOT NULL
 );
 
+-- request_log: 每条写操作请求的审计日志（按 request_id 幂等去重）。
 CREATE TABLE request_log (
     request_id TEXT PRIMARY KEY,
     action TEXT NOT NULL,

@@ -5,6 +5,8 @@ ApiServer::ApiServer(QObject *parent) : QTcpServer(parent)
     qRegisterMetaType<ev::protocol::RequestEnvelope>();
 }
 ApiServer::~ApiServer() { stop(); }
+// 每来一个 TCP 连接就创建独立线程 + ConnectionWorker（一连接一线程），
+// 超过 16 个并发时以 SERVER_BUSY 拒绝，避免资源耗尽。
 void ApiServer::incomingConnection(qintptr descriptor)
 {
     auto *thread = new QThread(this);
@@ -14,7 +16,7 @@ void ApiServer::incomingConnection(qintptr descriptor)
     connect(thread,&QThread::started,connection,&ConnectionWorker::start);
     connect(thread,&QThread::finished,connection,&QObject::deleteLater);
     connect(connection,&ConnectionWorker::requestReceived,this,[this,connection](const auto &request) {
-        if (!m_stopping) emit requestReceived(connection,request);
+        if (!m_stopping) emit requestReceived(connection,request);   // 转发给主控队列
     });
     connect(connection,&ConnectionWorker::closed,this,[this,thread] { retire(thread); });
     thread->start();

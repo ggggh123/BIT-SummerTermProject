@@ -7,17 +7,19 @@
 
 #include <QJsonObject>
 
+// 所有 TCP 请求的"传菜员"：校验 action 合法 → 识别 token 角色 → 权限预检 →
+// 按 action 分发到对应 Service（handleRequest），写操作还会包一层请求日志事务。
 QByteArray RequestDispatcher::dispatch(const ev::protocol::RequestEnvelope &request) const
 {
     const auto &action = request.action;
-    if (!ev::actions::all().contains(action))
+    if (!ev::actions::all().contains(action))   // 不在 Actions.h 清单里的动作直接拒绝
         return ev::protocol::toJson(fail(request.requestId, QStringLiteral("INVALID_REQUEST"), QStringLiteral("未知接口动作")));
-    QString role;
+    QString role;   // 按 token 识别四种调用方身份
     if (m_authService->isTokenValid(request.token)) role = QStringLiteral("admin");
     else if (m_authService->isUserTokenValid(request.token)) role = QStringLiteral("user");
     else if (m_authService->isSimulatorTokenValid(request.token)) role = QStringLiteral("simulator");
     else if (m_authService->isMlTokenValid(request.token)) role = QStringLiteral("ml");
-    const auto preflight=RequestPreflight::check(role,request);
+    const auto preflight=RequestPreflight::check(role,request);   // 权限矩阵：该角色能否调该 action
     if (!preflight.ok) return ev::protocol::toJson(fail(request.requestId,preflight.code,preflight.message));
     QString actor;
     if (role=="admin") actor="admin:"+m_authService->adminIdentityForToken(request.token);
@@ -47,6 +49,7 @@ QByteArray RequestDispatcher::dispatch(const ev::protocol::RequestEnvelope &requ
         mutation = true;
         if (m_authService->isMlTokenValid(request.token)) actor = QStringLiteral("ml");
     }
+    // 写操作：由 RequestLogService 包外层事务 + 记录审计日志，再执行真正的业务
     if (mutation) {
         if (actor.isEmpty()) return ev::protocol::toJson(fail(request.requestId, QStringLiteral("AUTH_REQUIRED"), QStringLiteral("token is missing or invalid")));
         return m_requestLogService->execute(request, actor, [this, &request] { return handleRequest(request); },
@@ -58,6 +61,7 @@ QByteArray RequestDispatcher::dispatch(const ev::protocol::RequestEnvelope &requ
     return ev::protocol::toJson(response);
 }
 
+// 按 action 字符串把请求映射到具体 Service 方法（接口名 → 实现的"路由表"）。
 ev::protocol::ResponseEnvelope RequestDispatcher::handleRequest(const ev::protocol::RequestEnvelope &request) const
 {
     if (request.action == ev::actions::AuthUserLogin) {

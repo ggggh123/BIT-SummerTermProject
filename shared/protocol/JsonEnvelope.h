@@ -23,6 +23,8 @@ private:
     QString message_;
 };
 
+// JSON 信封层：帧 body 的统一格式 {requestId, action, token, payload}，
+// requestId 用于请求-响应配对，token 用于鉴权。
 QByteArray toJson(const RequestEnvelope &request);
 QByteArray toJson(const ResponseEnvelope &response);
 RequestEnvelope parseRequest(QByteArrayView json);

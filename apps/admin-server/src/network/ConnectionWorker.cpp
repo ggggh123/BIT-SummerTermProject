@@ -17,7 +17,7 @@ void ConnectionWorker::start()
         QTimer::singleShot(1000,this,&ConnectionWorker::stop);
         return;
     }
-    connect(m_socket, &QTcpSocket::readyRead, this, &ConnectionWorker::read);
+    connect(m_socket, &QTcpSocket::readyRead, this, &ConnectionWorker::read); // 数据到达即解帧
     if (m_socket->bytesAvailable()) read();
 }
 void ConnectionWorker::stop()
@@ -35,14 +35,14 @@ void ConnectionWorker::reply(const QByteArray &bytes)
 void ConnectionWorker::read()
 {
     QList<QByteArray> frames;
-    try { frames = m_decoder.append(m_socket->readAll()); }
+    try { frames = m_decoder.append(m_socket->readAll()); }   // 攒缓冲+切完整帧（粘包/半包）
     catch (const ev::protocol::FrameError &) {
         reply(ev::protocol::toJson({{},false,"INVALID_REQUEST","无效 TCP 帧",QJsonObject{}}));
         m_socket->disconnectFromHost();
         return;
     }
     for (const auto &frame : frames) {
-        try { emit requestReceived(ev::protocol::parseRequest(frame)); }
+        try { emit requestReceived(ev::protocol::parseRequest(frame)); }  // JSON信封→请求对象，转发给DB线程
         catch (const ev::protocol::EnvelopeError &error) {
             reply(ev::protocol::toJson({{},false,error.code(),error.message(),QJsonObject{}}));
         }

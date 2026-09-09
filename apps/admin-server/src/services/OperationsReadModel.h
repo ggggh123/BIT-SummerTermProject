@@ -10,6 +10,7 @@
 
 // 管理窗口的只读视图，不新增公开协议或改变设备／订单状态。
 namespace OperationsReadModel {
+// 运营页快照：站点表 + 桩表（联查充电次数/累计时长） + 最新一条遥测，一次查完打包 JSON。
 inline Result snapshot(QSqlDatabase db, QJsonObject *out)
 {
     QSqlQuery query(db);

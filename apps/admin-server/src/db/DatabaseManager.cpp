@@ -135,6 +135,7 @@ QString DatabaseManager::resolvePath(const QString &databasePath)
     return QFileInfo(QDir::cleanPath(databasePath)).absoluteFilePath();
 }
 
+// 打开 SQLite 连接：整库生命周期唯一的入口（服务端是唯一 writer）。
 Result DatabaseManager::open(const QString &databasePath)
 {
     m_databasePath = resolvePath(databasePath);
@@ -149,15 +150,15 @@ Result DatabaseManager::open(const QString &databasePath)
         return databaseFailure(db.lastError());
     }
 
-    execSql(QStringLiteral("PRAGMA foreign_keys = ON"));
-    execSql(QStringLiteral("PRAGMA busy_timeout = 3000"));
-    execSql(QStringLiteral("PRAGMA journal_mode = WAL"));
+    execSql(QStringLiteral("PRAGMA foreign_keys = ON"));   // SQLite 默认不检查外键，必须显式开启
+    execSql(QStringLiteral("PRAGMA busy_timeout = 3000")); // 遇锁等 3 秒再失败，容忍瞬时争用
+    execSql(QStringLiteral("PRAGMA journal_mode = WAL"));  // WAL：读写并发，写不阻塞读
 
-    Result migration = migrate();
+    Result migration = migrate();   // 首启执行 schema.sql 建表
     if (!migration.ok) {
         return migration;
     }
-    return seed();
+    return seed();                  // 空库时灌入演示种子数据
 }
 
 QSqlDatabase DatabaseManager::database() const
@@ -170,6 +171,7 @@ QString DatabaseManager::databasePath() const
     return m_databasePath;
 }
 
+// 迁移：schema_version 表存在即认为库已初始化，否则逐条执行 schema.sql。
 Result DatabaseManager::migrate()
 {
     QSqlQuery exists(database());
@@ -196,6 +198,8 @@ Result DatabaseManager::migrate()
     return Result::success();
 }
 
+// 种子数据：空库时灌入 6 站 48 桩、30 用户和默认 admin（密码 sha256）。
+// 逐表判空/INSERT OR IGNORE，保证重复启动不会重复插入。
 Result DatabaseManager::seed()
 {
     const QString timestamp = nowIso();
