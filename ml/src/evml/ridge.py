@@ -1,44 +1,31 @@
-"""Ridge regression model fitting and honest champion selection."""
+"""Ridge regression model fitting and honest champion selection.
+
+Phase 2: the model is trained with Spark MLlib (see ``spark_model``).
+The public API (``fit_ridge`` / ``predict_ridge`` / ``choose_champion`` /
+``evaluate_model_on_split``) is unchanged, so downstream consumers
+(features, forecast, pipeline, CLI, tests) are unaffected.
+"""
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import Ridge
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from .metrics import evaluate_predictions
+from .spark_model import (
+    CATEGORICAL_COLS,
+    FEATURE_COLUMNS,
+    NUMERIC_COLS,
+    SparkRidgeModel,
+    fit_spark_ridge,
+)
 
-FEATURE_COLUMNS = [
-    "station_id",
-    "horizon_h",
-    "pile_count",
-    "rated_power_kw",
-    "target_hour_sin",
-    "target_hour_cos",
-    "target_dow_sin",
-    "target_dow_cos",
-    "target_is_weekend",
-    "target_is_holiday",
-    "target_temperature_c",
-    "load_lag_1",
-    "load_lag_24",
-    "load_roll_6",
-    "load_roll_24",
-    "busy_lag_1",
-    "busy_lag_24",
-    "busy_roll_6",
-    "busy_roll_24",
-]
-
-CATEGORICAL_COLS = ["station_id"]
-NUMERIC_COLS = [c for c in FEATURE_COLUMNS if c not in CATEGORICAL_COLS]
+# FEATURE_COLUMNS / CATEGORICAL_COLS / NUMERIC_COLS are re-exported here for
+# backward compatibility: forecast.py and tests import them from evml.ridge.
 
 
-def fit_ridge(train: pd.DataFrame, target: str = "load_kw") -> Pipeline:
-    """Fit a Ridge regression pipeline.
+def fit_ridge(train: pd.DataFrame, target: str = "load_kw") -> SparkRidgeModel:
+    """Fit a Ridge regression model (Spark MLlib LinearRegression, L2).
 
     Parameters
     ----------
@@ -50,31 +37,13 @@ def fit_ridge(train: pd.DataFrame, target: str = "load_kw") -> Pipeline:
 
     Returns
     -------
-    Fitted sklearn Pipeline (ColumnTransformer + Ridge).
+    A fitted :class:`SparkRidgeModel` exposing ``predict(pandas.DataFrame)``.
     """
-    target_col = f"target_{target}"
-    X = train[FEATURE_COLUMNS].copy()
-    y = train[target_col].copy()
-
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("cat", OneHotEncoder(drop=None, sparse_output=False), CATEGORICAL_COLS),
-            ("num", StandardScaler(), NUMERIC_COLS),
-        ]
-    )
-
-    pipeline = Pipeline(
-        steps=[
-            ("preprocessor", preprocessor),
-            ("regressor", Ridge(alpha=1.0)),
-        ]
-    )
-    pipeline.fit(X, y)
-    return pipeline
+    return fit_spark_ridge(train, target)
 
 
-def predict_ridge(model: Pipeline, data: pd.DataFrame) -> np.ndarray:
-    """Predict using a fitted Ridge pipeline."""
+def predict_ridge(model: SparkRidgeModel, data: pd.DataFrame) -> np.ndarray:
+    """Predict using a fitted Ridge model."""
     X = data[FEATURE_COLUMNS].copy()
     return model.predict(X)
 
@@ -99,7 +68,7 @@ def choose_champion(
 
 
 def evaluate_model_on_split(
-    model: Pipeline,
+    model: SparkRidgeModel,
     split: pd.DataFrame,
     target: str,
     model_name: str = "ridge",

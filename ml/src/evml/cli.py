@@ -104,7 +104,8 @@ def _cmd_train(args) -> int:
     from .features import build_supervised, split_supervised
     from .ridge import fit_ridge, evaluate_model_on_split
     from .metrics import evaluate_predictions
-    from .pipeline import _atomic_write_joblib, _atomic_write_json, _metrics_to_json
+    from .pipeline import _atomic_write_json, _metrics_to_json
+    from .spark_model import save_spark_model
 
     history = load_history(args.history)
     supervised = build_supervised(history)
@@ -135,8 +136,8 @@ def _cmd_train(args) -> int:
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    _atomic_write_joblib(out / "model_load.joblib", load_model)
-    _atomic_write_joblib(out / "model_busy.joblib", busy_model)
+    save_spark_model(load_model, out / "model_load")
+    save_spark_model(busy_model, out / "model_busy")
     _atomic_write_json(out / "metrics.json", _metrics_to_json(all_metrics))
 
     print("Models trained and saved.")
@@ -145,9 +146,9 @@ def _cmd_train(args) -> int:
 
 def _cmd_forecast(args) -> int:
     """Generate forecast from existing models."""
-    import joblib
     from .repository import load_history
     from .ridge import choose_champion
+    from .spark_model import load_spark_model
     from .forecast import build_forecast_run
     from .pipeline import _atomic_write_json, _run_to_candidate, _run_summary
 
@@ -156,8 +157,8 @@ def _cmd_forecast(args) -> int:
     generated_at = _parse_ts(args.generated_at) if args.generated_at else None
 
     out = Path(args.output_dir)
-    load_model = joblib.load(out / "model_load.joblib")
-    busy_model = joblib.load(out / "model_busy.joblib")
+    load_model = load_spark_model(out / "model_load")
+    busy_model = load_spark_model(out / "model_busy")
 
     # For simplicity, use ridge as champion (in production, check metrics)
     load_champion = "ridge"

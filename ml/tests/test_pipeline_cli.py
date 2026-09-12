@@ -26,8 +26,8 @@ class TestPipeline:
             output_dir=tmp_path,
         )
         # Check artifacts
-        assert (tmp_path / "model_load.joblib").exists()
-        assert (tmp_path / "model_busy.joblib").exists()
+        assert (tmp_path / "model_load").is_dir()
+        assert (tmp_path / "model_busy").is_dir()
         assert (tmp_path / "metrics.json").exists()
         assert (tmp_path / "forecast_candidate.json").exists()
         assert (tmp_path / "run_summary.json").exists()
@@ -131,8 +131,8 @@ class TestCLI:
             "--output-dir", str(tmp_path),
         ])
         assert rc == 0
-        assert (tmp_path / "model_load.joblib").exists()
-        assert (tmp_path / "model_busy.joblib").exists()
+        assert (tmp_path / "model_load").is_dir()
+        assert (tmp_path / "model_busy").is_dir()
         assert (tmp_path / "metrics.json").exists()
         assert (tmp_path / "forecast_candidate.json").exists()
         assert (tmp_path / "run_summary.json").exists()

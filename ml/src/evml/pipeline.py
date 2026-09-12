@@ -4,19 +4,16 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from pathlib import Path
 
-import joblib
-import numpy as np
 import pandas as pd
 
-from .baseline import predict_seasonal_naive
 from .features import build_supervised, split_supervised
 from .forecast import build_forecast_run
 from .metrics import evaluate_predictions
 from .repository import load_history
-from .ridge import choose_champion, evaluate_model_on_split, fit_ridge, predict_ridge
+from .ridge import choose_champion, evaluate_model_on_split, fit_ridge
+from .spark_model import save_spark_model
 from .types import ForecastRun, MetricRow
 
 
@@ -168,8 +165,8 @@ def run_pipeline(
     _atomic_write_json(output_dir / "metrics.json", _metrics_to_json(all_metrics))
     _atomic_write_json(output_dir / "forecast_candidate.json", _run_to_candidate(run))
     _atomic_write_json(output_dir / "run_summary.json", _run_summary(run, load_champion, busy_champion))
-    _atomic_write_joblib(output_dir / "model_load.joblib", load_model)
-    _atomic_write_joblib(output_dir / "model_busy.joblib", busy_model)
+    save_spark_model(load_model, output_dir / "model_load")
+    save_spark_model(busy_model, output_dir / "model_busy")
 
     return run
 
@@ -183,15 +180,6 @@ def _atomic_write_json(path: Path, data: dict | list) -> None:
         json.dump(data, f, ensure_ascii=False, sort_keys=True, indent=2)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp, path)
-
-
-def _atomic_write_joblib(path: Path, obj) -> None:
-    """Write joblib atomically via temp file + os.replace."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    joblib.dump(obj, tmp)
     os.replace(tmp, path)
 
 
