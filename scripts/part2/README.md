@@ -1,170 +1,57 @@
-# 第二阶段 Ubuntu 环境：体检与补齐
+# 第二阶段 Ubuntu 环境：安装、修补与验收
 
-> 用途：第二阶段（Hadoop + PySpark + SparkSQL + Flask/Vue 大屏 + Spark MLlib）在本组的 Ubuntu 虚拟机上跑通所需环境的检查与安装命令。
-> 口径：以老师《2026_09_12_00.先看这里！！！》材料为准 —— 完整环境镜像为 **Hadoop 3.3.0 + Spark 3.4.1，装在 `/opt/module/`**，`start-all.sh` 一键起 HDFS+YARN，HDFS RPC 端口 **9000**。
+依据桌面 `Part2/06-TL-Hadoop伪分布式安装部署指南.md`（2026-09-14 版）。**本组不用老师下发的 hadoop-3.2.1 + jdk-8u261**，改用官方 tarball。
 
-## 最小必装清单
+## 版本基线（全组必须一致）
 
-| 档位 | 项目 | 理由 |
+| 组件 | 版本 | 安装路径 |
 |---|---|---|
-| 必装 | **Spark 3.4.1** | 老师镜像口径；PySpark / SparkSQL / MLlib 全靠它 |
-| 必装 | **Python 3.11 解释器 + pyspark** | 系统 Python 3.13 与 PySpark 3.5 不兼容；PySpark 作业必须在 VM 里跑（宿主机是 Windows Python，驱不动 Hadoop 上的 Spark） |
-| 按需 | `flask`、`flask-cors` | 只有 Flask 也在 VM 里跑才装 |
-| 按需 | `pandas`、`pyarrow` | 只在需要直接核对 ADS Parquet 数值时方便，可省 |
-| 按需 | Node 20 | 只在 VM 里跑 `npm run dev` 才要；在 Windows 上 `npm run build` 出 dist 拷进来就不用装 |
-| 不用装 | PyCharm | 用 VM 里已有的 CodeBuddy（VS Code 内核）写 PySpark 足够；仅当老师当面点验步骤第 2 条，再补第 4 节那条命令 |
-| 不用装 | HBuilderX | 老师给的前端 IDE，走 Vite 路线不需要 |
-| 不用装 | MySQL / Hive | 老师明确"数据库可用第一阶段 SQLite"；数仓用 Spark catalog + Parquet 即可 |
+| JDK | Eclipse Temurin **17** | `/usr/local/jdk-17` |
+| Hadoop | **3.4.1** | `/usr/local/hadoop` |
+| Spark | **3.5.7** | `/usr/local/spark` |
+| Python | 22.04 用系统 3.10；25.04 自建 **3.11** | `~/venvs/part2`（软链 `~/venv-py311`） |
+| HDFS RPC | `hdfs://<主机名>:8020` | 副本数 1 |
 
-## 0. 先做体检
+## 脚本一览（按执行顺序）
 
-```bash
-bash /mnt/hgfs/BIT-SummerTermProject/scripts/part2/env-check.sh
-```
-
-输出末尾会给「缺失清单」。下面是各缺失项的补齐命令。
-
-把结果落盘回传给宿主机（Windows 端路径 `D:\BIT-SummerTermProject\scripts\part2\env-report.txt`）：
+| 脚本 | 用途 | 是否需要 sudo |
+|---|---|---|
+| `10-install-newstack.sh` | 校验 tarball → 停旧环境 → 装三个组件 → 写 7 个 Hadoop 配置(含 Java 17 `--add-opens`)→ 写 Spark 配置 → 写环境变量 → 删旧环境 → 格式化并启动 → 建 HDFS 目录并预传 jars | 是 |
+| `11-fix-profile-and-start.sh` | 只补做"清 `/etc/profile` 旧块 + 格式化 + 启动 + 建目录" | 是 |
+| `env-check.sh` | 只读体检：版本、配置、五进程、HDFS、Python 依赖、SSH 免密、共享文件夹 | 否 |
+| `40-verify.sh` | 验收：版本、五进程、HDFS 读写、**Spark on YARN 读 HDFS**、SparkSQL、YARN 记录、Web UI | 否 |
 
 ```bash
-bash /mnt/hgfs/BIT-SummerTermProject/scripts/part2/env-check.sh | tee /mnt/hgfs/BIT-SummerTermProject/scripts/part2/env-report.txt
+# 前置：三个 tarball 下载到 ~/software/
+#   jdk17.tar.gz                 （Adoptium Temurin 17，清华镜像）
+#   hadoop-3.4.1.tar.gz          （清华 apache 镜像）
+#   spark-3.5.7-bin-hadoop3.tgz  （清华没有，用华为云 mirrors.huaweicloud.com/apache/spark/）
+
+sudo bash scripts/part2/10-install-newstack.sh   # 安装（在共享文件夹路径下执行）
+bash scripts/part2/env-check.sh | tee env-report.txt   # 体检
+bash scripts/part2/40-verify.sh                  # 验收
 ```
 
-## 0.1 如果 apt 报 404（Ubuntu 25.04）
+## 本机已记录的偏差（如实声明）
 
-25.04 是过渡版本（支持到 2026-01），官方源已下架，`apt-get update` 会全部 404。改用归档源：
+- 主机名保持 `TimeMachine`，操作用户 `spiderboy`（指南示例为「姓名全拼+数字」与 `hadoop`）
+- Python 虚拟环境为 `~/venvs/part2`（并软链 `~/venv-py311` 对齐指南路径）
+- YARN 容器内存 3072MB（指南建议 4096，本机总内存 5.3GB，指南允许下调）；`yarn-site`/`hdfs-site` 额外设 `bind-host=0.0.0.0`，便于宿主机浏览器直接打开 9870/8088
+- 系统为 Ubuntu 25.04（指南双轨支持），apt 需切 `old-releases` 源
 
-```bash
-# 25.04 用 deb822 格式的源文件；老版本才是 /etc/apt/sources.list
-if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-  sudo sed -i -E 's|https?://[^ ]*ubuntu\.com/ubuntu|https://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
-else
-  sudo sed -i -E 's|https?://[^ ]*ubuntu\.com/ubuntu|https://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list
-fi
-sudo apt-get update
-```
-
-若源里用的是非 `ubuntu.com` 的国内镜像（如 tuna、aliyun），需要手工把地址也改成 `old-releases.ubuntu.com`。
-
-## 1. Spark 3.4.1（对齐老师镜像，必装）
-
-VM 能联网：从 Apache 归档下载；不能联网：把 `spark-3.4.1-bin-hadoop3.tgz` 放到宿主机的 `D:\BIT-SummerTermProject\`，在 VM 里从 `/mnt/hgfs/BIT-SummerTermProject/` 取。
-
-```bash
-mkdir -p /opt/software /opt/module && cd /opt/software
-# 有网时：
-sudo curl -O https://archive.apache.org/dist/spark/spark-3.4.1/spark-3.4.1-bin-hadoop3.tgz
-# 或者从共享文件夹拷贝（宿主机先下好放进去）：
-# sudo cp /mnt/hgfs/BIT-SummerTermProject/spark-3.4.1-bin-hadoop3.tgz /opt/software/
-
-sudo tar -zxvf spark-3.4.1-bin-hadoop3.tgz -C /opt/module
-sudo mv /opt/module/spark-3.4.1-bin-hadoop3 /opt/module/spark-3.4.1
-sudo chown -R "$USER":"$USER" /opt/module/spark-3.4.1
-
-cat >> ~/.bashrc <<'EOF'
-export SPARK_HOME=/opt/module/spark-3.4.1
-export PATH=$SPARK_HOME/bin:$SPARK_HOME/sbin:$PATH
-export HADOOP_CONF_DIR=/opt/module/hadoop-3.3.0/etc/hadoop
-EOF
-source ~/.bashrc
-
-# 让 Spark 读到 HDFS 配置（HADOOP_CONF_DIR 指对就不用拷；不确定就拷一份）
-cp $HADOOP_CONF_DIR/core-site.xml $HADOOP_CONF_DIR/hdfs-site.xml $SPARK_HOME/conf/ 2>/dev/null
-```
-
-Hadoop 装在别处时，把上面的 `hadoop-3.3.0` 换成实际目录（体检脚本会打印发现的目录）。
-
-验证：
-
-```bash
-spark-submit --version
-pyspark --master yarn
->>> spark.read.text("hdfs://localhost:9000/README.txt").count()   # 换成 HDFS 上真实存在的文件
-```
-
-## 2. Python 3.11 + PySpark（必装）
-
-**不要用系统 Python。** Ubuntu 25.04 自带 Python 3.13，PySpark 3.4/3.5 官方只支持 3.8–3.11，导入就会炸。用 uv 或 conda 建一个 3.11 环境。
-
-```bash
-# 方案 A：uv（推荐，装完即用）
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.bashrc
-uv venv --python 3.11 /opt/module/venv311
-source /opt/module/venv311/bin/activate
-uv pip install pyspark==3.5.3 pandas pyarrow flask flask-cors
-
-# 方案 B：conda 存在时
-# conda create -y -n spark python=3.11 && conda activate spark
-# pip install pyspark==3.5.3 pandas pyarrow flask flask-cors
-```
-
-装上 `SPARK_HOME` 后 `pyspark` 用哪个 Python 由 `PYSPARK_PYTHON` 决定：
-
-```bash
-cat >> ~/.bashrc <<'EOF'
-export PYSPARK_PYTHON=/opt/module/venv311/bin/python
-export PYSPARK_DRIVER_PYTHON=/opt/module/venv311/bin/python
-EOF
-source ~/.bashrc
-python -c "import pyspark; print(pyspark.__version__)"
-```
-
-离线环境下用 `uv pip install --find-links=/mnt/hgfs/BIT-SummerTermProject/wheels ...`，wheels 目录在能联网的机器上 `pip download` 出来。
-
-## 3. Node 20（按需：只在 VM 里跑前端 dev server 才装）
-
-老师另外给了 **HBuilderX**（`01.单机版Hadoop安装包/HBuilderX.5.24...zip`），那是他预期的前端 IDE，做 uni-app/Vue 无需自己配 Node。若你走 Vite 路线：
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-node -v && npm -v
-```
-
-离线时打包 `node_modules`（联网机 `npm install` 后整体拷进共享文件夹），在工程目录 `npm ci --offline`。
-
-## 4. PyCharm（按需，默认不装）
-
-老师给的 Python 安装包是 **Windows 版**，说明他预期 IDE 也可能装在宿主机（用 FinalShell 连 VM，或直接本地写脚本）。两条路都行：
-
-```bash
-# VM 内（snap）
-sudo snap install pycharm-community --classic
-# 或下载 tar.gz 解压到 /opt（离线友好）
-# sudo tar -zxvf pycharm-community-*.tar.gz -C /opt && /opt/pycharm-*/bin/pycharm.sh
-```
-
-PyCharm 里把解释器指到 `/opt/module/venv311/bin/python`，Run Configuration 里补 `PYTHONPATH`/`SPARK_HOME`，就能在本机跑 PySpark 作业。
-
-## 5. 北京 GeoJSON（大屏地图必需，走本地文件）
-
-不能走 CDN，VM 也可能没网。在能联网的机器上下载后放进仓库，由前端本地引用：
-
-```bash
-curl -o beijing.json "https://geo.datav.aliyun.com/areas_v3/bound/110000_full.json"
-```
-
-放到前端工程的 `public/geo/beijing.json`（或 `src/assets/geo/`），ECharts `registerMap('beijing', geoJson)` 使用。
-
-## 6. HDFS 业务目录 + 起停顺序
-
-```bash
-hdfs dfs -mkdir -p /ev-charging/{ods,dwd,dws,ads,quality,forecast}
-
-# 起：HDFS + YARN → Spark → 作业 → Flask
-start-all.sh          # 老师镜像用这个；分开起用 start-dfs.sh + start-yarn.sh
-jps                   # 期望 NameNode/DataNode/SecondaryNameNode/ResourceManager/NodeManager
-```
-
-写入失败先查安全模式：`hdfs dfsadmin -safemode get`，必要时 `hdfs dfsadmin -safemode leave`。
-
-## 7. 常见坑
+## 踩过的坑（务必转告其他成员）
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| `apt-get update` 全 404 | Ubuntu 25.04 已 EOL | 见第 0.1 节换 old-releases |
-| `import pyspark` 报错 / 段错误 | 系统 Python 3.13 与 PySpark 3.5 不兼容 | 见第 2 节建 3.11 环境并设 `PYSPARK_PYTHON` |
-| Spark 读不到 HDFS | `HADOOP_CONF_DIR` 没设或没拷 `core-site.xml` | 见第 1 节 |
-| 作业 OOM / 反复失败 | 6 GB 内存偏小 | VM 内存调到 8–12 GB；`--executor-memory 2g --driver-memory 2g`；`spark.sql.shuffle.partitions=8`；必要时 `yarn.nodemanager.resource.memory-mb=4096` |
-| 脚本报 `$'\r': command not found` | 文件被 Windows 存成 CRLF | `sed -i 's/\r$//' scripts/part2/env-check.sh` |
+| `hadoop`/`hdfs` 报 `Cannot execute /opt/module/hadoop-3.2.1/libexec/...` | 旧环境把 `JAVA_HOME`/`HADOOP_HOME` 追加在 **`/etc/profile` 末尾**，而它在 `/etc/profile.d/` **之后**执行，覆盖了新路径 | `11-fix-profile-and-start.sh` 会删掉该块；`10-install-newstack.sh` 已内置自动清理 |
+| `jps` 缺 NameNode | 未格式化，或上一版 Hadoop 的 `dfs/` 残留导致 clusterID 冲突 | 清空 `dfs/data` 后 `hdfs namenode -format` |
+| YARN/NameNode 报 `InaccessibleObjectException` | Java 17 强封装，缺 `--add-opens` | 见指南 §5.7(1)(2)，`10-install-newstack.sh` 已写好 |
+| `start-dfs.sh` 报 `can only be executed by root` | `hadoop-env.sh` 里 `HDFS_*_USER`/`YARN_*_USER` 被设成了 root | 改为当前用户（脚本已设） |
+| Web UI 在宿主机打不开 | 默认只绑 `127.0.1.1`（hosts 把主机名解析到回环） | `bind-host=0.0.0.0`（脚本已配） |
+| PySpark 报 Python 版本错误 | 25.04 系统 Python 是 3.13，PySpark 3.5 只支持 3.8–3.11 | `PYSPARK_PYTHON` 指向自建 3.11 环境 |
+
+## 验收基线（2026-09-14 实测）
+
+- `env-check.sh`：21 项全过
+- `40-verify.sh`：12 项全过，其中 Spark on YARN 读 HDFS 成功，YARN 留下 `FINISHED/SUCCEEDED` 记录
+- 宿主机浏览器可直接访问 `http://<VM-IP>:9870/`（HDFS）与 `:8088/`（YARN）
