@@ -1,5 +1,10 @@
 # 第二阶段数据管道（1/10 规模的参考骨架）
 
+> **权威口径变更（2026-09-14 16:20）**：ADS 表结构以 **#4 的 `part2/scml/warehouse/sql/ads_schema.sql`**（分支 `feat/part2_SCML`）为准。
+> 本目录的 `gen_ods.py`（生成器）与 `build_warehouse.py` 的 ADS 部分**标记为 deprecated**，
+> 仅保留可跑通的链路参考；对外产出统一走 `align_to_scml_ads.py`（按他的字段名与粒度重写 ADS）。
+> 本目录保留且不重复的价值：**逐层对账 `reconcile.py`、接口契约导出 `export_api.py`**、以及 `scripts/part2/` 的环境三件套。
+
 > 提出人：#1（PM）｜用途：**在不依赖任何人的前提下先把「生成 → 质量 → 清洗 → 分层 → ADS」整条链路跑通**，
 > 作为 #3（质量/清洗）、#4（生成器/数仓）、#5（预测）的起点骨架；他们接手后按《03》《04》替换实现即可。
 > 口径以第一阶段 `database/schema.sql` 为唯一真源（金额整数分、时间 `+08:00` ISO 8601）。
