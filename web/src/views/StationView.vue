@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import EChart from '@/components/EChart.vue'
 import { fetchEnvelope, fetchGroup } from '@/api/client'
 import { startPolling } from '@/api/polling'
@@ -15,12 +16,16 @@ const data = ref(null)
 const detail = ref(null)
 const stationId = ref(1)
 const error = ref('')
+const route = useRoute()
 
 async function load() {
   try {
     const raw = await fetchGroup({ stations: ENDPOINTS.home.stations, coverage: ENDPOINTS.station.coverage })
     data.value = { stations: raw.stations, coverage: raw.coverage }
-    stationId.value = raw.stations[0]?.stationId ?? 1
+    // 主页站点散点点击会带上 ?station=<id>
+    const fromQuery = Number(route.query.station)
+    const exists = raw.stations.some((s) => s.stationId === fromQuery)
+    stationId.value = exists ? fromQuery : raw.stations[0]?.stationId ?? 1
     await loadDetail()
     error.value = ''
   } catch (e) {

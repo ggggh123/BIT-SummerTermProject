@@ -1,11 +1,15 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import EChart from '@/components/EChart.vue'
+import ScaleFrame from '@/components/ScaleFrame.vue'
 import { fetchGroup } from '@/api/client'
 import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
 import { buildHomeViewModel } from '@/lib/viewModel'
 import { formatFen, formatKwh } from '@/lib/contracts'
+import { loadBeijingMap } from '@/lib/beijingMap'
+import { buildBeijingStationOption } from '@/lib/charts/beijingStation'
 import { buildRevenueTrendOption30d } from '@/lib/charts/overview'
 import {
   buildLoadForecastOption,
@@ -19,6 +23,8 @@ const error = ref('')
 const selectedStation = ref(null)
 const fast = ref(null)
 const slow = ref(null)
+const mapReady = ref(false)
+const router = useRouter()
 
 function rebuild() {
   if (!fast.value) return
@@ -78,6 +84,9 @@ let stopSlow = null
 onMounted(() => {
   stopFast = startPolling(loadFast, 5000)
   stopSlow = startPolling(loadSlow, 60000)
+  loadBeijingMap()
+    .then(() => { mapReady.value = true })
+    .catch(() => { mapReady.value = false }) // 加载失败自动降级为经纬度散点
 })
 
 onBeforeUnmount(() => {
@@ -89,7 +98,13 @@ const kpis = computed(() => view.value?.kpis ?? {})
 const revenueOption = computed(() => (view.value ? buildRevenueTrendOption30d(view.value) : {}))
 const statusOption = computed(() => (view.value ? buildStatusOption(view.value) : {}))
 const rankingOption = computed(() => (view.value ? buildRankingOption(view.value) : {}))
-const stationOption = computed(() => (view.value ? buildStationOption(view.value) : {}))
+const stationOption = computed(() => {
+  if (!view.value) return {}
+  return mapReady.value ? buildBeijingStationOption(view.value) : buildStationOption(view.value)
+})
+function onStationClick(params) {
+  if (params?.data?.stationId) router.push({ path: '/station', query: { station: params.data.stationId } })
+}
 const loadOption = computed(() =>
   view.value && selectedStation.value ? buildLoadForecastOption(view.value, selectedStation.value) : {},
 )
@@ -107,6 +122,7 @@ const totalQualityIssues = computed(() =>
     数据加载失败：{{ error }}（页面保留上一次成功数据）
   </p>
 
+  <ScaleFrame>
   <section class="grid kpi" aria-label="核心指标">
     <div class="panel kpi-card">
       <h2 class="kpi-label">累计营收</h2>
@@ -161,9 +177,9 @@ const totalQualityIssues = computed(() =>
       <EChart v-if="view" :option="rankingOption" />
     </div>
     <div class="panel">
-      <h2>站点分布（经纬度）</h2>
-      <EChart v-if="view" :option="stationOption" />
-      <p class="note">北京 GeoJSON 底图待接入（本地文件，不走 CDN）。</p>
+      <h2>北京市站点分布（点击站点跳转充电站视角）</h2>
+      <EChart v-if="view" :option="stationOption" @chart-click="onStationClick" />
+      <p v-if="!mapReady" class="note">北京 GeoJSON 底图加载失败，已降级为经纬度散点（离线文件：public/geo/beijing.json）。</p>
     </div>
   </section>
 
@@ -192,4 +208,5 @@ const totalQualityIssues = computed(() =>
       </ul>
     </div>
   </section>
+  </ScaleFrame>
 </template>
