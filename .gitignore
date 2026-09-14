@@ -21,6 +21,10 @@ handoff/
 spark-*-bin-hadoop3.tgz
 _artifact_env.trash-*/
 
+# Web 工程依赖与构建产物（dist 由 Flask 托管，构建生成不入库）
+node_modules/
+web/dist/
+
 /build/
 /.venv/
 /runtime/
