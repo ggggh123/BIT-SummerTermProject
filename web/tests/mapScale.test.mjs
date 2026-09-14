@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { BEIJING_MAP, buildBeijingStationOption } from '../src/lib/charts/beijingStation.js'
 import { computeScale } from '../src/lib/scale.js'
-import stations from '../src/mock/overview_stations.json' with { type: 'json' }
+import stations from './fixtures/overview_stations.json' with { type: 'json' }
 
 const view = { stations: stations.data }
 

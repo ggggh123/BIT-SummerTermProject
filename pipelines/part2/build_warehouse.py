@@ -46,10 +46,9 @@ def main():
     hourly = spark.read.parquet(f"{DWD}/dwd_station_hourly")
 
     st_small = stations.select("id", "district", "price_fen_per_kwh").withColumnRenamed("id", "station_id")
-    # 注意：orders 没有 station_id（第一阶段 schema 如此），必须经 chargers 关联
-    charger_station = chargers.select(F.col("id").alias("charger_id"), "station_id")
+    # 说明：第一阶段 orders 表没有 station_id，清洗阶段（clean_to_dwd）已按《03》DWD 契约
+    # 经 chargers 关联并保留到 dwd_order_detail，因此这里直接用
     o = (orders.withColumn("dt", F.substring("started_at", 1, 10))
-         .join(charger_station, "charger_id", "left")
          .join(st_small, "station_id", "left"))
 
     dws_station_day = o.groupBy("dt", "station_id").agg(

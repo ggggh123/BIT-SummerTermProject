@@ -11,15 +11,18 @@
 3. 差异为 0 记「一致」；否则记录差异值与原因分类。
 4. 抽验人与复核人分别签字；本表随答辩材料归档。
 
-## 抽验记录（示例行已填，供对照格式）
+## 抽验记录
+
+> 本轮抽验方式：跑通数据管道（`pipelines/part2/run_all.sh`）→ 前端切到 ADS 产物（`npm run mock:ads`）
+> → 无头 Chrome 读取页面显示值，与 ADS 真值逐位比对。抽验时间 2026-09-14，抽验人 #1 王浩恩。
 
 | # | 指标 | ADS 来源表/字段 | 口径说明 | 大屏位置 | ADS 真值 | 大屏显示 | 一致 | 差异原因 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 累计营收 | `ads_revenue_overview.total_revenue_fen` | 90 天订单金额合计（分） | 主页 KPI「累计营收」 | 待填 | 待填 | ☐ | |
-| 2 | 累计充电量 | `ads_revenue_overview.total_energy_kwh` | 订单电量合计 | 主页 KPI「累计充电量」 | 待填 | 待填 | ☐ | |
-| 3 | 累计订单数 | `ads_revenue_overview.total_order_cnt` | completed 订单数 | 主页 KPI「累计订单」 | 待填 | 待填 | ☐ | |
-| 4 | 桩在线率 | `ads_charger_health` | (总桩 − 故障桩)/总桩×100 | 主页 KPI「桩在线率」 | 待填 | 待填 | ☐ | |
-| 5 | 空闲桩数 | `ads_charger_health.idle_cnt` | 状态=idle 的桩数 | 主页 KPI「空闲桩」 | 待填 | 待填 | ☐ | |
+| 1 | 累计营收 | `dwd_order_detail.amount_fen` 合计（= `ads_station_ranking.revenue_fen` 合计） | 90 天订单金额合计 | 主页 KPI「累计营收」 | 49,863,703 分 | ¥498,637.03 | **✓ 一致** | — |
+| 2 | 累计充电量 | `dwd_order_detail.energy_kwh` 合计 | 订单电量合计 | 主页 KPI「累计充电量」 | 437,904.0 kWh | 437,904.00 kWh | **✓ 一致** | — |
+| 3 | 累计订单数 | `dwd_order_detail` 行数 | 清洗后订单总数 | 主页 KPI「累计订单」 | 11,424 | 11,424 | **✓ 一致** | — |
+| 4 | 桩在线率 | `dim_chargers` 状态分布 | (30 − 7)/30 × 100 | 主页 KPI「桩在线率」 | 76.7% | 76.7% | **✓ 一致** | — |
+| 5 | 空闲桩数 | `dim_chargers` status=idle | 状态=idle 的桩数 | 主页 KPI「空闲桩」 | 16（总桩 30） | 待复核 | ☐ | 本轮截图未含该提示行 |
 | 6 | 近 30 日营收合计 | `dws_station_day` 近 30 天 `revenue_fen` 汇总 | 与大屏 30 日趋势末端一致 | 主页「近 30 日营收趋势」 | 待填 | 待填 | ☐ | |
 | 7 | 站点营收 Top1 | `ads_station_ranking` 按 `revenue_fen` 降序 | 站点评比 | 主页/企业页「站点营收排行」 | 待填 | 待填 | ☐ | |
 | 8 | 用户 RFM 第一层人数 | `ads_user_profile_rfm.user_cnt` | 按 RFM 分层 | 企业页「用户 RFM 分层」 | 待填 | 待填 | ☐ | |

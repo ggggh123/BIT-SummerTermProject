@@ -17,6 +17,7 @@
 | `quality_check.py` | PySpark 统计画像 + 10 条规则检测，输出 `quality_report.json`（含注入/检出对账） | 第 3 步 |
 | `clean_to_dwd.py` | PySpark 去重/补缺/剔除/标准化，写 HDFS `/ev-charging/dwd`（Parquet） | 第 4 步 |
 | `build_warehouse.py` | SparkSQL 分层 ODS→DWD→DWS→ADS，导出 ADS 到 SQLite `ads.db` | 第 6 步 |
+| `reconcile.py` | 逐层对账：DWS/ADS 合计 = DWD 明细合计（《04》§3.4 误差 0），失败返回非零码 | 验收 |
 | `run_all.sh` | 一键串联（HDFS 就绪前提下） | — |
 
 ## 用法

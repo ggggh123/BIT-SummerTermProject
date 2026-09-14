@@ -12,13 +12,13 @@ import {
   buildStatusOption,
 } from '../src/lib/models.js'
 
-import kpis from '../src/mock/overview_kpis.json' with { type: 'json' }
-import stations from '../src/mock/overview_stations.json' with { type: 'json' }
-import chargerStatus from '../src/mock/overview_charger-status.json' with { type: 'json' }
-import load24h from '../src/mock/overview_load-24h.json' with { type: 'json' }
-import revenueTrend from '../src/mock/enterprise_revenue-trend.json' with { type: 'json' }
-import ranking from '../src/mock/enterprise_station-ranking.json' with { type: 'json' }
-import forecast24h from '../src/mock/forecast_24h.json' with { type: 'json' }
+import kpis from './fixtures/overview_kpis.json' with { type: 'json' }
+import stations from './fixtures/overview_stations.json' with { type: 'json' }
+import chargerStatus from './fixtures/overview_charger-status.json' with { type: 'json' }
+import load24h from './fixtures/overview_load-24h.json' with { type: 'json' }
+import revenueTrend from './fixtures/enterprise_revenue-trend.json' with { type: 'json' }
+import ranking from './fixtures/enterprise_station-ranking.json' with { type: 'json' }
+import forecast24h from './fixtures/forecast_24h.json' with { type: 'json' }
 
 const view = buildHomeViewModel({
   kpis: kpis.data,

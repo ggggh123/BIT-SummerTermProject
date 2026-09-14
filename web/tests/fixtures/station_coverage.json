@@ -1,0 +1,79 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "stationId": 1,
+      "name": "朝阳国贸中心充电站",
+      "district": "朝阳区",
+      "longitude": 116.4612,
+      "latitude": 39.9085,
+      "chargerCount": 48,
+      "serviceRadiusKm": 2.3
+    },
+    {
+      "stationId": 2,
+      "name": "海淀中关村科技园充电站",
+      "district": "海淀区",
+      "longitude": 116.3164,
+      "latitude": 39.9836,
+      "chargerCount": 28,
+      "serviceRadiusKm": 1.9
+    },
+    {
+      "stationId": 3,
+      "name": "丰台丽泽商务区充电站",
+      "district": "丰台区",
+      "longitude": 116.3245,
+      "latitude": 39.8586,
+      "chargerCount": 47,
+      "serviceRadiusKm": 1.8
+    },
+    {
+      "stationId": 4,
+      "name": "通州运河商务区充电站",
+      "district": "通州区",
+      "longitude": 116.6584,
+      "latitude": 39.9026,
+      "chargerCount": 24,
+      "serviceRadiusKm": 2.6
+    },
+    {
+      "stationId": 5,
+      "name": "大兴亦庄经开区充电站",
+      "district": "大兴区",
+      "longitude": 116.5064,
+      "latitude": 39.7956,
+      "chargerCount": 32,
+      "serviceRadiusKm": 1.8
+    },
+    {
+      "stationId": 6,
+      "name": "朝阳望京SOHO充电站",
+      "district": "朝阳区",
+      "longitude": 116.4707,
+      "latitude": 40.0009,
+      "chargerCount": 26,
+      "serviceRadiusKm": 1.1
+    },
+    {
+      "stationId": 7,
+      "name": "海淀西二旗软件园充电站",
+      "district": "海淀区",
+      "longitude": 116.3034,
+      "latitude": 40.0509,
+      "chargerCount": 38,
+      "serviceRadiusKm": 2.6
+    },
+    {
+      "stationId": 8,
+      "name": "丰台科技园东区充电站",
+      "district": "丰台区",
+      "longitude": 116.2946,
+      "latitude": 39.8339,
+      "chargerCount": 36,
+      "serviceRadiusKm": 1.6
+    }
+  ],
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

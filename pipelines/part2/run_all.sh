@@ -22,6 +22,8 @@ echo "=== 4/5 清洗到 DWD（老师第 4 步）==="
 $SUBMIT clean_to_dwd.py 2>&1 | grep -E '写出|->|剔除' | tail -14
 echo "=== 5/5 分层 DWS/ADS（老师第 6 步）==="
 $SUBMIT build_warehouse.py 2>&1 | grep -E 'dws_|ads.db|导出' | tail -16
+echo "=== 6/6 逐层对账（《04》§3.4 硬指标）==="
+$SUBMIT reconcile.py 2>&1 | grep -E '\[OK\]|\[FAIL\]|对账|全绿' | tail -20
 echo
 echo "=== 产物 ==="
 echo "  报告：$(pwd)/handoff/quality/   ADS：$(pwd)/handoff/ads/"

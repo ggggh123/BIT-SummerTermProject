@@ -14,12 +14,12 @@ import {
   buildUtilizationOption,
 } from '../src/lib/charts/station.js'
 
-import priceCompare from '../src/mock/user_price-compare.json' with { type: 'json' }
-import priceDistance from '../src/mock/user_price-distance.json' with { type: 'json' }
-import idleRanking from '../src/mock/user_idle-ranking.json' with { type: 'json' }
-import peakHeatmap from '../src/mock/user_peak-heatmap.json' with { type: 'json' }
-import coverage from '../src/mock/station_coverage.json' with { type: 'json' }
-import stationDetail from '../src/mock/station_detail.json' with { type: 'json' }
+import priceCompare from './fixtures/user_price-compare.json' with { type: 'json' }
+import priceDistance from './fixtures/user_price-distance.json' with { type: 'json' }
+import idleRanking from './fixtures/user_idle-ranking.json' with { type: 'json' }
+import peakHeatmap from './fixtures/user_peak-heatmap.json' with { type: 'json' }
+import coverage from './fixtures/station_coverage.json' with { type: 'json' }
+import stationDetail from './fixtures/station_detail.json' with { type: 'json' }
 
 function assertClean(node, path = 'opt') {
   if (typeof node === 'number') return assert.ok(Number.isFinite(node), `${path} 非有限数`)

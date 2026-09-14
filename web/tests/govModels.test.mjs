@@ -9,11 +9,11 @@ import {
   buildUtilizationFairnessOption,
 } from '../src/lib/charts/gov.js'
 
-import coverage from '../src/mock/gov_coverage.json' with { type: 'json' }
-import serviceStats from '../src/mock/gov_service-stats.json' with { type: 'json' }
-import carbon from '../src/mock/gov_carbon.json' with { type: 'json' }
-import peakLoad from '../src/mock/gov_peak-load.json' with { type: 'json' }
-import utilization from '../src/mock/gov_utilization.json' with { type: 'json' }
+import coverage from './fixtures/gov_coverage.json' with { type: 'json' }
+import serviceStats from './fixtures/gov_service-stats.json' with { type: 'json' }
+import carbon from './fixtures/gov_carbon.json' with { type: 'json' }
+import peakLoad from './fixtures/gov_peak-load.json' with { type: 'json' }
+import utilization from './fixtures/gov_utilization.json' with { type: 'json' }
 
 function assertClean(node, path = 'opt') {
   if (typeof node === 'number') return assert.ok(Number.isFinite(node), `${path} 非有限数`)

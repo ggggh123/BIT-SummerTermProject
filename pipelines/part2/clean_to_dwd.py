@@ -34,6 +34,7 @@ def to_iso(col):
 def clean_dims(spark, report):
     stations = read(spark, "stations")
     st = (stations
+          .withColumn("id", F.col("id").cast("int"))
           .withColumn("name", F.trim(F.regexp_replace("name", "[　\\s]+", "")))
           .withColumn("address", F.trim(F.regexp_replace("address", "[　]+", " ")))
           .withColumn("district", F.trim("district"))
@@ -47,6 +48,7 @@ def clean_dims(spark, report):
 
     users = read(spark, "users")
     us = (users
+          .withColumn("id", F.col("id").cast("int"))
           .withColumn("mobile", F.trim("mobile"))
           .withColumn("nickname", F.trim("nickname"))
           .withColumn("nickname", F.when(F.coalesce("nickname", F.lit("")) == "", F.concat(F.lit("用户"), F.col("id"))).otherwise("nickname"))
@@ -58,6 +60,8 @@ def clean_dims(spark, report):
 
     chargers = read(spark, "chargers")
     ch = (chargers
+          .withColumn("id", F.col("id").cast("int"))
+          .withColumn("station_id", F.col("station_id").cast("int"))
           .withColumn("power_kw", F.col("power_kw").cast("double"))
           .withColumn("charge_count", F.col("charge_count").cast("int"))
           .withColumn("total_duration_sec", F.col("total_duration_sec").cast("long"))
@@ -73,6 +77,9 @@ def clean_orders(spark, st, us, ch, report):
     sid_of = ch.select(F.col("id").alias("charger_id"), F.col("station_id").alias("sid"))
 
     df = (orders
+          .withColumn("id", F.col("id").cast("int"))
+          .withColumn("user_id", F.col("user_id").cast("int"))
+          .withColumn("charger_id", F.col("charger_id").cast("int"))
           .withColumn("started_at", to_iso(F.col("started_at")))
           .withColumn("ended_at", to_iso(F.col("ended_at")))
           .withColumn("energy_kwh", F.col("energy_kwh").cast("double"))
@@ -90,7 +97,9 @@ def clean_orders(spark, st, us, ch, report):
           .filter(F.col("uid").isNotNull())            # 孤儿引用（user）
           # 金额口径：以「单价 × 电量」为准重算（元/分混入自动被纠正）
           .withColumn("amount_fen", F.round(F.col("energy_kwh") * F.col("price")))
-          .drop("sid", "price", "uid"))
+          # 《03》DWD 契约：明细需带关联维度字段，故保留 station_id 供区域汇总与对账
+          .withColumnRenamed("sid", "station_id")
+          .drop("price", "uid"))
     report.append(("dwd_order_detail", orders.count(), df.count()))
     return df
 
@@ -99,6 +108,8 @@ def clean_telemetry(spark, ch, report):
     telemetry = read(spark, "telemetry")
     rated = ch.select(F.col("id").alias("charger_id"), F.col("power_kw").alias("rated_kw"))
     df = (telemetry
+          .withColumn("id", F.col("id").cast("int"))
+          .withColumn("charger_id", F.col("charger_id").cast("int"))
           .withColumn("recorded_at", to_iso(F.col("recorded_at")))
           .withColumn("power_kw", F.col("power_kw").cast("double"))
           .withColumn("energy_increment_kwh", F.col("energy_increment_kwh").cast("double"))
@@ -115,6 +126,7 @@ def clean_telemetry(spark, ch, report):
 def clean_hourly(spark, report):
     hourly = read(spark, "station_hourly_history")
     df = (hourly
+          .withColumn("station_id", F.col("station_id").cast("int"))
           .withColumn("observed_at", to_iso(F.col("observed_at")))
           .withColumn("pile_count", F.col("pile_count").cast("int"))
           .withColumn("busy_count", F.col("busy_count").cast("int"))

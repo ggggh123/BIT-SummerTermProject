@@ -1,0 +1,35 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "month": "2026-06",
+      "orderCount": 45116,
+      "energyKwh": 1521588.4,
+      "revenueFen": 187155373,
+      "revenuePerChargerFen": 643539
+    },
+    {
+      "month": "2026-07",
+      "orderCount": 39830,
+      "energyKwh": 1180225.3,
+      "revenueFen": 148708388,
+      "revenuePerChargerFen": 499163
+    },
+    {
+      "month": "2026-08",
+      "orderCount": 40303,
+      "energyKwh": 1301452.9,
+      "revenueFen": 152269989,
+      "revenuePerChargerFen": 550435
+    },
+    {
+      "month": "2026-09",
+      "orderCount": 43031,
+      "energyKwh": 1268430.8,
+      "revenueFen": 154748558,
+      "revenuePerChargerFen": 536469
+    }
+  ],
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}
