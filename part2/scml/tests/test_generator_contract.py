@@ -175,5 +175,125 @@ class GeneratorContractTest(unittest.TestCase):
             self.assertTrue(manifest["tables"]["ods_orders"]["partitions"])
 
 
+class DemandShapeTest(unittest.TestCase):
+    """守《04-SCML》§2.1 的「真实分布」要求。
+
+    早期版本的负荷是 `randint(0, pile_count)`、订单开工时间在整窗口上均匀撒点，
+    结果是 24 小时曲线是平的、`peak_hour` 在 0–23 均匀散落。这对下游是致命的：
+    `load_kw` 是 #5 的预测目标，没有日内规律就没有可学的模式（只能拟合噪声）；
+    大屏的热力图与 24h 曲线也会变成一片雪花。这几条断言就是为了防止退回那个状态。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from generator import GenerationConfig, generate_handoff
+
+        cls._temp = tempfile.TemporaryDirectory()
+        cls.handoff = Path(cls._temp.name) / "ods"
+        generate_handoff(
+            GenerationConfig(
+                seed=20260914,
+                station_count=8,
+                chargers_per_station=12,
+                user_count=300,
+                order_count=2000,
+                telemetry_count=300,
+                history_days=28,
+                event_count=60,
+                start_date="2026-06-17",
+            ),
+            cls.handoff,
+        )
+        cls.hourly = read_csv_partitions(cls.handoff, "ods_station_hourly")
+        cls.orders = read_csv_partitions(cls.handoff, "ods_orders")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._temp.cleanup()
+
+    def _clean_hourly(self) -> dict[int, list[tuple[datetime, int, float]]]:
+        rows = []
+        for row in self.hourly:
+            # Q5 会把个别 busy_count 抬到 pile_count 以上，形状统计只看正常行
+            if int(row["busy_count"]) > int(row["pile_count"]):
+                continue
+            rows.append(
+                (
+                    datetime.fromisoformat(row["observed_at"]),
+                    int(row["station_id"]),
+                    float(row["load_kw"]),
+                )
+            )
+        return rows
+
+    def test_hourly_load_has_diurnal_double_peak(self):
+        per_hour: dict[int, list[float]] = {}
+        for moment, _station, load in self._clean_hourly():
+            per_hour.setdefault(moment.hour, []).append(load)
+        self.assertEqual(len(per_hour), 24, "每个整点都要有数据")
+        means = {hour: sum(values) / len(values) for hour, values in per_hour.items()}
+
+        overall = sum(means.values()) / 24
+        top = max(means.values())
+        peak_hours = {hour for hour, value in means.items() if value >= top * 0.92}
+        self.assertTrue(
+            peak_hours & {7, 8, 9, 17, 18, 19, 20},
+            f"高峰时段 {sorted(peak_hours)} 不在早晚双峰区间内",
+        )
+        for hour in (2, 3, 4):
+            self.assertLess(means[hour], overall * 0.55, f"{hour} 点不应该高")
+        self.assertGreater(top / min(means.values()), 2.0, "峰谷比太小，等于没有日内形状")
+
+    def test_orders_follow_the_same_diurnal_shape(self):
+        per_hour: dict[int, int] = {}
+        for row in self.orders:
+            value = row.get("started_at")
+            if not value or value == r"\N" or "T" not in value:
+                continue
+            hour = datetime.fromisoformat(value).hour
+            per_hour[hour] = per_hour.get(hour, 0) + 1
+        self.assertEqual(len(per_hour), 24)
+        peak = max(per_hour, key=lambda hour: per_hour[hour])
+        self.assertIn(peak, {7, 8, 9, 17, 18, 19, 20}, f"订单高峰落在 {peak} 点")
+        night = sum(per_hour.get(hour, 0) for hour in (1, 2, 3, 4))
+        evening = sum(per_hour.get(hour, 0) for hour in (17, 18, 19, 20))
+        self.assertLess(night, evening * 0.5, "凌晨订单量应显著低于晚高峰")
+
+    def test_station_scale_and_new_station_ramp(self):
+        by_station: dict[int, list[tuple[str, float]]] = {}
+        for moment, station, load in self._clean_hourly():
+            by_station.setdefault(station, []).append((moment.date().isoformat(), load))
+        days = sorted({day for values in by_station.values() for day, _ in values})
+
+        # 1 号站最早投运、规模最大；末号站最晚投运、规模最小
+        first_avg = sum(v for _, v in by_station[1]) / len(by_station[1])
+        last_id = max(by_station)
+        last_values = by_station[last_id]
+        last_avg = sum(v for _, v in last_values) / len(last_values)
+        self.assertGreater(first_avg, last_avg, "1 号站的平均负荷应高于最晚投运的站点")
+
+        # 新站爬坡：末号站在窗口后段应高于前段
+        early_cut = days[len(days) // 3]
+        late_cut = days[-max(1, len(days) // 3)]
+        early = [v for d, v in last_values if d <= early_cut]
+        late = [v for d, v in last_values if d >= late_cut]
+        self.assertTrue(early and late)
+        self.assertGreater(
+            sum(late) / len(late), sum(early) / len(early), "末号站应呈现利用率爬坡"
+        )
+
+    def test_weekend_morning_peak_is_flattened(self):
+        weekday: dict[int, list[float]] = {}
+        weekend: dict[int, list[float]] = {}
+        for moment, _station, load in self._clean_hourly():
+            bucket = weekend if moment.weekday() >= 5 else weekday
+            bucket.setdefault(moment.hour, []).append(load)
+        if len(weekend) < 24 or len(weekday) < 24:
+            self.skipTest("样例窗口内没有完整周末，跳过")
+        weekday_morning = sum(weekday[8]) / len(weekday[8])
+        weekend_morning = sum(weekend[8]) / len(weekend[8])
+        self.assertLess(weekend_morning, weekday_morning, "周末 08 点不应维持通勤早高峰")
+
+
 if __name__ == "__main__":
     unittest.main()

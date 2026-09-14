@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import bisect
 import csv
 import hashlib
 import json
+import math
 import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -82,6 +84,77 @@ QUALITY_RULES: dict[str, dict[str, object]] = {
 }
 
 TABLE_FORMATS: dict[str, str] = {"ods_events": "jsonl"}
+
+# =============================================================================
+# 需求分布模型（《04-SCML》§2.1「真实分布：订单在日内呈早晚双峰、周末/节假日差异；
+# 新站利用率爬坡；温度按季节模拟」）
+# =============================================================================
+# 早期版本的 `_orders` 在整窗口内均匀抽开工时间、`_station_hourly` 用
+# `busy = randint(0, pile_count)` 均匀抽占用，结果是：24 小时负荷曲线是平的、
+# 站点之间没有差异、`peak_hour` 在 0–23 之间均匀散落。这有两个后果：
+#   1. 大屏的「24h 负荷曲线 / 繁忙热力图」看起来就是噪声；
+#   2. `load_kw` 是 #5 的**预测目标**，没有日内规律就没有可学习的模式，
+#      Spark MLlib 无论怎么调都是拟合噪声。
+# 所以这里显式建模三层因子：日内形状 × 星期修正 × 站点规模与爬坡。
+
+# 日内需求形状（24 点相对权重）：08 点早高峰与 18 点晚高峰双峰，04 点最深谷。
+HOURLY_DEMAND_SHAPE: tuple[float, ...] = (
+    0.26, 0.18, 0.14, 0.12, 0.13, 0.20,   # 00-05 夜间谷
+    0.42, 0.72, 0.95, 0.86, 0.66, 0.58,   # 06-11 早高峰（08 点峰）
+    0.62, 0.56, 0.54, 0.58, 0.70, 0.84,   # 12-17 午后逐步回升
+    0.98, 0.90, 0.72, 0.56, 0.42, 0.32,   # 18-23 晚高峰（18 点峰）
+)
+
+# 星期修正（索引 = `datetime.weekday()`，0=周一 … 6=周日）：周末整体需求更低，
+# 且**形状**要再压平一次（通勤早高峰消失），见 WEEKEND_HOUR_FACTOR。
+WEEKDAY_FACTOR: tuple[float, ...] = (1.00, 0.97, 0.98, 1.01, 1.08, 0.88, 0.84)
+
+# 周末的逐小时附加修正：抹掉早高峰、抬高白天与深夜。
+WEEKEND_HOUR_FACTOR: tuple[float, ...] = (
+    1.15, 1.20, 1.20, 1.20, 1.12, 1.00,
+    0.88, 0.62, 0.58, 0.80, 0.98, 1.08,
+    1.15, 1.15, 1.12, 1.08, 1.02, 0.98,
+    1.00, 1.02, 1.08, 1.12, 1.15, 1.15,
+)
+
+# 站点规模差异：把站点按「投运越晚越小」排布，同时用于爬坡。
+STATION_SCALE_MIN = 0.62
+STATION_SCALE_MAX = 1.08
+
+# 充电效率（负荷 / 额定）：快慢桩混合后的等效系数区间。
+EFFICIENCY_MIN = 0.78
+EFFICIENCY_MAX = 0.94
+
+# 温度模型（北京 6 月中旬 → 9 月中旬）：季节项 + 日内项，日内 05 点最低、17 点最高。
+TEMPERATURE_SEASONAL_BASE = 26.0
+TEMPERATURE_SEASONAL_AMPLITUDE = 4.0
+TEMPERATURE_DIURNAL_AMPLITUDE = 5.0
+
+
+def _hour_weight(day_index: int, hour: int, base_weekday: int) -> float:
+    """第 `day_index` 天 `hour` 点的相对需求权重（三层因子相乘）。"""
+    weekday = (base_weekday + day_index) % 7
+    weight = HOURLY_DEMAND_SHAPE[hour] * WEEKDAY_FACTOR[weekday]
+    if weekday >= 5:
+        weight *= WEEKEND_HOUR_FACTOR[hour]
+    return weight
+
+
+def _ramp_factor(day_index: int, station_age_days: float, history_days: int) -> float:
+    """新站利用率爬坡：投运越晚的站点，在窗口早期利用率越低，60 天后趋于饱和。"""
+    age = station_age_days + day_index
+    maturity = min(1.0, max(0.0, age / 60.0))
+    return 0.55 + 0.45 * maturity
+
+
+def _temperature(day_index: int, hour: int, history_days: int, jitter: float) -> float:
+    """季节曲线（夏初升到盛夏再回落）+ 日内曲线（05 点最低、17 点最高）+ 噪声。"""
+    span = max(1, history_days - 1)
+    seasonal = TEMPERATURE_SEASONAL_BASE + TEMPERATURE_SEASONAL_AMPLITUDE * math.sin(
+        math.pi * day_index / span
+    )
+    diurnal = -TEMPERATURE_DIURNAL_AMPLITUDE * math.cos(2 * math.pi * (hour - 5) / 24.0)
+    return round(seasonal + diurnal + jitter, 1)
 
 
 @dataclass(frozen=True)
@@ -265,11 +338,22 @@ def generate_handoff(config: GenerationConfig, handoff_dir: Path) -> dict[str, o
     return manifest
 
 
+def _station_age_days(station: dict[str, object], base: datetime) -> float:
+    """站点在窗口起点（`base`）已投运的天数，用于爬坡因子。"""
+    try:
+        created = datetime.fromisoformat(str(station["created_at"])).astimezone(CN_TZ)
+    except (ValueError, KeyError):
+        return 90.0
+    return max(0.0, (base - created).total_seconds() / 86400.0)
+
+
 def _stations(config: GenerationConfig, rng: random.Random, base: datetime) -> list[dict[str, object]]:
     districts = ["Chaoyang", "Haidian", "Fengtai", "Tongzhou", "Daxing"]
     rows = []
     for station_id in range(1, config.station_count + 1):
         district = districts[(station_id - 1) % len(districts)]
+        # 投运时间刻意拉开：1 号站约 108 天前投运（窗口起点已成熟），
+        # 末号站只有 24 天（窗口内还在爬坡），支撑《04-SCML》§2.1 的「新站利用率爬坡」。
         rows.append(
             {
                 "_row_id": "",
@@ -281,7 +365,7 @@ def _stations(config: GenerationConfig, rng: random.Random, base: datetime) -> l
                 "longitude": round(116.10 + rng.random() * 0.55, 6),
                 "price_fen_per_kwh": rng.choice([80, 100, 120, 140, 160]),
                 "forecast_enabled": 1 if station_id <= min(6, config.station_count) else 0,
-                "created_at": iso_at(base, days=-90 + station_id),
+                "created_at": iso_at(base, days=-(120 - station_id * 12)),
             }
         )
     return _with_row_ids("stations", rows)
@@ -340,12 +424,25 @@ def _orders(
 ) -> list[dict[str, object]]:
     station_price = {int(row["id"]): int(row["price_fen_per_kwh"]) for row in stations}
     charger_station = {int(row["id"]): int(row["station_id"]) for row in chargers}
+
+    # 开工时刻按「日内双峰 × 星期修正」加权抽样，而不是在整窗口上均匀撒点。
+    # 累积权重表只建一次（history_days × 24 个桶），之后每个订单二分查找一次。
+    cumulative: list[float] = []
+    running = 0.0
+    for day in range(config.history_days):
+        for hour in range(24):
+            running += _hour_weight(day, hour, base.weekday())
+            cumulative.append(running)
+    total_weight = cumulative[-1]
+
     rows = []
     for order_id in range(1, config.order_count + 1):
         charger = rng.choice(chargers)
         charger_id = int(charger["id"])
         station_id = charger_station[charger_id]
-        started = base + timedelta(minutes=rng.randint(0, config.history_days * 24 * 60 - 90))
+        slot = bisect.bisect_right(cumulative, rng.random() * total_weight)
+        day, hour = divmod(min(slot, len(cumulative) - 1), 24)
+        started = base + timedelta(days=day, hours=hour, minutes=rng.randint(0, 59))
         duration = rng.randint(15, 180)
         energy = round(float(charger["power_kw"]) * duration / 60 * rng.uniform(0.22, 0.72), 3)
         status = "completed" if order_id % 23 else "cancelled"
@@ -398,13 +495,32 @@ def _telemetry(config: GenerationConfig, rng: random.Random, base: datetime, cha
 
 
 def _station_hourly(config: GenerationConfig, rng: random.Random, base: datetime, stations: list[dict[str, object]]) -> list[dict[str, object]]:
+    """站点 × 小时占用与负荷（ML 训练输入，也是大屏热力图的数据源）。
+
+    占用率 = 日内形状 × 星期修正 × 站点规模 × 新站爬坡 × 噪声，再夹到 [0, 0.97]；
+    `load_kw` = 额定总功率 × 占用率 × 充电效率。这样曲线有真实的早晚双峰，
+    站点之间有规模差异，晚投运的站点在窗口内呈现爬坡 —— #5 才有可学的模式。
+    """
     rows = []
+    weekday0 = base.weekday()
+    station_count = max(1, len(stations))
+
     for day in range(config.history_days):
         for hour in range(24):
-            for station in stations:
+            shape = _hour_weight(day, hour, weekday0)
+            for index, station in enumerate(stations):
                 pile_count = config.chargers_per_station
-                busy = rng.randint(0, pile_count)
                 rated = pile_count * 42
+                # 站点规模与投运时间**反序**：1 号站最早投运、规模最大；末号站最晚投运、
+                # 规模最小且仍在爬坡。两条因子的方向一致，曲线才讲得通 —— 否则
+                # 「规模随投运变晚而变小」会被爬坡因子抵消掉，站间差异看不出趋势。
+                rank = index / max(1, station_count - 1) if station_count > 1 else 1.0
+                scale = STATION_SCALE_MIN + (STATION_SCALE_MAX - STATION_SCALE_MIN) * (1.0 - rank)
+                ramp = _ramp_factor(day, _station_age_days(station, base), config.history_days)
+                target = shape * scale * ramp * rng.uniform(0.88, 1.12)
+                utilization = max(0.0, min(0.97, target))
+                busy = max(0, min(pile_count, int(round(pile_count * utilization))))
+                efficiency = rng.uniform(EFFICIENCY_MIN, EFFICIENCY_MAX)
                 rows.append(
                     {
                         "_row_id": "",
@@ -412,10 +528,10 @@ def _station_hourly(config: GenerationConfig, rng: random.Random, base: datetime
                         "observed_at": iso_at(base, days=day, hours=hour),
                         "pile_count": pile_count,
                         "rated_power_kw": rated,
-                        "temperature_c": round(18 + rng.uniform(-8, 12), 1),
+                        "temperature_c": _temperature(day, hour, config.history_days, rng.uniform(-1.2, 1.2)),
                         "is_holiday": 1 if (base + timedelta(days=day)).weekday() >= 5 else 0,
                         "busy_count": busy,
-                        "load_kw": round(rated * busy / pile_count * rng.uniform(0.45, 0.85), 3),
+                        "load_kw": round(rated * busy / pile_count * efficiency, 3),
                     }
                 )
     return _with_row_ids("station_hourly", rows)
