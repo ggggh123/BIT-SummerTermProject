@@ -6,15 +6,48 @@ Path: `handoff/ods` locally, `/ev-charging/ods` in HDFS.
 
 Required files:
 
-- `manifest.json`: seed, run id, generated time, row counts and SHA-256 values.
-- `injection_log.json`: Q1-Q10 injected issue records.
+- `manifest.json`: seed, run id, data window, row counts and SHA-256 values.
+- `injection_log.json`: Q1-Q10 injected issue records, one entry per injected row.
 - `ods_users/part-00000.csv`
 - `ods_stations/part-00000.csv`
 - `ods_chargers/part-00000.csv`
-- `ods_orders/part-00000.csv`
-- `ods_telemetry/part-00000.csv`
-- `ods_station_hourly/part-00000.csv`
-- `ods_events/part-00000.csv`
+- `ods_orders/dt=YYYY-MM-DD/part-00000.csv`
+- `ods_telemetry/dt=YYYY-MM-DD/part-00000.csv`
+- `ods_station_hourly/dt=YYYY-MM-DD/part-00000.csv`
+- `ods_events/dt=YYYY-MM-DD/part-00000.jsonl`
+
+## ODS Partitioning
+
+The four time-series tables are written as Hive-style `dt=YYYY-MM-DD` directories.
+The three dimension snapshots (`ods_users`, `ods_stations`, `ods_chargers`) stay flat
+because they are current-state snapshots, not dated facts.
+
+| Table | Partition column | Window |
+|---|---|---|
+| `ods_orders` | `reserved_at` | `[start_date, start_date + history_days)` |
+| `ods_telemetry` | `recorded_at` | same |
+| `ods_station_hourly` | `observed_at` | same |
+| `ods_events` | `created_at` | same |
+
+Two rules #3 must know:
+
+1. **The partition key comes from the clean timestamp, computed before quality
+   issues are injected.** Q4 rewrites some `reserved_at` / `recorded_at` values into
+   `yyyy/MM/dd HH:mm:ss` or Unix seconds; those rows stay in the partition of their
+   original value. The dirty value is the thing to detect, not the thing to trust.
+2. **`dt` is not a column inside the files.** The CSV/JSONL payload has no `dt`
+   field, so Spark must discover it from the directory name:
+
+   ```python
+   spark.read.option("basePath", f"{ODS}/ods_telemetry").csv(f"{ODS}/ods_telemetry/dt=*")
+   ```
+
+   Do not add a `dt` column to the payload on the #4 side — partition discovery
+   would then produce a duplicate column.
+
+`manifest.json` carries `dataWindow` (`start` / `end` / `days`) and, per table,
+a `partitions[]` list with `dt`, `rows`, `path` and `sha256`. The validator rejects
+any partition that falls outside the window.
 
 ODS preserves dirty data. #3 should read ODS columns as strings and clean into DWD.
 

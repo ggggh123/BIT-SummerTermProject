@@ -55,11 +55,50 @@ station-hour records and at least 20000 events.
 
 Send or share the local `handoff/ods` folder after validation. It contains:
 
-- one directory per ODS table, each with `part-00000.csv` and `_SUCCESS`;
-- `manifest.json` with seed, row counts and SHA-256 values;
-- `injection_log.json` with Q1-Q10 issue records.
+- one directory per ODS table with `_SUCCESS`;
+- `dt=YYYY-MM-DD` partition directories for `ods_orders`, `ods_telemetry`,
+  `ods_station_hourly` and `ods_events`;
+- flat `part-00000.csv` for the dimension snapshots `ods_stations`, `ods_chargers`
+  and `ods_users`;
+- `manifest.json` with seed, data window, row counts and SHA-256 values;
+- `injection_log.json` with one record per injected dirty row (Q1-Q10).
+
+Partition details and the Spark `basePath` read recipe live in
+`contracts/handoff_contract.md`.
 
 Generated handoff data is intentionally ignored by git.
+
+## Data Quality Injection
+
+Ten issue classes are injected at the rates defined by the design document
+(`QUALITY_RULES` in `data_generator/generator.py`), and **every mutated row is
+recorded** in `injection_log.json` as `{rule, table, row_id, business_key,
+description}`. A rule can hit more than one table:
+
+| Rule | Tables | Rate |
+|---|---|---|
+| Q1 missing value | `ods_orders`, `ods_telemetry` | 0.5% |
+| Q2 duplicate record | `ods_orders`, `ods_telemetry` | 1% |
+| Q3 outlier | `ods_orders`, `ods_telemetry` | 0.3% |
+| Q4 mixed timestamp format | `ods_orders`, `ods_telemetry` | 1% |
+| Q5 logical contradiction | `ods_orders`, `ods_station_hourly` | 0.3% |
+| Q6 wrong money unit | `ods_orders` | 0.5% |
+| Q7 orphan reference | `ods_orders` | 0.3% |
+| Q8 illegal field value | `ods_users`, `ods_chargers` | 0.3% |
+| Q9 out-of-range coordinate | `ods_stations` | 1-2 rows |
+| Q10 dirty text | `ods_stations`, `ods_users` | 0.5% |
+
+`injection_log.json` also carries a `summary` block with the per-rule, per-table
+counts, which is what `/api/quality/summary` needs for its `injected` column.
+
+## Telemetry Time Axis
+
+Telemetry frames are placed on a 5-minute grid **inside the history window**:
+row `n` of `telemetry_count` lands on slot `(n-1) * window_slots // total`, so the
+series never runs past `start_date + history_days`. At the full scale that means
+roughly 39 of the 288 chargers report on each 5-minute tick, 1000000 frames over
+90 days. The old `recorded_at = base + row_id * 5min` formula pushed the last
+frame about 9.5 years into the future and broke `dt` partitioning.
 
 ## Handoff To #2 And #1
 
