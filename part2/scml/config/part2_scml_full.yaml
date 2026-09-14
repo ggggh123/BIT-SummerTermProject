@@ -1,0 +1,9 @@
+seed: 20260914
+station_count: 8
+chargers_per_station: 36
+user_count: 5000
+order_count: 120000
+telemetry_count: 1000000
+history_days: 90
+event_count: 20000
+start_date: "2026-09-01"
