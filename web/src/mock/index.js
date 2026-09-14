@@ -7,6 +7,9 @@ import overviewLoad24h from './overview_load-24h.json'
 import overviewEvents from './overview_events.json'
 import enterpriseRevenueTrend from './enterprise_revenue-trend.json'
 import enterpriseStationRanking from './enterprise_station-ranking.json'
+import enterpriseUserGrowth from './enterprise_user-growth.json'
+import enterpriseUserRfm from './enterprise_user-rfm.json'
+import enterpriseMonthly from './enterprise_monthly.json'
 import forecast24h from './forecast_24h.json'
 import qualitySummary from './quality_summary.json'
 
@@ -18,6 +21,9 @@ const TABLE = {
   'overview/events': overviewEvents,
   'enterprise/revenue-trend': enterpriseRevenueTrend,
   'enterprise/station-ranking': enterpriseStationRanking,
+  'enterprise/user-growth': enterpriseUserGrowth,
+  'enterprise/user-rfm': enterpriseUserRfm,
+  'enterprise/monthly': enterpriseMonthly,
   'forecast/24h': forecast24h,
   'quality/summary': qualitySummary,
 }

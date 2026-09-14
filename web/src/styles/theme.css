@@ -82,6 +82,11 @@ body {
 .event-list .time { color: var(--text-dim); font-variant-numeric: tabular-nums; }
 
 .todo { color: var(--text-dim); font-size: 13px; line-height: 1.9; }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th, .data-table td { padding: 6px 8px; text-align: right; border-bottom: 1px dashed rgba(27, 42, 72, 0.8); font-variant-numeric: tabular-nums; }
+.data-table th:first-child, .data-table td:first-child { text-align: left; }
+.data-table th { color: var(--text-dim); font-weight: 600; }
 .footnote { padding: 12px 24px 24px; color: var(--text-dim); font-size: 12px; }
 
 @media (max-width: 1100px) {

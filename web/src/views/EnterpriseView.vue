@@ -1,22 +1,134 @@
 <script setup>
-// 企业视角：整体营收与发展（老师口述里最强调的那块）
-const planned = [
-  ['营收/订单/电量趋势', '7 / 30 / 90 日切换', 'GET /api/enterprise/revenue-trend'],
-  ['站点营收排行', '营收、订单、客单价 Top N', 'GET /api/enterprise/station-ranking'],
-  ['用户增长与活跃', '新增用户、日活充电用户曲线', 'GET /api/enterprise/user-growth'],
-  ['用户 RFM 分层', '重要价值/保持/挽留用户分布', 'GET /api/enterprise/user-rfm'],
-  ['月度经营汇总', '月度营收、电量、订单、单桩日均收益', 'GET /api/enterprise/monthly'],
-]
+import { computed, onMounted, ref } from 'vue'
+import EChart from '@/components/EChart.vue'
+import { fetchGroup } from '@/api/client'
+import { ENDPOINTS } from '@/api/endpoints'
+import { formatFen, formatKwh } from '@/lib/contracts'
+import {
+  buildMonthlyRows,
+  buildRevenueTrendOption,
+  buildRfmOption,
+  buildStationRevenueRankingOption,
+} from '@/lib/charts/enterprise'
+
+const data = ref(null)
+const error = ref('')
+const days = ref(30)
+
+async function load() {
+  try {
+    const raw = await fetchGroup(ENDPOINTS.enterprise)
+    data.value = {
+      revenueTrend: raw.revenueTrend.points,
+      ranking: raw.stationRanking,
+      userGrowth: raw.userGrowth.points,
+      rfm: raw.userRfm,
+      monthly: raw.monthly,
+    }
+    error.value = ''
+  } catch (e) {
+    error.value = e?.message ?? String(e)
+  }
+}
+
+onMounted(load)
+
+const windowPoints = computed(() => (data.value ? data.value.revenueTrend.slice(-days.value) : []))
+const trendOption = computed(() => (data.value ? buildRevenueTrendOption(windowPoints.value) : {}))
+const rankingOption = computed(() => (data.value ? buildStationRevenueRankingOption(data.value.ranking) : {}))
+const rfmOption = computed(() => (data.value ? buildRfmOption(data.value.rfm) : {}))
+const monthlyRows = computed(() => (data.value ? buildMonthlyRows(data.value.monthly) : []))
+const growthOption = computed(() =>
+  data.value
+    ? {
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['新增用户', '日活充电用户'] },
+        xAxis: { type: 'category', data: data.value.userGrowth.map((p) => p.date.slice(5)) },
+        yAxis: { type: 'value', name: '人' },
+        series: [
+          { name: '新增用户', type: 'bar', data: data.value.userGrowth.map((p) => p.newUsers) },
+          { name: '日活充电用户', type: 'line', smooth: true, data: data.value.userGrowth.map((p) => p.activeUsers) },
+        ],
+      }
+    : {},
+)
+const summary = computed(() => {
+  const rows = windowPoints.value
+  const revenueFen = rows.reduce((s, r) => s + (r.revenueFen ?? 0), 0)
+  const orders = rows.reduce((s, r) => s + (r.orderCount ?? 0), 0)
+  const energy = rows.reduce((s, r) => s + (r.energyKwh ?? 0), 0)
+  return { revenueFen, orders, energy, avgTicketFen: orders ? Math.round(revenueFen / orders) : 0 }
+})
 </script>
 
 <template>
-  <div class="panel">
-    <h2>企业视角 · 整体营收与发展</h2>
-    <p class="note">数据源：ADS `ads_revenue_overview`、`ads_user_profile_rfm`；DWS `dws_station_day`。</p>
-    <ul class="todo">
-      <li v-for="[name, desc, api] in planned" :key="name">
-        <strong>{{ name }}</strong> —— {{ desc }}（{{ api }}）<em>待接入</em>
-      </li>
-    </ul>
-  </div>
+  <p v-if="error" class="panel" style="border-color: #ff7a7a">数据加载失败：{{ error }}</p>
+
+  <section class="grid kpi" aria-label="经营概览">
+    <div class="panel kpi-card">
+      <h2 class="kpi-label">近 {{ days }} 日营收</h2>
+      <p class="kpi-value">{{ formatFen(summary.revenueFen) }}</p>
+      <p class="kpi-hint">窗口：近 {{ days }} 日</p>
+    </div>
+    <div class="panel kpi-card">
+      <h2 class="kpi-label">近 {{ days }} 日订单</h2>
+      <p class="kpi-value">{{ summary.orders.toLocaleString('zh-CN') }}</p>
+      <p class="kpi-hint">完成订单笔数</p>
+    </div>
+    <div class="panel kpi-card">
+      <h2 class="kpi-label">近 {{ days }} 日电量</h2>
+      <p class="kpi-value">{{ formatKwh(summary.energy) }}</p>
+      <p class="kpi-hint">全部站点合计</p>
+    </div>
+    <div class="panel kpi-card">
+      <h2 class="kpi-label">客单价</h2>
+      <p class="kpi-value">{{ formatFen(summary.avgTicketFen) }}</p>
+      <p class="kpi-hint">营收 ÷ 订单</p>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top: 16px">
+    <h2>
+      营收 / 订单 / 电量趋势
+      <span style="float: right; font-weight: 400; font-size: 13px">
+        <button v-for="d in [7, 30]" :key="d" :disabled="days === d" @click="days = d">近 {{ d }} 日</button>
+      </span>
+    </h2>
+    <EChart v-if="data" :option="trendOption" tall />
+  </section>
+
+  <section class="grid two" style="margin-top: 16px">
+    <div class="panel">
+      <h2>站点营收排行（元）</h2>
+      <EChart v-if="data" :option="rankingOption" tall />
+    </div>
+    <div class="panel">
+      <h2>用户 RFM 分层（人）</h2>
+      <EChart v-if="data" :option="rfmOption" tall />
+    </div>
+  </section>
+
+  <section class="grid two" style="margin-top: 16px">
+    <div class="panel">
+      <h2>月度经营汇总</h2>
+      <table class="data-table">
+        <thead>
+          <tr><th>月份</th><th>营收</th><th>电量</th><th>订单</th><th>单桩日均收益</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in monthlyRows" :key="r.month">
+            <td>{{ r.month }}</td>
+            <td>{{ formatFen(r.revenueFen) }}</td>
+            <td>{{ formatKwh(r.energyKwh) }}</td>
+            <td>{{ r.orderCount.toLocaleString('zh-CN') }}</td>
+            <td>{{ formatFen(r.revenuePerChargerFen) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>用户增长与活跃</h2>
+      <EChart v-if="data" :option="growthOption" />
+    </div>
+  </section>
 </template>

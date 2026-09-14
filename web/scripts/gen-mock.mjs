@@ -65,16 +65,6 @@ const chargerStatus = {
   restarting,
 }
 
-const kpis = {
-  totalRevenueFen: stations.reduce((s, x) => s + x.revenueFen, 0),
-  totalEnergyKwh: Number((stations.reduce((s, x) => s + x.revenueFen, 0) / 118 / 100).toFixed(1)),
-  totalOrders: 128_640,
-  chargerCount: totalChargers,
-  idleCount: chargerStatus.idle,
-  onlineRate: Number((((totalChargers - fault) / totalChargers) * 100).toFixed(1)),
-  generatedFrom: 'ADS（ads_revenue_overview / ads_charger_health）',
-}
-
 const dayOffset = (base, n) => {
   const [y, m, d] = base.split('-').map(Number)
   const dt = new Date(Date.UTC(y, m - 1, d))
@@ -82,11 +72,31 @@ const dayOffset = (base, n) => {
   return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`
 }
 
-const revenueTrend = Array.from({ length: 7 }, (_, i) => {
-  const date = dayOffset(DEMO_DAY, i - 6)
+// 90 天趋势（主页取最后 7 天，企业页可按 7/30 切窗口）
+const revenueTrend = Array.from({ length: 90 }, (_, i) => {
+  const date = dayOffset(DEMO_DAY, i - 89)
   const weekend = [0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay())
-  return { date, revenueFen: Math.round(ri(3_600_000, 5_400_000) * (weekend ? 1.18 : 1)) }
+  const orderCount = Math.round(ri(1_050, 1_680) * (weekend ? 1.12 : 1))
+  const energyKwh = Number((orderCount * rf(28, 34)).toFixed(1))
+  return {
+    date,
+    orderCount,
+    energyKwh,
+    revenueFen: Math.round(energyKwh * ri(110, 128) * (weekend ? 1.05 : 1)),
+  }
 })
+
+// KPI 直接由趋势逐日汇总，保证「总览 = 明细合计」可对账（财报口径一致）
+const kpis = {
+  totalRevenueFen: revenueTrend.reduce((s, r) => s + r.revenueFen, 0),
+  totalEnergyKwh: Number(revenueTrend.reduce((s, r) => s + r.energyKwh, 0).toFixed(1)),
+  totalOrders: revenueTrend.reduce((s, r) => s + r.orderCount, 0),
+  chargerCount: totalChargers,
+  idleCount: chargerStatus.idle,
+  onlineRate: Number((((totalChargers - fault) / totalChargers) * 100).toFixed(1)),
+  windowDays: revenueTrend.length,
+  generatedFrom: 'ADS（ads_revenue_overview / ads_charger_health）',
+}
 
 const hourlyShape = [0.32, 0.24, 0.2, 0.19, 0.22, 0.3, 0.46, 0.63, 0.78, 0.83, 0.8, 0.76,
   0.72, 0.74, 0.79, 0.84, 0.9, 0.97, 1.0, 0.94, 0.82, 0.66, 0.5, 0.4]
@@ -167,6 +177,35 @@ const quality = {
   issues: qualityIssues,
 }
 
+// ---- 企业视角：用户增长 / RFM / 月度汇总 ----
+const userGrowth = Array.from({ length: 30 }, (_, i) => {
+  const date = dayOffset(DEMO_DAY, i - 29)
+  const weekend = [0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay())
+  return { date, newUsers: ri(18, 64), activeUsers: Math.round(ri(520, 900) * (weekend ? 1.15 : 1)) }
+})
+
+const RFM_SEGMENTS = [
+  '重要价值客户', '重要保持客户', '重要发展客户', '重要挽留客户',
+  '一般价值客户', '一般保持客户', '一般发展客户', '一般挽留客户',
+]
+const userRfm = RFM_SEGMENTS.map((segment, i) => ({
+  segment,
+  userCount: Math.round(ri(120, 900) * (1 - i * 0.06)),
+  revenueFen: ri(1_200_000, 9_600_000),
+}))
+
+const monthly = ['2026-06', '2026-07', '2026-08', '2026-09'].map((month) => {
+  const orderCount = ri(34_000, 46_000)
+  const energyKwh = Number((orderCount * rf(28, 34)).toFixed(1))
+  return {
+    month,
+    orderCount,
+    energyKwh,
+    revenueFen: Math.round(energyKwh * ri(110, 128)),
+    revenuePerChargerFen: Math.round((energyKwh * 118) / 279),
+  }
+})
+
 const wrap = (data) => ({ ...SOURCE, data, generatedAt: iso(DEMO_DAY, 10, 5) })
 
 const files = {
@@ -188,6 +227,9 @@ const files = {
     points: forecast24h,
   }),
   'quality_summary.json': wrap(quality),
+  'enterprise_user-growth.json': wrap({ days: 30, points: userGrowth }),
+  'enterprise_user-rfm.json': wrap(userRfm),
+  'enterprise_monthly.json': wrap(monthly),
 }
 
 for (const [name, body] of Object.entries(files)) {

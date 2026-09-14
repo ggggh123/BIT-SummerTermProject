@@ -25,7 +25,8 @@ const view = buildHomeViewModel({
   stations: stations.data,
   chargerStatus: chargerStatus.data,
   ranking: ranking.data,
-  revenueTrend: revenueTrend.data.points,
+  // 与主页一致：接口给 90 天，页面固定取最近 7 天
+  revenueTrend: revenueTrend.data.points.slice(-7),
   load24h: load24h.data.points,
   forecast24h: forecast24h.data.points,
   events: [],

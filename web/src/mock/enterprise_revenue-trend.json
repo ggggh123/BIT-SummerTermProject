@@ -5,32 +5,544 @@
     "days": 7,
     "points": [
       {
+        "date": "2026-06-17",
+        "orderCount": 1269,
+        "energyKwh": 36867.8,
+        "revenueFen": 4608475
+      },
+      {
+        "date": "2026-06-18",
+        "orderCount": 1564,
+        "energyKwh": 45020.5,
+        "revenueFen": 5177358
+      },
+      {
+        "date": "2026-06-19",
+        "orderCount": 1628,
+        "energyKwh": 53688.7,
+        "revenueFen": 6818465
+      },
+      {
+        "date": "2026-06-20",
+        "orderCount": 1576,
+        "energyKwh": 47493.3,
+        "revenueFen": 6034024
+      },
+      {
+        "date": "2026-06-21",
+        "orderCount": 1467,
+        "energyKwh": 42099.6,
+        "revenueFen": 4950913
+      },
+      {
+        "date": "2026-06-22",
+        "orderCount": 1491,
+        "energyKwh": 44284.4,
+        "revenueFen": 5624119
+      },
+      {
+        "date": "2026-06-23",
+        "orderCount": 1549,
+        "energyKwh": 52008.8,
+        "revenueFen": 6501100
+      },
+      {
+        "date": "2026-06-24",
+        "orderCount": 1459,
+        "energyKwh": 40980.4,
+        "revenueFen": 5081570
+      },
+      {
+        "date": "2026-06-25",
+        "orderCount": 1528,
+        "energyKwh": 48179,
+        "revenueFen": 6166912
+      },
+      {
+        "date": "2026-06-26",
+        "orderCount": 1601,
+        "energyKwh": 52037.1,
+        "revenueFen": 5724081
+      },
+      {
+        "date": "2026-06-27",
+        "orderCount": 1848,
+        "energyKwh": 59824,
+        "revenueFen": 7098118
+      },
+      {
+        "date": "2026-06-28",
+        "orderCount": 1194,
+        "energyKwh": 36223.4,
+        "revenueFen": 4678252
+      },
+      {
+        "date": "2026-06-29",
+        "orderCount": 1215,
+        "energyKwh": 34411,
+        "revenueFen": 4370197
+      },
+      {
+        "date": "2026-06-30",
+        "orderCount": 1628,
+        "energyKwh": 53124.7,
+        "revenueFen": 6003091
+      },
+      {
+        "date": "2026-07-01",
+        "orderCount": 1101,
+        "energyKwh": 33785.9,
+        "revenueFen": 3750235
+      },
+      {
+        "date": "2026-07-02",
+        "orderCount": 1304,
+        "energyKwh": 38648,
+        "revenueFen": 4637760
+      },
+      {
+        "date": "2026-07-03",
+        "orderCount": 1678,
+        "energyKwh": 54983.1,
+        "revenueFen": 6542989
+      },
+      {
+        "date": "2026-07-04",
+        "orderCount": 1788,
+        "energyKwh": 53760.9,
+        "revenueFen": 6378731
+      },
+      {
+        "date": "2026-07-05",
+        "orderCount": 1683,
+        "energyKwh": 53291.2,
+        "revenueFen": 6155134
+      },
+      {
+        "date": "2026-07-06",
+        "orderCount": 1445,
+        "energyKwh": 46693.7,
+        "revenueFen": 5649938
+      },
+      {
+        "date": "2026-07-07",
+        "orderCount": 1474,
+        "energyKwh": 43766.4,
+        "revenueFen": 5208202
+      },
+      {
+        "date": "2026-07-08",
+        "orderCount": 1370,
+        "energyKwh": 44214.2,
+        "revenueFen": 5305704
+      },
+      {
+        "date": "2026-07-09",
+        "orderCount": 1364,
+        "energyKwh": 43597.1,
+        "revenueFen": 5362443
+      },
+      {
+        "date": "2026-07-10",
+        "orderCount": 1412,
+        "energyKwh": 45261.8,
+        "revenueFen": 5476678
+      },
+      {
+        "date": "2026-07-11",
+        "orderCount": 1811,
+        "energyKwh": 59514.8,
+        "revenueFen": 7123922
+      },
+      {
+        "date": "2026-07-12",
+        "orderCount": 1868,
+        "energyKwh": 58111,
+        "revenueFen": 7749102
+      },
+      {
+        "date": "2026-07-13",
+        "orderCount": 1399,
+        "energyKwh": 40733.9,
+        "revenueFen": 5213939
+      },
+      {
+        "date": "2026-07-14",
+        "orderCount": 1444,
+        "energyKwh": 47060.8,
+        "revenueFen": 5741418
+      },
+      {
+        "date": "2026-07-15",
+        "orderCount": 1221,
+        "energyKwh": 39353.7,
+        "revenueFen": 4446968
+      },
+      {
+        "date": "2026-07-16",
+        "orderCount": 1401,
+        "energyKwh": 44478.9,
+        "revenueFen": 5115074
+      },
+      {
+        "date": "2026-07-17",
+        "orderCount": 1297,
+        "energyKwh": 37763.7,
+        "revenueFen": 4493880
+      },
+      {
+        "date": "2026-07-18",
+        "orderCount": 1848,
+        "energyKwh": 59156.6,
+        "revenueFen": 7826418
+      },
+      {
+        "date": "2026-07-19",
+        "orderCount": 1446,
+        "energyKwh": 43357.1,
+        "revenueFen": 5736144
+      },
+      {
+        "date": "2026-07-20",
+        "orderCount": 1147,
+        "energyKwh": 33922.3,
+        "revenueFen": 3765375
+      },
+      {
+        "date": "2026-07-21",
+        "orderCount": 1063,
+        "energyKwh": 30058.1,
+        "revenueFen": 3787321
+      },
+      {
+        "date": "2026-07-22",
+        "orderCount": 1529,
+        "energyKwh": 44771.4,
+        "revenueFen": 5730739
+      },
+      {
+        "date": "2026-07-23",
+        "orderCount": 1404,
+        "energyKwh": 45786.3,
+        "revenueFen": 5814860
+      },
+      {
+        "date": "2026-07-24",
+        "orderCount": 1542,
+        "energyKwh": 43572.6,
+        "revenueFen": 5577293
+      },
+      {
+        "date": "2026-07-25",
+        "orderCount": 1654,
+        "energyKwh": 46836.3,
+        "revenueFen": 5999730
+      },
+      {
+        "date": "2026-07-26",
+        "orderCount": 1295,
+        "energyKwh": 41256.2,
+        "revenueFen": 5414876
+      },
+      {
+        "date": "2026-07-27",
+        "orderCount": 1149,
+        "energyKwh": 36042.5,
+        "revenueFen": 4180930
+      },
+      {
+        "date": "2026-07-28",
+        "orderCount": 1605,
+        "energyKwh": 47538.6,
+        "revenueFen": 5847248
+      },
+      {
+        "date": "2026-07-29",
+        "orderCount": 1309,
+        "energyKwh": 38140.3,
+        "revenueFen": 4767538
+      },
+      {
+        "date": "2026-07-30",
+        "orderCount": 1430,
+        "energyKwh": 43147.3,
+        "revenueFen": 5048234
+      },
+      {
+        "date": "2026-07-31",
+        "orderCount": 1554,
+        "energyKwh": 46396.4,
+        "revenueFen": 5521172
+      },
+      {
+        "date": "2026-08-01",
+        "orderCount": 1464,
+        "energyKwh": 49225.4,
+        "revenueFen": 5685534
+      },
+      {
+        "date": "2026-08-02",
+        "orderCount": 1784,
+        "energyKwh": 51409,
+        "revenueFen": 6585493
+      },
+      {
+        "date": "2026-08-03",
+        "orderCount": 1085,
+        "energyKwh": 31869.1,
+        "revenueFen": 4079245
+      },
+      {
+        "date": "2026-08-04",
+        "orderCount": 1349,
+        "energyKwh": 44926.1,
+        "revenueFen": 5750541
+      },
+      {
+        "date": "2026-08-05",
+        "orderCount": 1363,
+        "energyKwh": 46155.7,
+        "revenueFen": 5538684
+      },
+      {
+        "date": "2026-08-06",
+        "orderCount": 1613,
+        "energyKwh": 46951.5,
+        "revenueFen": 5446374
+      },
+      {
+        "date": "2026-08-07",
+        "orderCount": 1554,
+        "energyKwh": 51986.3,
+        "revenueFen": 6290342
+      },
+      {
+        "date": "2026-08-08",
+        "orderCount": 1439,
+        "energyKwh": 42740.7,
+        "revenueFen": 5699472
+      },
+      {
+        "date": "2026-08-09",
+        "orderCount": 1829,
+        "energyKwh": 52554,
+        "revenueFen": 6511441
+      },
+      {
+        "date": "2026-08-10",
+        "orderCount": 1434,
+        "energyKwh": 47770.4,
+        "revenueFen": 5302514
+      },
+      {
+        "date": "2026-08-11",
+        "orderCount": 1373,
+        "energyKwh": 41080,
+        "revenueFen": 4929600
+      },
+      {
+        "date": "2026-08-12",
+        "orderCount": 1103,
+        "energyKwh": 35543.2,
+        "revenueFen": 4513986
+      },
+      {
+        "date": "2026-08-13",
+        "orderCount": 1195,
+        "energyKwh": 37249,
+        "revenueFen": 4134639
+      },
+      {
+        "date": "2026-08-14",
+        "orderCount": 1428,
+        "energyKwh": 43164.8,
+        "revenueFen": 4834458
+      },
+      {
+        "date": "2026-08-15",
+        "orderCount": 1448,
+        "energyKwh": 45898.4,
+        "revenueFen": 5975972
+      },
+      {
+        "date": "2026-08-16",
+        "orderCount": 1765,
+        "energyKwh": 53512.7,
+        "revenueFen": 7135919
+      },
+      {
+        "date": "2026-08-17",
+        "orderCount": 1624,
+        "energyKwh": 50837.6,
+        "revenueFen": 5795486
+      },
+      {
+        "date": "2026-08-18",
+        "orderCount": 1165,
+        "energyKwh": 39398,
+        "revenueFen": 4491372
+      },
+      {
+        "date": "2026-08-19",
+        "orderCount": 1578,
+        "energyKwh": 48724.4,
+        "revenueFen": 5554582
+      },
+      {
+        "date": "2026-08-20",
+        "orderCount": 1104,
+        "energyKwh": 33205.7,
+        "revenueFen": 4183918
+      },
+      {
+        "date": "2026-08-21",
+        "orderCount": 1662,
+        "energyKwh": 48145.8,
+        "revenueFen": 5970079
+      },
+      {
+        "date": "2026-08-22",
+        "orderCount": 1460,
+        "energyKwh": 43246.9,
+        "revenueFen": 5222063
+      },
+      {
+        "date": "2026-08-23",
+        "orderCount": 1717,
+        "energyKwh": 48360.1,
+        "revenueFen": 6245707
+      },
+      {
+        "date": "2026-08-24",
+        "orderCount": 1668,
+        "energyKwh": 51421.9,
+        "revenueFen": 6170628
+      },
+      {
+        "date": "2026-08-25",
+        "orderCount": 1320,
+        "energyKwh": 42256.7,
+        "revenueFen": 4690494
+      },
+      {
+        "date": "2026-08-26",
+        "orderCount": 1089,
+        "energyKwh": 34102.4,
+        "revenueFen": 3955878
+      },
+      {
+        "date": "2026-08-27",
+        "orderCount": 1534,
+        "energyKwh": 46739.5,
+        "revenueFen": 5608740
+      },
+      {
+        "date": "2026-08-28",
+        "orderCount": 1287,
+        "energyKwh": 37033.5,
+        "revenueFen": 4110719
+      },
+      {
+        "date": "2026-08-29",
+        "orderCount": 1421,
+        "energyKwh": 48055.5,
+        "revenueFen": 6206368
+      },
+      {
+        "date": "2026-08-30",
+        "orderCount": 1532,
+        "energyKwh": 46296.1,
+        "revenueFen": 6173585
+      },
+      {
+        "date": "2026-08-31",
+        "orderCount": 1599,
+        "energyKwh": 51239.9,
+        "revenueFen": 5892589
+      },
+      {
+        "date": "2026-09-01",
+        "orderCount": 1121,
+        "energyKwh": 32684.5,
+        "revenueFen": 3791402
+      },
+      {
+        "date": "2026-09-02",
+        "orderCount": 1406,
+        "energyKwh": 42754.6,
+        "revenueFen": 4874024
+      },
+      {
+        "date": "2026-09-03",
+        "orderCount": 1391,
+        "energyKwh": 45543.7,
+        "revenueFen": 5510788
+      },
+      {
+        "date": "2026-09-04",
+        "orderCount": 1569,
+        "energyKwh": 47601.9,
+        "revenueFen": 5902636
+      },
+      {
+        "date": "2026-09-05",
+        "orderCount": 1569,
+        "energyKwh": 50312.1,
+        "revenueFen": 6233669
+      },
+      {
+        "date": "2026-09-06",
+        "orderCount": 1602,
+        "energyKwh": 47244.6,
+        "revenueFen": 6349674
+      },
+      {
+        "date": "2026-09-07",
+        "orderCount": 1093,
+        "energyKwh": 31685.3,
+        "revenueFen": 3865607
+      },
+      {
         "date": "2026-09-08",
-        "revenueFen": 4225567
+        "orderCount": 1535,
+        "energyKwh": 44216.2,
+        "revenueFen": 5040647
       },
       {
         "date": "2026-09-09",
-        "revenueFen": 3915792
+        "orderCount": 1264,
+        "energyKwh": 41731.6,
+        "revenueFen": 5049524
       },
       {
         "date": "2026-09-10",
-        "revenueFen": 5043432
+        "orderCount": 1267,
+        "energyKwh": 40369.5,
+        "revenueFen": 4481015
       },
       {
         "date": "2026-09-11",
-        "revenueFen": 5067202
+        "orderCount": 1449,
+        "energyKwh": 48759.4,
+        "revenueFen": 5802369
       },
       {
         "date": "2026-09-12",
-        "revenueFen": 4526068
+        "orderCount": 1186,
+        "energyKwh": 39467.1,
+        "revenueFen": 5055736
       },
       {
         "date": "2026-09-13",
-        "revenueFen": 4899302
+        "orderCount": 1831,
+        "energyKwh": 59856.3,
+        "revenueFen": 7793290
       },
       {
         "date": "2026-09-14",
-        "revenueFen": 5250608
+        "orderCount": 1561,
+        "energyKwh": 45124.5,
+        "revenueFen": 5008820
       }
     ]
   },

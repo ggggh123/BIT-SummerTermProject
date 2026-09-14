@@ -25,7 +25,8 @@ async function load() {
       stations: raw.stations,
       chargerStatus: raw.chargerStatus,
       ranking: raw.ranking,
-      revenueTrend: raw.revenueTrend?.points ?? raw.revenueTrend ?? [],
+      // 接口按 days=7 请求，主页固定取最近 7 天
+      revenueTrend: (raw.revenueTrend?.points ?? raw.revenueTrend ?? []).slice(-7),
       load24h: raw.load24h?.points ?? raw.load24h ?? [],
       forecast24h: raw.forecast24h?.points ?? raw.forecast24h ?? [],
       events: raw.events,
