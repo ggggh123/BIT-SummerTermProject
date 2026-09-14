@@ -131,16 +131,34 @@ sha256sum OpenJDK17U-*.tar.gz hadoop-3.4.1.tar.gz spark-3.5.7-bin-hadoop3.tgz | 
 sudo su root                     # 初始密码按实际
 cat /etc/passwd | grep hadoop    # 已存在则跳过创建
 useradd -m hadoop -s /bin/bash
-passwd hadoop                    # 设置为 hadoop
 adduser hadoop sudo
 ```
 
-### 5.2 修改主机名并重启
+设置密码 —— **注意 Ubuntu 默认开启 PAM 密码强度校验**，直接 `passwd hadoop` 或 `echo "hadoop:hadoop" | chpasswd` 设 6 个字符会被拒绝并报「无效的密码：密码少于 8 个字符」（`chpasswd` 还会**静默失败**，用户实际处于无密码状态）。用下面这条绕过：
 
 ```bash
-sudo gedit /etc/hostname         # 改为「姓名全拼+数字」，如 zhangsan01
-reboot
+# 主方案：直接写入 SHA-512 哈希，绕过 PAM 强度检查
+sudo usermod -p "$(openssl passwd -6 hadoop)" hadoop
+sudo passwd -S hadoop            # 输出第二列含 "P" 表示密码已生效
+
+# 备选：交互式设置（密码须 ≥ 8 字符，否则同样被 PAM 拒绝）
+# sudo passwd hadoop
 ```
+
+> 该密码仅在本地虚拟机使用。日常操作统一走 `sudo -u hadoop`（以已有 sudo 用户切换身份，**不需要 hadoop 的密码**），只有 `su - hadoop` 或图形界面登录 hadoop 账户时才会用到。
+
+### 5.2 修改主机名
+
+```bash
+# 主方案：立即生效，无需重启（通过 SSH 远程部署时 reboot 会中断会话）
+sudo hostnamectl set-hostname zhangsan01    # 替换为自己的「姓名全拼+数字」
+hostname                                    # 确认输出新主机名
+
+# 备选：改配置文件后重启（等效，但会断开远程连接）
+# sudo gedit /etc/hostname && reboot
+```
+
+> 主机名会写入 `core-site.xml` / `yarn-site.xml`，**必须在装 Hadoop 前定好**；中途改名需同步修改配置文件并重跑 §7 自检。
 
 ### 5.3 添加域名映射
 
@@ -180,17 +198,27 @@ sudo mv /usr/local/jdk-17.0.* /usr/local/jdk-17
 sudo chown -R hadoop:hadoop /usr/local/jdk-17
 ```
 
-在 `~/.bashrc` 末尾追加：
+**配置环境变量（关键：写全局 `profile.d`，不要只写 `~/.bashrc`）**：
 
 ```bash
+# 1) 全局生效：登录 shell 会加载 /etc/profile.d/*.sh
+sudo tee /etc/profile.d/hadoop-env.sh > /dev/null <<'EOF'
 export JAVA_HOME=/usr/local/jdk-17
 export PATH=$JAVA_HOME/bin:$PATH
+EOF
+sudo chmod 644 /etc/profile.d/hadoop-env.sh
+
+# 2) 让 hadoop 用户的交互式 shell 也加载它
+sudo -u hadoop bash -c 'grep -q hadoop-env ~/.bashrc || echo "[ -f /etc/profile.d/hadoop-env.sh ] && . /etc/profile.d/hadoop-env.sh" >> ~/.bashrc'
 ```
 
 ```bash
-source ~/.bashrc
 java -version                    # 期望：openjdk version "17.0.x"
 ```
+
+> **为什么不能只写 `~/.bashrc`**：`ssh <主机> '<命令>'` 执行的是**非交互、非登录** shell，不会读取 `~/.bashrc`，会出现「本地能跑、SSH 过去报 command not found」。本组的作业脚本、`start_part2.sh` 都是远程/非交互调用的，因此 JDK / Hadoop / Spark 的环境变量（§5.5、§5.6、§6）**统一追加到同一个 `/etc/profile.d/hadoop-env.sh`**。
+>
+> 脚本内需要环境变量时，显式加一行 `. /etc/profile.d/hadoop-env.sh`，或改用 `bash -lc` 执行。
 
 ### 5.6 安装 Hadoop 3.4.1
 
@@ -200,18 +228,20 @@ sudo mv /usr/local/hadoop-3.4.1 /usr/local/hadoop
 sudo chown -R hadoop:hadoop /usr/local/hadoop
 ```
 
-在 `~/.bashrc` 末尾追加：
+把 Hadoop 变量**追加到同一个全局文件** `/etc/profile.d/hadoop-env.sh`（与 §5.5 同一个文件）：
 
 ```bash
+sudo tee -a /etc/profile.d/hadoop-env.sh > /dev/null <<'EOF'
 export HADOOP_HOME=/usr/local/hadoop
 export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
 export YARN_HOME=$HADOOP_HOME
 export YARN_CONF_DIR=$HADOOP_CONF_DIR
 export PATH=$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$PATH
+EOF
 ```
 
 ```bash
-source ~/.bashrc
+hadoop version                   # 期望：Hadoop 3.4.1
 ```
 
 ### 5.7 配置 7 个文件
@@ -310,7 +340,7 @@ export YARN_NODEMANAGER_OPTS="$JDK_ADD_OPENS"
 </configuration>
 ```
 
-**（7）`yarn-site.xml`**：
+**（7）`yarn-site.xml`** —— 含内存上限，**内存 ≤ 8 GB 的机器必须设**，否则 YARN 容器申请不到资源、作业反复失败：
 
 ```xml
 <configuration>
@@ -327,11 +357,21 @@ export YARN_NODEMANAGER_OPTS="$JDK_ADD_OPENS"
     <value><主机名>:8032</value>
   </property>
   <property>
+    <name>yarn.nodemanager.resource.memory-mb</name>
+    <value>4096</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.maximum-allocation-mb</name>
+    <value>4096</value>
+  </property>
+  <property>
     <name>yarn.nodemanager.env-whitelist</name>
     <value>JAVA_HOME,HADOOP_COMMON_HOME,HADOOP_HDFS_HOME,HADOOP_CONF_DIR,CLASSPATH_PREPEND_DISTCACHE,HADOOP_YARN_HOME,HADOOP_HOME,PATH,LANG,TZ,HADOOP_MAPRED_HOME</value>
   </property>
 </configuration>
 ```
+
+> 两个内存属性的取值依据见 §10.2；虚拟机内存紧张时可下调至 2048。
 
 ### 5.8 格式化 NameNode
 
@@ -396,11 +436,13 @@ sudo mv /usr/local/spark-3.5.7-bin-hadoop3 /usr/local/spark
 sudo chown -R hadoop:hadoop /usr/local/spark
 ```
 
-在 `~/.bashrc` 追加：
+把 Spark 变量**追加到全局文件** `/etc/profile.d/hadoop-env.sh`（与 §5.5、§5.6 同一个文件）：
 
 ```bash
+sudo tee -a /etc/profile.d/hadoop-env.sh > /dev/null <<'EOF'
 export SPARK_HOME=/usr/local/spark
 export PATH=$SPARK_HOME/bin:$PATH
+EOF
 ```
 
 配置 `spark-env.sh`：
@@ -435,7 +477,18 @@ pyspark --master yarn
 
 ## 7. 环境自检脚本 `check_env.sh`
 
-任一台成员机部署完成后运行本脚本，全部 `[OK]` 即为合格（这也是《02》验收「成员机级」的判定依据）。
+任一台成员机部署完成后运行本脚本，全部 `[OK]` 即为合格（这也是《02》验收「成员机级」的判定依据）。本组实测记录见 §11。
+
+**运行方式（必须以 hadoop 身份、用 login shell 运行，否则拿不到全局环境变量）**：
+
+```bash
+sudo -u hadoop bash -lc "bash ~/check_env.sh"
+```
+
+**两个容易误报 FAIL 的点**：
+
+- **`add-opens 已配` 项**：脚本用 `grep -c 'add-opens' hadoop-env.sh` 判定，期望结果为 `1`。若 §5.7(1) 追加段的**注释里也出现 `add-opens` 字样**，计数会变成 2 而误报 FAIL——注释请写「Java 17 JVM 参数」之类措辞。
+- **`hosts 含本机名` 项**：要求 `/etc/hosts` 中本机名恰好出现 **1** 次，需删除残留的 `127.0.1.1 <旧主机名>` 行。
 
 ```bash
 #!/usr/bin/env bash
@@ -548,3 +601,36 @@ echo "通过 $pass 项，失败 $fail 项"
 | YARN 容器 | `yarn.nodemanager.resource.memory-mb=4096`、`yarn.scheduler.maximum-allocation-mb=4096`（内存紧张时下调） |
 
 > 若内存不足导致 YARN 作业反复失败：可临时用 `pyspark --master local[*]` 直连 HDFS 跑通逻辑，**答辩前切回 `--master yarn` 并留 YARN 记录**（见《00》§10 风险）。
+
+---
+
+## 11. 实机部署记录（本组）
+
+> 记录人：#2（TL）；部署机：`niyujun01`（**集成/演示机**）；部署日期：2026-09-14
+
+### 11.1 实际环境
+
+| 项 | 实测值 |
+|---|---|
+| 虚拟机 | VMware 17 / Ubuntu **22.04.3 LTS** / 8 核 / 内存 7.7 GiB / 磁盘 491 GiB |
+| 主机名 / IP | `niyujun01` / `192.168.59.128`（VMware NAT） |
+| 操作账户 | `bit`（原账户，已配置免密 sudo）+ `hadoop`（密码 `hadoop`，已加入 sudo 组） |
+| JDK | Eclipse Temurin **17.0.20.1+1** → `/usr/local/jdk-17` |
+| Hadoop | **3.4.1** → `/usr/local/hadoop`（1.7 GiB） |
+| Spark | **3.5.7** → `/usr/local/spark`（429 MiB） |
+| 环境变量 | 统一写入 `/etc/profile.d/hadoop-env.sh`（JAVA_HOME / HADOOP_* / YARN_* / SPARK_HOME） |
+| HDFS | `hdfs://niyujun01:8020`，`dfs.replication=1`；`/ev-charging/{ods,dwd,dws,ads,quality,forecast}` 已建 |
+| 自检结论 | `check_env.sh` **15 项全绿 → 环境自检 PASS** |
+
+### 11.2 验收证据
+
+1. **`jps` 五进程齐全**：NameNode / DataNode / SecondaryNameNode / ResourceManager / NodeManager；
+2. **Web UI 可访问**：NameNode `9870`、ResourceManager `8088` 均返回 302（正常重定向）；
+3. **MapReduce 冒烟通过**：`grep` 示例作业产出 `1 dfsadmin` / `1 dfs.replication` 等结果，`_SUCCESS` 标记存在（首次耗时约 2 分 47 秒，属 YARN 容器冷启动的正常现象）；
+4. **Spark on YARN 打通**：提交 PySpark 作业读取 `hdfs://niyujun01:8020/input/core-site.xml`，输出行数 = 12；YARN 应用列表中该作业为 `FINISHED / SUCCEEDED`。
+
+### 11.3 与其他成员机的差异说明（照做时请注意）
+
+- §5.5 / §5.6 / §6 的环境变量按本记录采用**全局 `/etc/profile.d/hadoop-env.sh`** 方案（原因见 §5.5 说明），其他机器请照此执行，以保证 `check_env.sh` 与跨机脚本行为一致；
+- 本机内存仅 7.7 GiB，已按 §5.7(7) 设置 YARN 内存上限 4096 MB，并按 §10.2 限制 Spark executor/driver 为 2g；内存更充裕的机器可忽略；
+- 本机 `/etc/hosts` 为 `192.168.59.128 niyujun01`。若虚拟机 DHCP 更换 IP，需同步更新该行（或绑定静态 IP），否则 `hdfs://niyujun01:8020` 会失联。
