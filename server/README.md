@@ -82,7 +82,7 @@ echo "VITE_API_BASE=http://localhost:5000/api" >> web/.env.local
 
 ```
 SCML 生成器 ──► handoff/ods/（ODS 交接包）
-                    │  server/tools/build_ads_db.py  ← 纯标准库，约 16s
+                    │  part2/scml/warehouse/jobs/build_local.py  ← 纯标准库，约 15s
                     ▼
               handoff/ads/ads.db（SQLite 单文件，15 张表，5.5 MB）
                     │  server/services/ads_reader.py  ← sqlite3 只读
@@ -92,7 +92,7 @@ SCML 生成器 ──► handoff/ods/（ODS 交接包）
 
 > **重要事实**：任务下达时提到的 `handoff/ads/ads.db` 与 `handoff/ads/json/*.json`
 > 在仓库和本机**都不存在**。当前 `ads.db` 是本次用 SCML 生成器自产 ODS 后，
-> 由 `build_ads_db.py` 自行物化出来的**过渡产物**（`ads_meta.sourceKind = ods-handoff`）。
+> 由 #4 的 `build_local.py` 自行物化出来的**过渡产物**（`ads_meta.sourceKind = ods-handoff`）。
 > 正式链路上 DWS/ADS 应由 SparkSQL 产出 Parquet，再导出同一张表结构的 SQLite；
 > 届时**只换数据、不改 Flask**。
 
@@ -101,7 +101,7 @@ SCML 生成器 ──► handoff/ods/（ODS 交接包）
 
 ```bash
 # 从共享文件夹取 handoff/ods，或按配置重跑 SCML 生成器（见 handoff/ods_config_used.yaml）
-python server/tools/build_ads_db.py --ods handoff/ods --out handoff/ads
+python part2/scml/warehouse/jobs/build_local.py --ods handoff/ods --dws handoff/dws --ads handoff/ads
 python server/app.py
 ```
 
@@ -160,10 +160,10 @@ server/
 │   └── station.py   gov.py      forecast.py
 ├── services/
 │   ├── ads_reader.py               sqlite3 只读连接、口径工具、参数校验、排序白名单
-│   ├── ads_cleaning.py             清洗规则实现（对齐《03-PRL》§3.2）
+│   # ads_cleaning.py 已迁至 part2/scml/warehouse/jobs/_lib.py（清洗是 #4 的生产职责）
 │   └── envelope.py                 统一响应信封
 └── tools/
-    ├── build_ads_db.py             ODS → ads.db 物化作业（幂等，可反复重跑）
+    # build_ads_db.py 已迁至 part2/scml/warehouse/jobs/build_local.py
     ├── selftest_contract.py        契约一致性自测
     └── selftest_frontend_shape.py  前端字段结构对齐自测
 ```

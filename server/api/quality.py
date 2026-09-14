@@ -1,7 +1,8 @@
 """数据质量对账端点（契约 §2 `/api/quality/summary`）。
 
 数据源：`ads_quality_table` / `ads_quality_issue` / `ads_quality_meta`，
-由 `server/tools/build_ads_db.py` 按《03-PRL》§3.2 规则对 ODS 独立复算后落库。
+由 `part2/scml/warehouse/jobs/build_local.py` 按《03-PRL》§3.2 规则对 ODS 独立复算后落库
+（质量复算逻辑只在 #4 侧一处实现，见 `part2/scml/warehouse/README.md` 的职责边界）。
 
 `injected` 来自生成器 `handoff/ods/injection_log.json`（Q1–Q10），
 `detected` 是 ADS 侧实际命中数，`recall = detected / injected`。

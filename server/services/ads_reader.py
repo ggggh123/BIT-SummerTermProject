@@ -88,7 +88,7 @@ def get_connection() -> sqlite3.Connection:
     if not path.is_file():
         raise AdsUnavailable(
             f"ADS 数据库不存在：{path}；请先运行 "
-            f"`python server/tools/build_ads_db.py --ods handoff/ods --out handoff/ads`"
+            f"`python part2/scml/warehouse/jobs/build_local.py --ods handoff/ods --dws handoff/dws --ads handoff/ads`"
         )
     # as_uri() 给出 file:///C:/... 形式；补 ?mode=ro 走只读 URI 通道
     conn = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, check_same_thread=False)
