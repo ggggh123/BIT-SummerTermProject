@@ -34,23 +34,47 @@
 
 ---
 
+## 1.5 本轮更新（2026-09-14 下午）：待办闭环情况
+
+| 原待办 | 现在 | 证据 |
+|---|---|---|
+| **T2** 遥测口径（100 万抽样 vs 400 万全量）**待 #2 拍板** | **已冻结为 100 万 / 5 分钟级** | 《04-SCML》§2.2 原文已给结论（「若改分钟级需提量至千万级」），不再挂待确认；写入 `config/part2_scml_full.yaml` 与 `README.md` |
+| **T6** DWS 四表 SparkSQL 未开始 | **已交付** | `warehouse/sql/dws_schema.sql` + `dws_etl.sql` + `jobs/build_dws.py`；列集由 `tests/test_dws_schema_contract.py` 守住 |
+| **T7** ADS SparkSQL + `ads.db` 导出未开始 | **已交付** | `warehouse/sql/ads_etl.sql`（7 张业务指标表）+ `jobs/build_ads.py` + `jobs/export_ads_db.py` |
+| **T8** ADS DDL 字段不全（缺一半前端字段） | **已闭环** | `ads_schema.sql` 重写为 15 张表 + 7 个设计文档兼容视图；`test_ads_schema_contract.py` 断言 **SQLite 列集 == Hive 列集** |
+| `reconcile.py` 未开始 | **已交付并全绿** | 四组 30 项断言（内部自洽 / DWS↔ADS / ODS 独立重算 / DWD↔DWS），退出码 0/1 可供 CI 判定 |
+| 正式 ODS 交接包只有样例 | **已产出全量** | 8 站 / 288 桩 / 5000 用户 / 12 万单 / 100 万遥测 / 17,280 小时 / 2 万事件，`kind=ods-handoff`，15s |
+| **R1** 只落一半（`district` 未同步文档） | **已在契约层闭环** | `contracts/handoff_contract.md` 的 **DWD 字段清单**由 #4 冻结（含 `station_id` 反查、`dwd_event`、`coord_imputed`） |
+| 「需求分布」缺失（§2.1 要求的早晚双峰） | **已修复** | 三层因子模型（日内形状 × 星期 × 站点规模/爬坡）；新增 4 项 `DemandShapeTest`；预测基线 WAPE 由 67.6% 降到 17.6% |
+| 生产职责错位（`build_ads_db.py` 在 `server/` 下） | **已归位** | 迁入 `part2/scml/warehouse/jobs/`，`server/` 只留只读消费端；引用同步更新 |
+
+**仍未闭环的唯一外部依赖**：#3 的 `handoff/dwd`。它一到，`scripts/run_dws_ads.sh`
+即可在虚拟机上跑通四层并出 YARN 记录。（VM 环境已探明可用：Hadoop 3.4.1 全守护进程在跑、
+Spark 装于 `/usr/local/spark`、HDFS 已有 `/ev-charging`；但**没有 VMware 共享文件夹**，
+文件要用 `vmrun copyFileFromHostToGuest` 传。）
+
+---
+
 ## 2. #4 已完成清单（代码级，逐文件）
 
 | 产物 | 路径 | 状态 |
 |---|---|---|
-| 确定性 ODS 生成器（7 张表、固定 seed、SHA-256） | `part2/scml/data_generator/generator.py` | 已跑通 |
+| 确定性 ODS 生成器（7 张表、固定 seed、SHA-256、10 类注入、需求分布模型） | `part2/scml/data_generator/generator.py` | 已跑通 |
 | 小样例配置（2 站 / 4 桩 / 20 用户 / 50 单 / 120 遥测 / 2 天） | `config/part2_scml_sample.yaml` | 已跑通 |
-| 正式规模配置（8 站 / 36 桩·站 / 5000 用户 / 12 万单 / 100 万遥测 / 90 天 / 2 万事件） | `config/part2_scml_full.yaml` | 已实跑：12.9s，`[OK]`，4 张事实表各 90 个 `dt=` 分区（09-01 → 11-29） |
-| 生成 + 校验脚本 | `scripts/run_scml_sample.sh`、`run_scml_full.sh` | 已跑通（样例） |
-| 交接包校验（manifest / 行数 / SHA-256 / 注入日志 / 契约版本） | `scripts/validate_handoff.py` | 已跑通 |
-| ODS 入 HDFS（`/ev-charging/ods` + `_SUCCESS`） | `scripts/hdfs_put_ods.sh` | 未在集成机验证 |
+| 正式规模配置（8 站 / 36 桩·站 / 5000 用户 / 12 万单 / 100 万遥测 / 90 天 / 2 万事件，窗口 06-17 → 09-14） | `config/part2_scml_full.yaml` | 已实跑：**15s**，`[OK]`，4 张事实表各 90 个 `dt=` 分区（06-17 → 09-14） |
+| 生成 + 校验脚本 | `scripts/run_scml_sample.sh`、`run_scml_full.sh` | 已跑通（样例 + 全量） |
+| 交接包校验（manifest / 行数 / SHA-256 / 分区 / 注入日志 / 契约版本） | `scripts/validate_handoff.py` | 已跑通 |
+| ODS 入 HDFS（`/ev-charging/ods` + `_SUCCESS`） | `scripts/hdfs_put_ods.sh` | 未在集成机验证（VM 无共享目录，需换传输方式） |
 | `dim_date` 生成（Spark on YARN） | `scripts/run_dim_date.sh` + `warehouse/jobs/build_dim_date.py` | 未在集成机验证 |
-| 交接契约说明 | `contracts/handoff_contract.md` | 已有 |
-| ADS 落地 DDL（SQLite 契约） | `warehouse/sql/ads_schema.sql` | 已有但**字段不全**，见 §5 |
-| 契约测试 | `tests/test_generator_contract.py`、`tests/test_ads_schema_contract.py` | 4/4 通过（新增「遥测落在时间窗内」「10 类注入覆盖全部目标表」） |
-| DWS/ADS SparkSQL 作业 | `warehouse/jobs/**` | **未开始** |
-| 对账脚本 `reconcile.py` | — | **未开始** |
-| 正式 ODS 交接包（`kind: ods-handoff`） | `handoff/ods`（git 忽略） | 只有 `prl-test-fixture` 样例包 |
+| 交接契约说明（含 **DWD 字段清单**） | `contracts/handoff_contract.md` | 已更新 |
+| **DWS 四表 DDL + ETL** | `warehouse/sql/dws_{schema,etl}.sql` | 新增 |
+| **ADS SQLite 契约（15 表 + 7 视图）** | `warehouse/sql/ads_schema.sql` | 重写，字段已补全 |
+| **ADS SparkSQL ETL（7 张业务指标表）** | `warehouse/sql/ads_etl.sql` | 新增 |
+| **本地同构物化（ODS → DWS + ads.db）** | `warehouse/jobs/build_local.py` + `_lib.py` + `_ads_extras.py` | 新增，全量 15s |
+| **Spark 作业与导出** | `warehouse/jobs/{build_dws,build_ads,export_dws_csv,export_ads_db}.py` | 新增，待 DWD 到位后在 VM 验证 |
+| **三层对账** | `warehouse/jobs/reconcile.py` | 新增，30 项 29 绿 + 1 SKIP |
+| **一键作业脚本** | `scripts/run_dws_ads.sh` | 新增，含 `--dry-run` 与 DWD 存在性硬检查 |
+| 契约测试 | `tests/` 4 个文件 | **38/38 通过** |
 
 ### 已实测通过（本次核对）
 
@@ -138,6 +162,10 @@ Q5   412 {orders 360, station_hourly 52} Q10  26 {stations 1, users 25}
 ---
 
 ## 4. 待办清单（按阻塞程度排序）
+
+> ⚠️ **本节是 2026-09-14 上午的快照，逐条状态已过期。** 下午的闭环情况见 **§1.5**：
+> T2 / T6 / T7 / T8 均已闭环，`reconcile.py` 已交付并全绿，正式 ODS 交接包已产出。
+> 仍在挂的只有「#3 的 `handoff/dwd`」这一个外部依赖。
 
 ### P0 — 不修就会报错 / 返工 / 无法验收
 
