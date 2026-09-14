@@ -65,7 +65,12 @@ def main() -> int:
         for index, statement in enumerate(statements, start=1):
             head = " ".join(statement.split())[:90]
             print(f"[{index}/{len(statements)}] {head}", flush=True)
-            spark.sql(statement)
+            try:
+                spark.sql(statement)
+            except Exception as exc:  # noqa: BLE001 —— 要把出错的是第几条语句带出来
+                # 在虚拟机上跑时日志很长，不指明条数就只能靠翻 plan dump 找
+                print(f"[FAIL] 第 {index}/{len(statements)} 条语句执行失败：{exc}", flush=True)
+                raise
         # 用行数自证不是空跑
         for table in ("dws_station_day", "dws_charger_day", "dws_user_day", "dws_region_day"):
             count = spark.sql(f"SELECT COUNT(1) AS n FROM ev_charging.{table}").collect()[0]["n"]

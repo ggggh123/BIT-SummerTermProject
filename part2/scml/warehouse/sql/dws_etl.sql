@@ -74,7 +74,9 @@ flt AS (
      GROUP BY dt, entity_id
 ),
 flt_station AS (
-    SELECT e.dt, c.station_id, COUNT(DISTINCT e.entity_id) AS fault_cnt
+    -- 注意别名：`flt` 里已经把 `entity_id` 改名为 `charger_id`，
+    -- 这里只能引用 `e.charger_id`（踩过一次 UNRESOLVED_COLUMN 的坑）。
+    SELECT e.dt, c.station_id, COUNT(DISTINCT e.charger_id) AS fault_cnt
       FROM flt e
       JOIN ev_charging.dim_chargers c ON c.charger_id = e.charger_id
      GROUP BY e.dt, c.station_id

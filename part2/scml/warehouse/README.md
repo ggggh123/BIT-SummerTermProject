@@ -111,6 +111,33 @@ bash scripts/run_dws_ads.sh --dry-run         # 只打印要执行的 SQL，不�
 `run_dws_ads.sh` 在第 0 步会**硬性检查** `${HDFS_ROOT}/dwd` 是否存在，缺 DWD 直接失败 ——
 不允许「静默出一份空表」当交付物。
 
+### 5.2.1 已经在真实集群上验证过（2026-09-14）
+
+DWD 还没交付，但 SQL 本身**已经在 Hadoop 3.4.1 + Spark 上跑通了**。做法是先用
+`dwd_contract.sql` 建出**空的** DWD 表，再跑 DWS/ADS —— 空表照样会走完整的
+analyze + plan + execute，任何列名/类型/函数错误都会立刻以
+`AnalysisException: UNRESOLVED_COLUMN` 抛出。
+
+```bash
+# 在客户机里（Hadoop/Spark 已起）
+spark-sql -f warehouse/sql/dwd_contract.sql     # 建空 DWD，验证契约 DDL
+python3 warehouse/jobs/build_dws.py --sql-dir warehouse/sql
+python3 warehouse/jobs/build_ads.py --sql-dir warehouse/sql
+```
+
+实测结果：`DWS_EXIT=0` / `ADS_EXIT=0`，全部 11 + 15 条语句通过，
+`/ev-charging/dws/*` 与 `/ev-charging/ads/*` 都写出了 `_SUCCESS`；
+`ads_user_rfm` 返回 8 行（固定八分层的 `segments` CTE 驱动，空输入下补 0），
+其余表 0 行 —— 与「DWD 为空」完全自洽。
+
+**这一步抓到了一个本地测试抓不到的 bug**：`dws_etl.sql` 里 `flt` CTE 把
+`entity_id` 起别名为 `charger_id` 之后，`flt_station` 仍在引用 `e.entity_id`，
+报 `UNRESOLVED_COLUMN`。纯 Python 路径（`build_local.py`）走自己的代码，
+不会发现这类 SQL 方言问题 —— 所以**改完 SQL 一定要在客户机上跑一遍**。
+
+> 结论：`dws_etl.sql` / `ads_etl.sql` 的**语法与列引用已验收**；
+> 尚未验收的是**数值层面对账**（D 组），那要等 #3 的真实 DWD。
+
 ### 5.3 数据窗口
 
 `config/part2_scml_full.yaml` 的 `start_date: "2026-06-17"` 是**冻结决策**：
