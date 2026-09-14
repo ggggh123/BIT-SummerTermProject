@@ -25,10 +25,13 @@ echo "=== 2/7 上传 ODS 到 HDFS ==="
 hdfs dfs -mkdir -p /ev-charging/ods
 hdfs dfs -put -f handoff/ods/*.csv /ev-charging/ods/
 echo "  已上传 $(hdfs dfs -ls /ev-charging/ods | grep -c csv) 个 CSV"
-echo "=== 3/7 质量探查（老师第 3 步）==="
-$SUBMIT quality_check.py 2>&1 | grep -E '画像|命中|注入' | tail -14
-echo "=== 4/7 清洗到 DWD（老师第 4 步）==="
-$SUBMIT clean_to_dwd.py 2>&1 | grep -E '写出|->|剔除' | tail -14
+echo "=== 3/7 质量探查（老师第 3 步）—— 属 #3 模块，不在本目录 ==="
+# 原参考骨架 quality_check.py 已按分工撤下，实现以 #3（PRL）为准。
+# 产出约定：quality_report.json（含 10 类问题检出与注入对账）→ 大屏 /api/quality/summary
+echo "  [跳过] 请运行 #3 的质量作业；本目录仅保留对账与接口导出"
+echo "=== 4/7 清洗到 DWD（老师第 4 步）—— 属 #3 模块，不在本目录 ==="
+# 原本参考骨架 clean_to_dwd.py 已撤下。产出约定：DWD 落 /ev-charging/dwd（Parquet）
+echo "  [跳过] 请运行 #3 的清洗作业；下游分层依赖 /ev-charging/dwd"
 echo "=== 5/7 分层 DWS/ADS（老师第 6 步）==="
 $SUBMIT build_warehouse.py 2>&1 | grep -E 'dws_|ads.db|导出' | tail -16
 echo "=== 5.5/7 ADS 口径对齐 #4 的 ads_schema.sql ==="

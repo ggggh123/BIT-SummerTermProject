@@ -5,7 +5,23 @@
 > 仅保留可跑通的链路参考；对外产出统一走 `align_to_scml_ads.py`（按他的字段名与粒度重写 ADS）。
 > 本目录保留且不重复的价值：**逐层对账 `reconcile.py`、接口契约导出 `export_api.py`**、以及 `scripts/part2/` 的环境三件套。
 
-### 待交接：ODS 入口切换到 #4 的生成器
+### 模块归属（2026-09-14 17:00 按分工调整）
+
+经与 #3 确认，**质量探查与清洗由 #3（PRL）实现**，本目录先期跑通的两个参考脚本
+（`quality_check.py`、`clean_to_dwd.py`）已撤下，不再保留，避免与他的实现重复。
+`run_all.sh` 的第 3、4 步改为占位说明，运行前请先跑 #3 的作业产出 DWD。
+
+本目录现在只保留**不重复的三样**：
+
+| 文件 | 内容 | 说明 |
+|---|---|---|
+| `reconcile.py` | 逐层对账（DWS/ADS 合计 = DWD 明细合计、粒度唯一、抽样重算） | 放量后复验用，不依赖具体实现 |
+| `export_api.py` | ADS → 19 个前端接口同构 JSON | 读 `ads_scml`（#4 的 `ads_schema.sql` 口径）+ DWD/DWS |
+| `align_to_scml_ads.py` | 按 #4 的 schema 产出 ADS 六表 | 他的作业就绪后可直接替换 |
+
+历史证据（先期跑通的那一版）保留在 `docs/test/evidence/part2-2026-09-14/`，仅作"链路可跑"的存档。
+
+### ODS 入口由 #4 的生成器接管
 
 他的入口（已在分支 `feat/part2_SCML`）：
 
