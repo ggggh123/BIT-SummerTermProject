@@ -11,3 +11,8 @@ downloads/
 *.tar.xz
 *.pid
 config/local/
+
+# #5（PE）本地自测产物与交接包 —— 数据不进 git（《02》§2.4）
+tmp/*.csv
+tmp/*.log
+tmp/__pycache__/

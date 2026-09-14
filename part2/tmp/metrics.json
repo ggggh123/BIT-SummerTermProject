@@ -1,0 +1,389 @@
+{
+  "run_id": "20260914164648",
+  "generated_at": "2026-09-14T16:46:48",
+  "spark_version": "3.5.7",
+  "master": "yarn",
+  "dwd_path": "hdfs://pangxiangzhen01:8020/ev-charging/tmp/dwd_station_hourly_synth",
+  "rows": {
+    "raw": 17280,
+    "train": 11904,
+    "valid": 2400,
+    "test": 2592
+  },
+  "split_bounds": {
+    "train_end": "2026-08-03 00:00:00",
+    "valid_end": "2026-08-16 12:00:00",
+    "gap_hours": 24
+  },
+  "feature_cols": [
+    "hour",
+    "day_of_week",
+    "is_weekend",
+    "is_holiday_flag",
+    "temperature_c",
+    "lag_1h",
+    "lag_24h",
+    "roll_6h",
+    "roll_24h",
+    "busy_lag_1h",
+    "busy_lag_24h",
+    "busy_roll_6h",
+    "busy_roll_24h"
+  ],
+  "horizons": {
+    "h1": {
+      "load": {
+        "label": "y_load_h1",
+        "naive_col": "naive_load_h1",
+        "rows": {
+          "train": 11712,
+          "valid": 2400,
+          "test": 2584
+        },
+        "baseline": {
+          "valid": {
+            "mae": 42.027125,
+            "rmse": 78.120204,
+            "wape": 0.210206,
+            "n": 2400
+          },
+          "test": {
+            "mae": 41.200681,
+            "rmse": 73.267116,
+            "wape": 0.208834,
+            "n": 2584
+          }
+        },
+        "models": {
+          "gbt": {
+            "valid": {
+              "mae": 32.771811,
+              "rmse": 57.141058,
+              "wape": 0.163914,
+              "n": 2400
+            },
+            "test": {
+              "mae": 34.349096,
+              "rmse": 59.920014,
+              "wape": 0.174105,
+              "n": 2584
+            }
+          },
+          "rf": {
+            "valid": {
+              "mae": 40.567906,
+              "rmse": 69.602052,
+              "wape": 0.202907,
+              "n": 2400
+            },
+            "test": {
+              "mae": 40.520123,
+              "rmse": 67.621262,
+              "wape": 0.205384,
+              "n": 2584
+            }
+          }
+        },
+        "selected": {
+          "algo": "gbt",
+          "valid_mae": 32.771811,
+          "model_path": "hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/load_h1_gbt"
+        }
+      },
+      "busy": {
+        "label": "y_busy_h1",
+        "naive_col": "naive_busy_h1",
+        "rows": {
+          "train": 11712,
+          "valid": 2400,
+          "test": 2584
+        },
+        "baseline": {
+          "valid": {
+            "mae": 0.92125,
+            "rmse": 1.269678,
+            "wape": 0.126437,
+            "n": 2400
+          },
+          "test": {
+            "mae": 0.914861,
+            "rmse": 1.254404,
+            "wape": 0.128234,
+            "n": 2584
+          }
+        },
+        "models": {
+          "gbt": {
+            "valid": {
+              "mae": 0.700345,
+              "rmse": 0.900752,
+              "wape": 0.096119,
+              "n": 2400
+            },
+            "test": {
+              "mae": 0.876447,
+              "rmse": 1.212809,
+              "wape": 0.12285,
+              "n": 2584
+            }
+          },
+          "rf": {
+            "valid": {
+              "mae": 1.089931,
+              "rmse": 1.394378,
+              "wape": 0.149587,
+              "n": 2400
+            },
+            "test": {
+              "mae": 1.193997,
+              "rmse": 1.510254,
+              "wape": 0.16736,
+              "n": 2584
+            }
+          }
+        },
+        "selected": {
+          "algo": "gbt",
+          "valid_mae": 0.700345,
+          "model_path": "hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/busy_h1_gbt"
+        }
+      }
+    },
+    "h6": {
+      "load": {
+        "label": "y_load_h6",
+        "naive_col": "naive_load_h6",
+        "rows": {
+          "train": 11712,
+          "valid": 2400,
+          "test": 2544
+        },
+        "baseline": {
+          "valid": {
+            "mae": 42.198154,
+            "rmse": 78.405843,
+            "wape": 0.209588,
+            "n": 2400
+          },
+          "test": {
+            "mae": 41.355303,
+            "rmse": 73.589863,
+            "wape": 0.208582,
+            "n": 2544
+          }
+        },
+        "models": {
+          "gbt": {
+            "valid": {
+              "mae": 35.101129,
+              "rmse": 63.68002,
+              "wape": 0.174339,
+              "n": 2400
+            },
+            "test": {
+              "mae": 39.520125,
+              "rmse": 69.655831,
+              "wape": 0.199326,
+              "n": 2544
+            }
+          },
+          "rf": {
+            "valid": {
+              "mae": 43.589222,
+              "rmse": 73.318086,
+              "wape": 0.216498,
+              "n": 2400
+            },
+            "test": {
+              "mae": 54.980183,
+              "rmse": 85.712306,
+              "wape": 0.277301,
+              "n": 2544
+            }
+          }
+        },
+        "selected": {
+          "algo": "gbt",
+          "valid_mae": 35.101129,
+          "model_path": "hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/load_h6_gbt"
+        }
+      },
+      "busy": {
+        "label": "y_busy_h6",
+        "naive_col": "naive_busy_h6",
+        "rows": {
+          "train": 11712,
+          "valid": 2400,
+          "test": 2544
+        },
+        "baseline": {
+          "valid": {
+            "mae": 0.930417,
+            "rmse": 1.280462,
+            "wape": 0.126882,
+            "n": 2400
+          },
+          "test": {
+            "mae": 0.916667,
+            "rmse": 1.25643,
+            "wape": 0.127865,
+            "n": 2544
+          }
+        },
+        "models": {
+          "gbt": {
+            "valid": {
+              "mae": 0.72957,
+              "rmse": 0.943487,
+              "wape": 0.099492,
+              "n": 2400
+            },
+            "test": {
+              "mae": 0.849142,
+              "rmse": 1.10731,
+              "wape": 0.118446,
+              "n": 2544
+            }
+          },
+          "rf": {
+            "valid": {
+              "mae": 1.110271,
+              "rmse": 1.413235,
+              "wape": 0.151409,
+              "n": 2400
+            },
+            "test": {
+              "mae": 1.665087,
+              "rmse": 2.088269,
+              "wape": 0.232261,
+              "n": 2544
+            }
+          }
+        },
+        "selected": {
+          "algo": "gbt",
+          "valid_mae": 0.72957,
+          "model_path": "hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/busy_h6_gbt"
+        }
+      }
+    },
+    "h24": {
+      "load": {
+        "label": "y_load_h24",
+        "naive_col": "naive_load_h24",
+        "rows": {
+          "train": 11712,
+          "valid": 2400,
+          "test": 2400
+        },
+        "baseline": {
+          "valid": {
+            "mae": 41.951792,
+            "rmse": 78.187703,
+            "wape": 0.213878,
+            "n": 2400
+          },
+          "test": {
+            "mae": 41.262271,
+            "rmse": 73.197355,
+            "wape": 0.207426,
+            "n": 2400
+          }
+        },
+        "models": {
+          "gbt": {
+            "valid": {
+              "mae": 33.90061,
+              "rmse": 60.949205,
+              "wape": 0.172832,
+              "n": 2400
+            },
+            "test": {
+              "mae": 33.629051,
+              "rmse": 59.970267,
+              "wape": 0.169053,
+              "n": 2400
+            }
+          },
+          "rf": {
+            "valid": {
+              "mae": 35.099876,
+              "rmse": 63.433165,
+              "wape": 0.178946,
+              "n": 2400
+            },
+            "test": {
+              "mae": 34.010164,
+              "rmse": 59.238302,
+              "wape": 0.170969,
+              "n": 2400
+            }
+          }
+        },
+        "selected": {
+          "algo": "gbt",
+          "valid_mae": 33.90061,
+          "model_path": "hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/load_h24_gbt"
+        }
+      },
+      "busy": {
+        "label": "y_busy_h24",
+        "naive_col": "naive_busy_h24",
+        "rows": {
+          "train": 11712,
+          "valid": 2400,
+          "test": 2400
+        },
+        "baseline": {
+          "valid": {
+            "mae": 0.928333,
+            "rmse": 1.28841,
+            "wape": 0.129935,
+            "n": 2400
+          },
+          "test": {
+            "mae": 0.917083,
+            "rmse": 1.254492,
+            "wape": 0.127358,
+            "n": 2400
+          }
+        },
+        "models": {
+          "gbt": {
+            "valid": {
+              "mae": 0.692233,
+              "rmse": 0.891599,
+              "wape": 0.096889,
+              "n": 2400
+            },
+            "test": {
+              "mae": 0.77208,
+              "rmse": 0.98699,
+              "wape": 0.107221,
+              "n": 2400
+            }
+          },
+          "rf": {
+            "valid": {
+              "mae": 0.857477,
+              "rmse": 1.09431,
+              "wape": 0.120018,
+              "n": 2400
+            },
+            "test": {
+              "mae": 0.909459,
+              "rmse": 1.157257,
+              "wape": 0.126299,
+              "n": 2400
+            }
+          }
+        },
+        "selected": {
+          "algo": "gbt",
+          "valid_mae": 0.692233,
+          "model_path": "hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/busy_h24_gbt"
+        }
+      }
+    }
+  }
+}
