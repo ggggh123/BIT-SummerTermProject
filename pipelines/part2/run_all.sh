@@ -10,7 +10,16 @@ export DWS_URI="hdfs://$HOSTN:8020/ev-charging/dws"
 export ADS_URI="hdfs://$HOSTN:8020/ev-charging/ads"
 PY=${PYSPARK_PYTHON:-python3}
 SUBMIT="spark-submit --master yarn --deploy-mode client --executor-memory 1g --driver-memory 1g"
-echo "=== 1/7 生成 ODS（本地，确定性 seed=20260914）==="
+echo "=== 1/8 生成 ODS ==="
+# 权威入口是 #4 的 SCML 生成器（分支 feat/part2_SCML，合并后本目录可见）：
+#   python3 part2/scml/data_generator/generator.py --config part2/scml/config/part2_scml_sample.yaml --out handoff/ods
+#   python3 part2/scml/scripts/validate_handoff.py handoff/ods
+# 注意：他的 ODS 是「每表一个目录 + _SUCCESS + sha256 manifest，表名带 ods_ 前缀」，
+# 而本目录的 quality_check.py / clean_to_dwd.py 仍按 <table>.csv 读取——**切换入口时这两步要由 #3/#4 同步改**，
+# 否则下游会读不到数据。在他那边接管前，这里暂时用我方的 1/10 规模生成器保持链路可跑。
+if [ -f ../part2/scml/data_generator/generator.py ]; then
+  echo "  检测到 #4 的 SCML 生成器，但下游读取口径尚未切换，暂不自动调用（见脚本内注释）"
+fi
 $PY gen_ods.py | tail -14
 echo "=== 2/7 上传 ODS 到 HDFS ==="
 hdfs dfs -mkdir -p /ev-charging/ods

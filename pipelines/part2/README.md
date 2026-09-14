@@ -5,6 +5,19 @@
 > 仅保留可跑通的链路参考；对外产出统一走 `align_to_scml_ads.py`（按他的字段名与粒度重写 ADS）。
 > 本目录保留且不重复的价值：**逐层对账 `reconcile.py`、接口契约导出 `export_api.py`**、以及 `scripts/part2/` 的环境三件套。
 
+### 待交接：ODS 入口切换到 #4 的生成器
+
+他的入口（已在分支 `feat/part2_SCML`）：
+
+```bash
+python3 part2/scml/data_generator/generator.py --config part2/scml/config/part2_scml_sample.yaml --out handoff/ods
+python3 part2/scml/scripts/validate_handoff.py handoff/ods
+```
+
+**切换前置条件**（否则下游读不到数据）：他的 ODS 是「每表一个目录 + `_SUCCESS` + sha256 `manifest.json`，
+表名带 `ods_` 前缀（`ods_orders` 等）」，而本目录的 `quality_check.py`、`clean_to_dwd.py` 目前按 `<table>.csv` 单文件读取。
+切换入口时，这两步的读取路径与表名需要 #3/#4 一并改（属他们的模块范围），本脚本只在检测到他的生成器时提示，不擅自改写。
+
 > 提出人：#1（PM）｜用途：**在不依赖任何人的前提下先把「生成 → 质量 → 清洗 → 分层 → ADS」整条链路跑通**，
 > 作为 #3（质量/清洗）、#4（生成器/数仓）、#5（预测）的起点骨架；他们接手后按《03》《04》替换实现即可。
 > 口径以第一阶段 `database/schema.sql` 为唯一真源（金额整数分、时间 `+08:00` ISO 8601）。
