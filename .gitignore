@@ -15,6 +15,12 @@ CMakeUserPresets.json
 dashboard/.vendor-cache/
 dashboard/runtime/
 
+# 第二阶段：数据交接包与大体积产物（永不提交，走共享文件夹/网盘）
+handoff/
+*.parquet
+spark-*-bin-hadoop3.tgz
+_artifact_env.trash-*/
+
 /build/
 /.venv/
 /runtime/
