@@ -1,0 +1,21 @@
+{
+  "run_id": "20260914165848",
+  "generated_at": "2026-09-14T16:58:48",
+  "horizons": [
+    1,
+    6,
+    24
+  ],
+  "t0": "2026-08-29 23:00:00",
+  "stations": 8,
+  "rows": 24,
+  "model_versions": {
+    "h1_load": "gbt@hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/load_h1_gbt",
+    "h1_busy": "gbt@hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/busy_h1_gbt",
+    "h6_load": "gbt@hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/load_h6_gbt",
+    "h6_busy": "gbt@hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/busy_h6_gbt",
+    "h24_load": "gbt@hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/load_h24_gbt",
+    "h24_busy": "gbt@hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/busy_h24_gbt"
+  },
+  "output": "hdfs://pangxiangzhen01:8020/ev-charging/ads/ads_forecast_result"
+}
