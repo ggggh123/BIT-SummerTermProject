@@ -20,6 +20,20 @@ const FILES = [
   'overview_charger-status.json',
   'enterprise_revenue-trend.json',
   'enterprise_station-ranking.json',
+  'enterprise_user-growth.json',
+  'enterprise_user-rfm.json',
+  'enterprise_monthly.json',
+  'user_price-compare.json',
+  'user_price-distance.json',
+  'user_idle-ranking.json',
+  'user_peak-heatmap.json',
+  'station_coverage.json',
+  'station_detail.json',
+  'gov_coverage.json',
+  'gov_service-stats.json',
+  'gov_carbon.json',
+  'gov_peak-load.json',
+  'gov_utilization.json',
 ]
 
 if (process.argv.includes('--restore')) {
