@@ -1,0 +1,969 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "points": [
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T00:00:00+08:00",
+        "loadKw": 870.4
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T01:00:00+08:00",
+        "loadKw": 662
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T02:00:00+08:00",
+        "loadKw": 519.4
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T03:00:00+08:00",
+        "loadKw": 474.8
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T04:00:00+08:00",
+        "loadKw": 575.5
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T05:00:00+08:00",
+        "loadKw": 757.6
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T06:00:00+08:00",
+        "loadKw": 1098
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T07:00:00+08:00",
+        "loadKw": 1513.6
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T08:00:00+08:00",
+        "loadKw": 2074.3
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T09:00:00+08:00",
+        "loadKw": 2046
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T10:00:00+08:00",
+        "loadKw": 2216.2
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T11:00:00+08:00",
+        "loadKw": 2053.6
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T12:00:00+08:00",
+        "loadKw": 1991.8
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T13:00:00+08:00",
+        "loadKw": 2000.5
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T14:00:00+08:00",
+        "loadKw": 2082.1
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T15:00:00+08:00",
+        "loadKw": 1965.3
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T16:00:00+08:00",
+        "loadKw": 2422
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T17:00:00+08:00",
+        "loadKw": 2606.2
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T18:00:00+08:00",
+        "loadKw": 2607.4
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T19:00:00+08:00",
+        "loadKw": 2614.9
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T20:00:00+08:00",
+        "loadKw": 2247.6
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T21:00:00+08:00",
+        "loadKw": 1770.7
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T22:00:00+08:00",
+        "loadKw": 1167.8
+      },
+      {
+        "stationId": 1,
+        "observedAt": "2026-09-13T23:00:00+08:00",
+        "loadKw": 1110.8
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T00:00:00+08:00",
+        "loadKw": 498.9
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T01:00:00+08:00",
+        "loadKw": 338.3
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T02:00:00+08:00",
+        "loadKw": 273.6
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T03:00:00+08:00",
+        "loadKw": 278.7
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T04:00:00+08:00",
+        "loadKw": 343.4
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T05:00:00+08:00",
+        "loadKw": 429.7
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T06:00:00+08:00",
+        "loadKw": 632.7
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T07:00:00+08:00",
+        "loadKw": 1015.3
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T08:00:00+08:00",
+        "loadKw": 1256
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T09:00:00+08:00",
+        "loadKw": 1303.8
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T10:00:00+08:00",
+        "loadKw": 1132.9
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T11:00:00+08:00",
+        "loadKw": 1051
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T12:00:00+08:00",
+        "loadKw": 1067.5
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T13:00:00+08:00",
+        "loadKw": 1024.9
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T14:00:00+08:00",
+        "loadKw": 1161.7
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T15:00:00+08:00",
+        "loadKw": 1205.5
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T16:00:00+08:00",
+        "loadKw": 1359.9
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T17:00:00+08:00",
+        "loadKw": 1582.8
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T18:00:00+08:00",
+        "loadKw": 1577
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T19:00:00+08:00",
+        "loadKw": 1411.5
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T20:00:00+08:00",
+        "loadKw": 1309.3
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T21:00:00+08:00",
+        "loadKw": 960
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T22:00:00+08:00",
+        "loadKw": 702.3
+      },
+      {
+        "stationId": 2,
+        "observedAt": "2026-09-13T23:00:00+08:00",
+        "loadKw": 622.6
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T00:00:00+08:00",
+        "loadKw": 820.2
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T01:00:00+08:00",
+        "loadKw": 550.9
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T02:00:00+08:00",
+        "loadKw": 514.1
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T03:00:00+08:00",
+        "loadKw": 496.4
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T04:00:00+08:00",
+        "loadKw": 562.6
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T05:00:00+08:00",
+        "loadKw": 777.5
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T06:00:00+08:00",
+        "loadKw": 1110
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T07:00:00+08:00",
+        "loadKw": 1583.1
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T08:00:00+08:00",
+        "loadKw": 1962.4
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T09:00:00+08:00",
+        "loadKw": 2165.9
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T10:00:00+08:00",
+        "loadKw": 2036
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T11:00:00+08:00",
+        "loadKw": 1909.3
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T12:00:00+08:00",
+        "loadKw": 1861.9
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T13:00:00+08:00",
+        "loadKw": 1934.1
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T14:00:00+08:00",
+        "loadKw": 2011.8
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T15:00:00+08:00",
+        "loadKw": 2178.1
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T16:00:00+08:00",
+        "loadKw": 2303.6
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T17:00:00+08:00",
+        "loadKw": 2614.4
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T18:00:00+08:00",
+        "loadKw": 2654.5
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T19:00:00+08:00",
+        "loadKw": 2254.5
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T20:00:00+08:00",
+        "loadKw": 2240.5
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T21:00:00+08:00",
+        "loadKw": 1663.8
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T22:00:00+08:00",
+        "loadKw": 1350.4
+      },
+      {
+        "stationId": 3,
+        "observedAt": "2026-09-13T23:00:00+08:00",
+        "loadKw": 1014.8
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T00:00:00+08:00",
+        "loadKw": 387.1
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T01:00:00+08:00",
+        "loadKw": 335.4
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T02:00:00+08:00",
+        "loadKw": 262.4
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T03:00:00+08:00",
+        "loadKw": 255.5
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T04:00:00+08:00",
+        "loadKw": 291.1
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T05:00:00+08:00",
+        "loadKw": 368.9
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T06:00:00+08:00",
+        "loadKw": 612.2
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T07:00:00+08:00",
+        "loadKw": 763.6
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T08:00:00+08:00",
+        "loadKw": 1011.1
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T09:00:00+08:00",
+        "loadKw": 1089.1
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T10:00:00+08:00",
+        "loadKw": 984.3
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T11:00:00+08:00",
+        "loadKw": 956
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T12:00:00+08:00",
+        "loadKw": 871.1
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T13:00:00+08:00",
+        "loadKw": 950.8
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T14:00:00+08:00",
+        "loadKw": 1096.9
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T15:00:00+08:00",
+        "loadKw": 1110.8
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T16:00:00+08:00",
+        "loadKw": 1233.9
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T17:00:00+08:00",
+        "loadKw": 1218.1
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T18:00:00+08:00",
+        "loadKw": 1243.5
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T19:00:00+08:00",
+        "loadKw": 1289
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T20:00:00+08:00",
+        "loadKw": 986
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T21:00:00+08:00",
+        "loadKw": 810.2
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T22:00:00+08:00",
+        "loadKw": 595
+      },
+      {
+        "stationId": 4,
+        "observedAt": "2026-09-13T23:00:00+08:00",
+        "loadKw": 468.6
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T00:00:00+08:00",
+        "loadKw": 502.3
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T01:00:00+08:00",
+        "loadKw": 436.7
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T02:00:00+08:00",
+        "loadKw": 358.3
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T03:00:00+08:00",
+        "loadKw": 308.1
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T04:00:00+08:00",
+        "loadKw": 407.9
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T05:00:00+08:00",
+        "loadKw": 519
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T06:00:00+08:00",
+        "loadKw": 825.4
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T07:00:00+08:00",
+        "loadKw": 1157.2
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T08:00:00+08:00",
+        "loadKw": 1402.5
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T09:00:00+08:00",
+        "loadKw": 1301.9
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T10:00:00+08:00",
+        "loadKw": 1486.8
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T11:00:00+08:00",
+        "loadKw": 1342.3
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T12:00:00+08:00",
+        "loadKw": 1131.6
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T13:00:00+08:00",
+        "loadKw": 1298.3
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T14:00:00+08:00",
+        "loadKw": 1270.2
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T15:00:00+08:00",
+        "loadKw": 1474.4
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T16:00:00+08:00",
+        "loadKw": 1631.8
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T17:00:00+08:00",
+        "loadKw": 1555.9
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T18:00:00+08:00",
+        "loadKw": 1729.8
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T19:00:00+08:00",
+        "loadKw": 1563.2
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T20:00:00+08:00",
+        "loadKw": 1499.8
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T21:00:00+08:00",
+        "loadKw": 1081.8
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T22:00:00+08:00",
+        "loadKw": 884.4
+      },
+      {
+        "stationId": 5,
+        "observedAt": "2026-09-13T23:00:00+08:00",
+        "loadKw": 673.2
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T00:00:00+08:00",
+        "loadKw": 419.7
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T01:00:00+08:00",
+        "loadKw": 353.2
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T02:00:00+08:00",
+        "loadKw": 283.2
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T03:00:00+08:00",
+        "loadKw": 257.5
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T04:00:00+08:00",
+        "loadKw": 298.9
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T05:00:00+08:00",
+        "loadKw": 439.6
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T06:00:00+08:00",
+        "loadKw": 617.2
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T07:00:00+08:00",
+        "loadKw": 874.2
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T08:00:00+08:00",
+        "loadKw": 1066.2
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T09:00:00+08:00",
+        "loadKw": 1245.4
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T10:00:00+08:00",
+        "loadKw": 1014.6
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T11:00:00+08:00",
+        "loadKw": 1125.7
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T12:00:00+08:00",
+        "loadKw": 934.6
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T13:00:00+08:00",
+        "loadKw": 1061.1
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T14:00:00+08:00",
+        "loadKw": 1009.3
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T15:00:00+08:00",
+        "loadKw": 1110
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T16:00:00+08:00",
+        "loadKw": 1354.4
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T17:00:00+08:00",
+        "loadKw": 1342.1
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T18:00:00+08:00",
+        "loadKw": 1487
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T19:00:00+08:00",
+        "loadKw": 1420.9
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T20:00:00+08:00",
+        "loadKw": 1139.1
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T21:00:00+08:00",
+        "loadKw": 997
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T22:00:00+08:00",
+        "loadKw": 699.3
+      },
+      {
+        "stationId": 6,
+        "observedAt": "2026-09-13T23:00:00+08:00",
+        "loadKw": 595.7
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T00:00:00+08:00",
+        "loadKw": 612.8
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T01:00:00+08:00",
+        "loadKw": 471.7
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T02:00:00+08:00",
+        "loadKw": 428.4
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T03:00:00+08:00",
+        "loadKw": 414.7
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T04:00:00+08:00",
+        "loadKw": 457.4
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T05:00:00+08:00",
+        "loadKw": 595.4
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T06:00:00+08:00",
+        "loadKw": 897.7
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T07:00:00+08:00",
+        "loadKw": 1376.7
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T08:00:00+08:00",
+        "loadKw": 1707
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T09:00:00+08:00",
+        "loadKw": 1570.3
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T10:00:00+08:00",
+        "loadKw": 1605.1
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T11:00:00+08:00",
+        "loadKw": 1574.7
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T12:00:00+08:00",
+        "loadKw": 1565.2
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T13:00:00+08:00",
+        "loadKw": 1382.3
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T14:00:00+08:00",
+        "loadKw": 1608.6
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T15:00:00+08:00",
+        "loadKw": 1650.6
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T16:00:00+08:00",
+        "loadKw": 1850.5
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T17:00:00+08:00",
+        "loadKw": 1821.7
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T18:00:00+08:00",
+        "loadKw": 2106.8
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T19:00:00+08:00",
+        "loadKw": 2053.6
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T20:00:00+08:00",
+        "loadKw": 1584.4
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T21:00:00+08:00",
+        "loadKw": 1347.7
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T22:00:00+08:00",
+        "loadKw": 936.5
+      },
+      {
+        "stationId": 7,
+        "observedAt": "2026-09-13T23:00:00+08:00",
+        "loadKw": 827.2
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T00:00:00+08:00",
+        "loadKw": 601.4
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T01:00:00+08:00",
+        "loadKw": 432.3
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T02:00:00+08:00",
+        "loadKw": 376.9
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T03:00:00+08:00",
+        "loadKw": 373.4
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T04:00:00+08:00",
+        "loadKw": 443.3
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T05:00:00+08:00",
+        "loadKw": 612.5
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T06:00:00+08:00",
+        "loadKw": 867
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T07:00:00+08:00",
+        "loadKw": 1310
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T08:00:00+08:00",
+        "loadKw": 1613.2
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T09:00:00+08:00",
+        "loadKw": 1612.1
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T10:00:00+08:00",
+        "loadKw": 1464.7
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T11:00:00+08:00",
+        "loadKw": 1378.3
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T12:00:00+08:00",
+        "loadKw": 1504
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T13:00:00+08:00",
+        "loadKw": 1357.4
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T14:00:00+08:00",
+        "loadKw": 1613.7
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T15:00:00+08:00",
+        "loadKw": 1610.6
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T16:00:00+08:00",
+        "loadKw": 1642.2
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T17:00:00+08:00",
+        "loadKw": 1726.3
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T18:00:00+08:00",
+        "loadKw": 1870.8
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T19:00:00+08:00",
+        "loadKw": 1927.7
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T20:00:00+08:00",
+        "loadKw": 1713
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T21:00:00+08:00",
+        "loadKw": 1192
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T22:00:00+08:00",
+        "loadKw": 1007.1
+      },
+      {
+        "stationId": 8,
+        "observedAt": "2026-09-13T23:00:00+08:00",
+        "loadKw": 756.4
+      }
+    ]
+  },
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

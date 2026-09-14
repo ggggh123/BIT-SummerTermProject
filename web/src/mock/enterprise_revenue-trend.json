@@ -1,0 +1,38 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "days": 7,
+    "points": [
+      {
+        "date": "2026-09-08",
+        "revenueFen": 4225567
+      },
+      {
+        "date": "2026-09-09",
+        "revenueFen": 3915792
+      },
+      {
+        "date": "2026-09-10",
+        "revenueFen": 5043432
+      },
+      {
+        "date": "2026-09-11",
+        "revenueFen": 5067202
+      },
+      {
+        "date": "2026-09-12",
+        "revenueFen": 4526068
+      },
+      {
+        "date": "2026-09-13",
+        "revenueFen": 4899302
+      },
+      {
+        "date": "2026-09-14",
+        "revenueFen": 5250608
+      }
+    ]
+  },
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}
