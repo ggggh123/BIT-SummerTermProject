@@ -20,9 +20,7 @@ export const ENDPOINTS = {
   },
   station: {
     coverage: ['station/coverage'],
-    mix: ['station/1/mix'],
-    health: ['station/1/health'],
-    utilization: ['station/1/utilization'],
+    // station/{id}/utilization | mix | health 由页面按选中站点动态拼接路径
   },
   enterprise: {
     revenueTrend: ['enterprise/revenue-trend', { days: 30 }],

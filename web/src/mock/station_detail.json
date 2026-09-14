@@ -1,0 +1,1199 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "1": {
+      "stationId": 1,
+      "name": "朝阳国贸中心充电站",
+      "district": "朝阳区",
+      "chargerCount": 48,
+      "utilization": {
+        "points": [
+          {
+            "observedAt": "2026-09-14T00:00:00+08:00",
+            "utilizationRate": 16.5
+          },
+          {
+            "observedAt": "2026-09-14T01:00:00+08:00",
+            "utilizationRate": 12.5
+          },
+          {
+            "observedAt": "2026-09-14T02:00:00+08:00",
+            "utilizationRate": 9.6
+          },
+          {
+            "observedAt": "2026-09-14T03:00:00+08:00",
+            "utilizationRate": 9.6
+          },
+          {
+            "observedAt": "2026-09-14T04:00:00+08:00",
+            "utilizationRate": 11.7
+          },
+          {
+            "observedAt": "2026-09-14T05:00:00+08:00",
+            "utilizationRate": 13.5
+          },
+          {
+            "observedAt": "2026-09-14T06:00:00+08:00",
+            "utilizationRate": 22.2
+          },
+          {
+            "observedAt": "2026-09-14T07:00:00+08:00",
+            "utilizationRate": 28.1
+          },
+          {
+            "observedAt": "2026-09-14T08:00:00+08:00",
+            "utilizationRate": 36.5
+          },
+          {
+            "observedAt": "2026-09-14T09:00:00+08:00",
+            "utilizationRate": 40.4
+          },
+          {
+            "observedAt": "2026-09-14T10:00:00+08:00",
+            "utilizationRate": 37.8
+          },
+          {
+            "observedAt": "2026-09-14T11:00:00+08:00",
+            "utilizationRate": 36.9
+          },
+          {
+            "observedAt": "2026-09-14T12:00:00+08:00",
+            "utilizationRate": 32.3
+          },
+          {
+            "observedAt": "2026-09-14T13:00:00+08:00",
+            "utilizationRate": 38.6
+          },
+          {
+            "observedAt": "2026-09-14T14:00:00+08:00",
+            "utilizationRate": 40.4
+          },
+          {
+            "observedAt": "2026-09-14T15:00:00+08:00",
+            "utilizationRate": 37.1
+          },
+          {
+            "observedAt": "2026-09-14T16:00:00+08:00",
+            "utilizationRate": 40.4
+          },
+          {
+            "observedAt": "2026-09-14T17:00:00+08:00",
+            "utilizationRate": 40.2
+          },
+          {
+            "observedAt": "2026-09-14T18:00:00+08:00",
+            "utilizationRate": 42.4
+          },
+          {
+            "observedAt": "2026-09-14T19:00:00+08:00",
+            "utilizationRate": 49.7
+          },
+          {
+            "observedAt": "2026-09-14T20:00:00+08:00",
+            "utilizationRate": 37.6
+          },
+          {
+            "observedAt": "2026-09-14T21:00:00+08:00",
+            "utilizationRate": 33.5
+          },
+          {
+            "observedAt": "2026-09-14T22:00:00+08:00",
+            "utilizationRate": 25.5
+          },
+          {
+            "observedAt": "2026-09-14T23:00:00+08:00",
+            "utilizationRate": 15.9
+          }
+        ]
+      },
+      "mix": {
+        "fastCount": 18,
+        "slowCount": 30,
+        "fastPowerKw": 120,
+        "slowPowerKw": 7,
+        "fastOrderShare": 0.65
+      },
+      "health": {
+        "faultRate": 1.1,
+        "faultCount": 0,
+        "topChargers": [
+          {
+            "code": "C-01-01",
+            "chargeCount": 381,
+            "totalDurationSec": 114596,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-01-05",
+            "chargeCount": 364,
+            "totalDurationSec": 109101,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-01-02",
+            "chargeCount": 281,
+            "totalDurationSec": 48226,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-01-04",
+            "chargeCount": 206,
+            "totalDurationSec": 86462,
+            "faultFlag": 1
+          },
+          {
+            "code": "C-01-03",
+            "chargeCount": 180,
+            "totalDurationSec": 105917,
+            "faultFlag": 0
+          }
+        ]
+      }
+    },
+    "2": {
+      "stationId": 2,
+      "name": "海淀中关村科技园充电站",
+      "district": "海淀区",
+      "chargerCount": 28,
+      "utilization": {
+        "points": [
+          {
+            "observedAt": "2026-09-14T02:00:00+08:00",
+            "utilizationRate": 16.6
+          },
+          {
+            "observedAt": "2026-09-14T03:00:00+08:00",
+            "utilizationRate": 16.1
+          },
+          {
+            "observedAt": "2026-09-14T04:00:00+08:00",
+            "utilizationRate": 10.5
+          },
+          {
+            "observedAt": "2026-09-14T05:00:00+08:00",
+            "utilizationRate": 10.2
+          },
+          {
+            "observedAt": "2026-09-14T06:00:00+08:00",
+            "utilizationRate": 12.3
+          },
+          {
+            "observedAt": "2026-09-14T07:00:00+08:00",
+            "utilizationRate": 17.1
+          },
+          {
+            "observedAt": "2026-09-14T08:00:00+08:00",
+            "utilizationRate": 30.4
+          },
+          {
+            "observedAt": "2026-09-14T09:00:00+08:00",
+            "utilizationRate": 40.7
+          },
+          {
+            "observedAt": "2026-09-14T10:00:00+08:00",
+            "utilizationRate": 44.2
+          },
+          {
+            "observedAt": "2026-09-14T11:00:00+08:00",
+            "utilizationRate": 45.9
+          },
+          {
+            "observedAt": "2026-09-14T12:00:00+08:00",
+            "utilizationRate": 46.7
+          },
+          {
+            "observedAt": "2026-09-14T13:00:00+08:00",
+            "utilizationRate": 50.4
+          },
+          {
+            "observedAt": "2026-09-14T14:00:00+08:00",
+            "utilizationRate": 46.3
+          },
+          {
+            "observedAt": "2026-09-14T15:00:00+08:00",
+            "utilizationRate": 38.7
+          },
+          {
+            "observedAt": "2026-09-14T16:00:00+08:00",
+            "utilizationRate": 49.8
+          },
+          {
+            "observedAt": "2026-09-14T17:00:00+08:00",
+            "utilizationRate": 43.8
+          },
+          {
+            "observedAt": "2026-09-14T18:00:00+08:00",
+            "utilizationRate": 57.3
+          },
+          {
+            "observedAt": "2026-09-14T19:00:00+08:00",
+            "utilizationRate": 67.4
+          },
+          {
+            "observedAt": "2026-09-14T20:00:00+08:00",
+            "utilizationRate": 52
+          },
+          {
+            "observedAt": "2026-09-14T21:00:00+08:00",
+            "utilizationRate": 65.2
+          },
+          {
+            "observedAt": "2026-09-14T22:00:00+08:00",
+            "utilizationRate": 55.8
+          },
+          {
+            "observedAt": "2026-09-14T23:00:00+08:00",
+            "utilizationRate": 44.7
+          },
+          {
+            "observedAt": "2026-09-14T00:00:00+08:00",
+            "utilizationRate": 34.5
+          },
+          {
+            "observedAt": "2026-09-14T01:00:00+08:00",
+            "utilizationRate": 22.2
+          }
+        ]
+      },
+      "mix": {
+        "fastCount": 12,
+        "slowCount": 16,
+        "fastPowerKw": 120,
+        "slowPowerKw": 7,
+        "fastOrderShare": 0.66
+      },
+      "health": {
+        "faultRate": 3.1,
+        "faultCount": 2,
+        "topChargers": [
+          {
+            "code": "C-02-04",
+            "chargeCount": 363,
+            "totalDurationSec": 74924,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-02-01",
+            "chargeCount": 351,
+            "totalDurationSec": 118767,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-02-02",
+            "chargeCount": 266,
+            "totalDurationSec": 113497,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-02-05",
+            "chargeCount": 241,
+            "totalDurationSec": 92248,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-02-03",
+            "chargeCount": 199,
+            "totalDurationSec": 117255,
+            "faultFlag": 0
+          }
+        ]
+      }
+    },
+    "3": {
+      "stationId": 3,
+      "name": "丰台丽泽商务区充电站",
+      "district": "丰台区",
+      "chargerCount": 47,
+      "utilization": {
+        "points": [
+          {
+            "observedAt": "2026-09-14T02:00:00+08:00",
+            "utilizationRate": 13.8
+          },
+          {
+            "observedAt": "2026-09-14T03:00:00+08:00",
+            "utilizationRate": 11
+          },
+          {
+            "observedAt": "2026-09-14T04:00:00+08:00",
+            "utilizationRate": 7.2
+          },
+          {
+            "observedAt": "2026-09-14T05:00:00+08:00",
+            "utilizationRate": 9.2
+          },
+          {
+            "observedAt": "2026-09-14T06:00:00+08:00",
+            "utilizationRate": 9.1
+          },
+          {
+            "observedAt": "2026-09-14T07:00:00+08:00",
+            "utilizationRate": 13.4
+          },
+          {
+            "observedAt": "2026-09-14T08:00:00+08:00",
+            "utilizationRate": 19.8
+          },
+          {
+            "observedAt": "2026-09-14T09:00:00+08:00",
+            "utilizationRate": 28.1
+          },
+          {
+            "observedAt": "2026-09-14T10:00:00+08:00",
+            "utilizationRate": 34.4
+          },
+          {
+            "observedAt": "2026-09-14T11:00:00+08:00",
+            "utilizationRate": 30.9
+          },
+          {
+            "observedAt": "2026-09-14T12:00:00+08:00",
+            "utilizationRate": 36.1
+          },
+          {
+            "observedAt": "2026-09-14T13:00:00+08:00",
+            "utilizationRate": 31.5
+          },
+          {
+            "observedAt": "2026-09-14T14:00:00+08:00",
+            "utilizationRate": 27.8
+          },
+          {
+            "observedAt": "2026-09-14T15:00:00+08:00",
+            "utilizationRate": 30.8
+          },
+          {
+            "observedAt": "2026-09-14T16:00:00+08:00",
+            "utilizationRate": 31.5
+          },
+          {
+            "observedAt": "2026-09-14T17:00:00+08:00",
+            "utilizationRate": 30.4
+          },
+          {
+            "observedAt": "2026-09-14T18:00:00+08:00",
+            "utilizationRate": 34.6
+          },
+          {
+            "observedAt": "2026-09-14T19:00:00+08:00",
+            "utilizationRate": 36.4
+          },
+          {
+            "observedAt": "2026-09-14T20:00:00+08:00",
+            "utilizationRate": 46.5
+          },
+          {
+            "observedAt": "2026-09-14T21:00:00+08:00",
+            "utilizationRate": 37.9
+          },
+          {
+            "observedAt": "2026-09-14T22:00:00+08:00",
+            "utilizationRate": 29.7
+          },
+          {
+            "observedAt": "2026-09-14T23:00:00+08:00",
+            "utilizationRate": 29.5
+          },
+          {
+            "observedAt": "2026-09-14T00:00:00+08:00",
+            "utilizationRate": 18.4
+          },
+          {
+            "observedAt": "2026-09-14T01:00:00+08:00",
+            "utilizationRate": 14.8
+          }
+        ]
+      },
+      "mix": {
+        "fastCount": 21,
+        "slowCount": 26,
+        "fastPowerKw": 120,
+        "slowPowerKw": 7,
+        "fastOrderShare": 0.57
+      },
+      "health": {
+        "faultRate": 0.8,
+        "faultCount": 2,
+        "topChargers": [
+          {
+            "code": "C-03-04",
+            "chargeCount": 433,
+            "totalDurationSec": 95384,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-03-02",
+            "chargeCount": 411,
+            "totalDurationSec": 86843,
+            "faultFlag": 1
+          },
+          {
+            "code": "C-03-05",
+            "chargeCount": 367,
+            "totalDurationSec": 82816,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-03-03",
+            "chargeCount": 299,
+            "totalDurationSec": 61073,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-03-01",
+            "chargeCount": 265,
+            "totalDurationSec": 77218,
+            "faultFlag": 1
+          }
+        ]
+      }
+    },
+    "4": {
+      "stationId": 4,
+      "name": "通州运河商务区充电站",
+      "district": "通州区",
+      "chargerCount": 24,
+      "utilization": {
+        "points": [
+          {
+            "observedAt": "2026-09-14T02:00:00+08:00",
+            "utilizationRate": 19.9
+          },
+          {
+            "observedAt": "2026-09-14T03:00:00+08:00",
+            "utilizationRate": 19.1
+          },
+          {
+            "observedAt": "2026-09-14T04:00:00+08:00",
+            "utilizationRate": 14.8
+          },
+          {
+            "observedAt": "2026-09-14T05:00:00+08:00",
+            "utilizationRate": 12.2
+          },
+          {
+            "observedAt": "2026-09-14T06:00:00+08:00",
+            "utilizationRate": 16.1
+          },
+          {
+            "observedAt": "2026-09-14T07:00:00+08:00",
+            "utilizationRate": 20.1
+          },
+          {
+            "observedAt": "2026-09-14T08:00:00+08:00",
+            "utilizationRate": 32.3
+          },
+          {
+            "observedAt": "2026-09-14T09:00:00+08:00",
+            "utilizationRate": 45.4
+          },
+          {
+            "observedAt": "2026-09-14T10:00:00+08:00",
+            "utilizationRate": 61
+          },
+          {
+            "observedAt": "2026-09-14T11:00:00+08:00",
+            "utilizationRate": 53.7
+          },
+          {
+            "observedAt": "2026-09-14T12:00:00+08:00",
+            "utilizationRate": 52.2
+          },
+          {
+            "observedAt": "2026-09-14T13:00:00+08:00",
+            "utilizationRate": 47.4
+          },
+          {
+            "observedAt": "2026-09-14T14:00:00+08:00",
+            "utilizationRate": 46.7
+          },
+          {
+            "observedAt": "2026-09-14T15:00:00+08:00",
+            "utilizationRate": 58
+          },
+          {
+            "observedAt": "2026-09-14T16:00:00+08:00",
+            "utilizationRate": 56
+          },
+          {
+            "observedAt": "2026-09-14T17:00:00+08:00",
+            "utilizationRate": 57.6
+          },
+          {
+            "observedAt": "2026-09-14T18:00:00+08:00",
+            "utilizationRate": 74
+          },
+          {
+            "observedAt": "2026-09-14T19:00:00+08:00",
+            "utilizationRate": 64
+          },
+          {
+            "observedAt": "2026-09-14T20:00:00+08:00",
+            "utilizationRate": 75.2
+          },
+          {
+            "observedAt": "2026-09-14T21:00:00+08:00",
+            "utilizationRate": 58.1
+          },
+          {
+            "observedAt": "2026-09-14T22:00:00+08:00",
+            "utilizationRate": 58.5
+          },
+          {
+            "observedAt": "2026-09-14T23:00:00+08:00",
+            "utilizationRate": 50.5
+          },
+          {
+            "observedAt": "2026-09-14T00:00:00+08:00",
+            "utilizationRate": 39.6
+          },
+          {
+            "observedAt": "2026-09-14T01:00:00+08:00",
+            "utilizationRate": 28.8
+          }
+        ]
+      },
+      "mix": {
+        "fastCount": 10,
+        "slowCount": 14,
+        "fastPowerKw": 120,
+        "slowPowerKw": 7,
+        "fastOrderShare": 0.66
+      },
+      "health": {
+        "faultRate": 1.5,
+        "faultCount": 3,
+        "topChargers": [
+          {
+            "code": "C-04-05",
+            "chargeCount": 460,
+            "totalDurationSec": 55557,
+            "faultFlag": 1
+          },
+          {
+            "code": "C-04-03",
+            "chargeCount": 453,
+            "totalDurationSec": 102006,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-04-04",
+            "chargeCount": 451,
+            "totalDurationSec": 50445,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-04-02",
+            "chargeCount": 375,
+            "totalDurationSec": 81638,
+            "faultFlag": 1
+          },
+          {
+            "code": "C-04-01",
+            "chargeCount": 304,
+            "totalDurationSec": 106246,
+            "faultFlag": 1
+          }
+        ]
+      }
+    },
+    "5": {
+      "stationId": 5,
+      "name": "大兴亦庄经开区充电站",
+      "district": "大兴区",
+      "chargerCount": 32,
+      "utilization": {
+        "points": [
+          {
+            "observedAt": "2026-09-14T00:00:00+08:00",
+            "utilizationRate": 10.1
+          },
+          {
+            "observedAt": "2026-09-14T01:00:00+08:00",
+            "utilizationRate": 8
+          },
+          {
+            "observedAt": "2026-09-14T02:00:00+08:00",
+            "utilizationRate": 8.1
+          },
+          {
+            "observedAt": "2026-09-14T03:00:00+08:00",
+            "utilizationRate": 6.9
+          },
+          {
+            "observedAt": "2026-09-14T04:00:00+08:00",
+            "utilizationRate": 8
+          },
+          {
+            "observedAt": "2026-09-14T05:00:00+08:00",
+            "utilizationRate": 11.2
+          },
+          {
+            "observedAt": "2026-09-14T06:00:00+08:00",
+            "utilizationRate": 17.4
+          },
+          {
+            "observedAt": "2026-09-14T07:00:00+08:00",
+            "utilizationRate": 20.3
+          },
+          {
+            "observedAt": "2026-09-14T08:00:00+08:00",
+            "utilizationRate": 31.2
+          },
+          {
+            "observedAt": "2026-09-14T09:00:00+08:00",
+            "utilizationRate": 27.7
+          },
+          {
+            "observedAt": "2026-09-14T10:00:00+08:00",
+            "utilizationRate": 31.8
+          },
+          {
+            "observedAt": "2026-09-14T11:00:00+08:00",
+            "utilizationRate": 30.9
+          },
+          {
+            "observedAt": "2026-09-14T12:00:00+08:00",
+            "utilizationRate": 28.8
+          },
+          {
+            "observedAt": "2026-09-14T13:00:00+08:00",
+            "utilizationRate": 25.6
+          },
+          {
+            "observedAt": "2026-09-14T14:00:00+08:00",
+            "utilizationRate": 28.6
+          },
+          {
+            "observedAt": "2026-09-14T15:00:00+08:00",
+            "utilizationRate": 34
+          },
+          {
+            "observedAt": "2026-09-14T16:00:00+08:00",
+            "utilizationRate": 27.6
+          },
+          {
+            "observedAt": "2026-09-14T17:00:00+08:00",
+            "utilizationRate": 32.1
+          },
+          {
+            "observedAt": "2026-09-14T18:00:00+08:00",
+            "utilizationRate": 32.7
+          },
+          {
+            "observedAt": "2026-09-14T19:00:00+08:00",
+            "utilizationRate": 34.6
+          },
+          {
+            "observedAt": "2026-09-14T20:00:00+08:00",
+            "utilizationRate": 32.9
+          },
+          {
+            "observedAt": "2026-09-14T21:00:00+08:00",
+            "utilizationRate": 20.8
+          },
+          {
+            "observedAt": "2026-09-14T22:00:00+08:00",
+            "utilizationRate": 20
+          },
+          {
+            "observedAt": "2026-09-14T23:00:00+08:00",
+            "utilizationRate": 14.8
+          }
+        ]
+      },
+      "mix": {
+        "fastCount": 11,
+        "slowCount": 21,
+        "fastPowerKw": 120,
+        "slowPowerKw": 7,
+        "fastOrderShare": 0.56
+      },
+      "health": {
+        "faultRate": 1.6,
+        "faultCount": 1,
+        "topChargers": [
+          {
+            "code": "C-05-04",
+            "chargeCount": 438,
+            "totalDurationSec": 76456,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-05-01",
+            "chargeCount": 410,
+            "totalDurationSec": 103346,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-05-02",
+            "chargeCount": 388,
+            "totalDurationSec": 82452,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-05-03",
+            "chargeCount": 273,
+            "totalDurationSec": 119732,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-05-05",
+            "chargeCount": 256,
+            "totalDurationSec": 80559,
+            "faultFlag": 0
+          }
+        ]
+      }
+    },
+    "6": {
+      "stationId": 6,
+      "name": "朝阳望京SOHO充电站",
+      "district": "朝阳区",
+      "chargerCount": 26,
+      "utilization": {
+        "points": [
+          {
+            "observedAt": "2026-09-14T00:00:00+08:00",
+            "utilizationRate": 12.6
+          },
+          {
+            "observedAt": "2026-09-14T01:00:00+08:00",
+            "utilizationRate": 10.2
+          },
+          {
+            "observedAt": "2026-09-14T02:00:00+08:00",
+            "utilizationRate": 10.3
+          },
+          {
+            "observedAt": "2026-09-14T03:00:00+08:00",
+            "utilizationRate": 8
+          },
+          {
+            "observedAt": "2026-09-14T04:00:00+08:00",
+            "utilizationRate": 9.9
+          },
+          {
+            "observedAt": "2026-09-14T05:00:00+08:00",
+            "utilizationRate": 13.8
+          },
+          {
+            "observedAt": "2026-09-14T06:00:00+08:00",
+            "utilizationRate": 20.9
+          },
+          {
+            "observedAt": "2026-09-14T07:00:00+08:00",
+            "utilizationRate": 26.6
+          },
+          {
+            "observedAt": "2026-09-14T08:00:00+08:00",
+            "utilizationRate": 34
+          },
+          {
+            "observedAt": "2026-09-14T09:00:00+08:00",
+            "utilizationRate": 36.7
+          },
+          {
+            "observedAt": "2026-09-14T10:00:00+08:00",
+            "utilizationRate": 40.7
+          },
+          {
+            "observedAt": "2026-09-14T11:00:00+08:00",
+            "utilizationRate": 34.7
+          },
+          {
+            "observedAt": "2026-09-14T12:00:00+08:00",
+            "utilizationRate": 35.8
+          },
+          {
+            "observedAt": "2026-09-14T13:00:00+08:00",
+            "utilizationRate": 34.4
+          },
+          {
+            "observedAt": "2026-09-14T14:00:00+08:00",
+            "utilizationRate": 32.8
+          },
+          {
+            "observedAt": "2026-09-14T15:00:00+08:00",
+            "utilizationRate": 38.6
+          },
+          {
+            "observedAt": "2026-09-14T16:00:00+08:00",
+            "utilizationRate": 37.7
+          },
+          {
+            "observedAt": "2026-09-14T17:00:00+08:00",
+            "utilizationRate": 48
+          },
+          {
+            "observedAt": "2026-09-14T18:00:00+08:00",
+            "utilizationRate": 48.9
+          },
+          {
+            "observedAt": "2026-09-14T19:00:00+08:00",
+            "utilizationRate": 36.6
+          },
+          {
+            "observedAt": "2026-09-14T20:00:00+08:00",
+            "utilizationRate": 40.4
+          },
+          {
+            "observedAt": "2026-09-14T21:00:00+08:00",
+            "utilizationRate": 34.5
+          },
+          {
+            "observedAt": "2026-09-14T22:00:00+08:00",
+            "utilizationRate": 23.6
+          },
+          {
+            "observedAt": "2026-09-14T23:00:00+08:00",
+            "utilizationRate": 21
+          }
+        ]
+      },
+      "mix": {
+        "fastCount": 9,
+        "slowCount": 17,
+        "fastPowerKw": 120,
+        "slowPowerKw": 7,
+        "fastOrderShare": 0.67
+      },
+      "health": {
+        "faultRate": 1.8,
+        "faultCount": 0,
+        "topChargers": [
+          {
+            "code": "C-06-04",
+            "chargeCount": 460,
+            "totalDurationSec": 51424,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-06-01",
+            "chargeCount": 337,
+            "totalDurationSec": 54618,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-06-05",
+            "chargeCount": 326,
+            "totalDurationSec": 55201,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-06-02",
+            "chargeCount": 266,
+            "totalDurationSec": 90677,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-06-03",
+            "chargeCount": 256,
+            "totalDurationSec": 85902,
+            "faultFlag": 0
+          }
+        ]
+      }
+    },
+    "7": {
+      "stationId": 7,
+      "name": "海淀西二旗软件园充电站",
+      "district": "海淀区",
+      "chargerCount": 38,
+      "utilization": {
+        "points": [
+          {
+            "observedAt": "2026-09-14T00:00:00+08:00",
+            "utilizationRate": 12.3
+          },
+          {
+            "observedAt": "2026-09-14T01:00:00+08:00",
+            "utilizationRate": 9.1
+          },
+          {
+            "observedAt": "2026-09-14T02:00:00+08:00",
+            "utilizationRate": 8.1
+          },
+          {
+            "observedAt": "2026-09-14T03:00:00+08:00",
+            "utilizationRate": 6.5
+          },
+          {
+            "observedAt": "2026-09-14T04:00:00+08:00",
+            "utilizationRate": 9.4
+          },
+          {
+            "observedAt": "2026-09-14T05:00:00+08:00",
+            "utilizationRate": 11.6
+          },
+          {
+            "observedAt": "2026-09-14T06:00:00+08:00",
+            "utilizationRate": 15.8
+          },
+          {
+            "observedAt": "2026-09-14T07:00:00+08:00",
+            "utilizationRate": 25.4
+          },
+          {
+            "observedAt": "2026-09-14T08:00:00+08:00",
+            "utilizationRate": 31.4
+          },
+          {
+            "observedAt": "2026-09-14T09:00:00+08:00",
+            "utilizationRate": 27.6
+          },
+          {
+            "observedAt": "2026-09-14T10:00:00+08:00",
+            "utilizationRate": 27.8
+          },
+          {
+            "observedAt": "2026-09-14T11:00:00+08:00",
+            "utilizationRate": 26.2
+          },
+          {
+            "observedAt": "2026-09-14T12:00:00+08:00",
+            "utilizationRate": 28
+          },
+          {
+            "observedAt": "2026-09-14T13:00:00+08:00",
+            "utilizationRate": 26.3
+          },
+          {
+            "observedAt": "2026-09-14T14:00:00+08:00",
+            "utilizationRate": 33.1
+          },
+          {
+            "observedAt": "2026-09-14T15:00:00+08:00",
+            "utilizationRate": 28.7
+          },
+          {
+            "observedAt": "2026-09-14T16:00:00+08:00",
+            "utilizationRate": 36.2
+          },
+          {
+            "observedAt": "2026-09-14T17:00:00+08:00",
+            "utilizationRate": 40.6
+          },
+          {
+            "observedAt": "2026-09-14T18:00:00+08:00",
+            "utilizationRate": 40.2
+          },
+          {
+            "observedAt": "2026-09-14T19:00:00+08:00",
+            "utilizationRate": 32
+          },
+          {
+            "observedAt": "2026-09-14T20:00:00+08:00",
+            "utilizationRate": 27.2
+          },
+          {
+            "observedAt": "2026-09-14T21:00:00+08:00",
+            "utilizationRate": 25.6
+          },
+          {
+            "observedAt": "2026-09-14T22:00:00+08:00",
+            "utilizationRate": 20.2
+          },
+          {
+            "observedAt": "2026-09-14T23:00:00+08:00",
+            "utilizationRate": 13.2
+          }
+        ]
+      },
+      "mix": {
+        "fastCount": 17,
+        "slowCount": 21,
+        "fastPowerKw": 120,
+        "slowPowerKw": 7,
+        "fastOrderShare": 0.64
+      },
+      "health": {
+        "faultRate": 2.4,
+        "faultCount": 3,
+        "topChargers": [
+          {
+            "code": "C-07-04",
+            "chargeCount": 420,
+            "totalDurationSec": 115490,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-07-01",
+            "chargeCount": 373,
+            "totalDurationSec": 117077,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-07-02",
+            "chargeCount": 356,
+            "totalDurationSec": 108343,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-07-03",
+            "chargeCount": 268,
+            "totalDurationSec": 73386,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-07-05",
+            "chargeCount": 252,
+            "totalDurationSec": 107529,
+            "faultFlag": 0
+          }
+        ]
+      }
+    },
+    "8": {
+      "stationId": 8,
+      "name": "丰台科技园东区充电站",
+      "district": "丰台区",
+      "chargerCount": 36,
+      "utilization": {
+        "points": [
+          {
+            "observedAt": "2026-09-14T03:00:00+08:00",
+            "utilizationRate": 14.2
+          },
+          {
+            "observedAt": "2026-09-14T04:00:00+08:00",
+            "utilizationRate": 11.3
+          },
+          {
+            "observedAt": "2026-09-14T05:00:00+08:00",
+            "utilizationRate": 9.9
+          },
+          {
+            "observedAt": "2026-09-14T06:00:00+08:00",
+            "utilizationRate": 10
+          },
+          {
+            "observedAt": "2026-09-14T07:00:00+08:00",
+            "utilizationRate": 10
+          },
+          {
+            "observedAt": "2026-09-14T08:00:00+08:00",
+            "utilizationRate": 16
+          },
+          {
+            "observedAt": "2026-09-14T09:00:00+08:00",
+            "utilizationRate": 23.5
+          },
+          {
+            "observedAt": "2026-09-14T10:00:00+08:00",
+            "utilizationRate": 34.8
+          },
+          {
+            "observedAt": "2026-09-14T11:00:00+08:00",
+            "utilizationRate": 35.7
+          },
+          {
+            "observedAt": "2026-09-14T12:00:00+08:00",
+            "utilizationRate": 40.6
+          },
+          {
+            "observedAt": "2026-09-14T13:00:00+08:00",
+            "utilizationRate": 43.1
+          },
+          {
+            "observedAt": "2026-09-14T14:00:00+08:00",
+            "utilizationRate": 36
+          },
+          {
+            "observedAt": "2026-09-14T15:00:00+08:00",
+            "utilizationRate": 40.3
+          },
+          {
+            "observedAt": "2026-09-14T16:00:00+08:00",
+            "utilizationRate": 39.9
+          },
+          {
+            "observedAt": "2026-09-14T17:00:00+08:00",
+            "utilizationRate": 44
+          },
+          {
+            "observedAt": "2026-09-14T18:00:00+08:00",
+            "utilizationRate": 43.4
+          },
+          {
+            "observedAt": "2026-09-14T19:00:00+08:00",
+            "utilizationRate": 37.8
+          },
+          {
+            "observedAt": "2026-09-14T20:00:00+08:00",
+            "utilizationRate": 52.9
+          },
+          {
+            "observedAt": "2026-09-14T21:00:00+08:00",
+            "utilizationRate": 51.3
+          },
+          {
+            "observedAt": "2026-09-14T22:00:00+08:00",
+            "utilizationRate": 47.4
+          },
+          {
+            "observedAt": "2026-09-14T23:00:00+08:00",
+            "utilizationRate": 41.6
+          },
+          {
+            "observedAt": "2026-09-14T00:00:00+08:00",
+            "utilizationRate": 29.5
+          },
+          {
+            "observedAt": "2026-09-14T01:00:00+08:00",
+            "utilizationRate": 23.3
+          },
+          {
+            "observedAt": "2026-09-14T02:00:00+08:00",
+            "utilizationRate": 20.9
+          }
+        ]
+      },
+      "mix": {
+        "fastCount": 15,
+        "slowCount": 21,
+        "fastPowerKw": 120,
+        "slowPowerKw": 7,
+        "fastOrderShare": 0.57
+      },
+      "health": {
+        "faultRate": 2.6,
+        "faultCount": 2,
+        "topChargers": [
+          {
+            "code": "C-08-05",
+            "chargeCount": 339,
+            "totalDurationSec": 41508,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-08-03",
+            "chargeCount": 329,
+            "totalDurationSec": 86883,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-08-04",
+            "chargeCount": 327,
+            "totalDurationSec": 54233,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-08-02",
+            "chargeCount": 250,
+            "totalDurationSec": 83359,
+            "faultFlag": 0
+          },
+          {
+            "code": "C-08-01",
+            "chargeCount": 236,
+            "totalDurationSec": 100048,
+            "faultFlag": 1
+          }
+        ]
+      }
+    }
+  },
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

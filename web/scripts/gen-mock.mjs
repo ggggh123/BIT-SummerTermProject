@@ -206,6 +206,102 @@ const monthly = ['2026-06', '2026-07', '2026-08', '2026-09'].map((month) => {
   }
 })
 
+// ---- 用户视角：价格对比 / 距离-价格 / 空闲排行 / 时段热力 ----
+const TIANANMEN = { lat: 39.9087, lng: 116.3975 }
+const haversineKm = (lat1, lng1, lat2, lng2) => {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return Number((2 * R * Math.asin(Math.sqrt(a))).toFixed(2))
+}
+
+const priceCompare = {
+  cityAvgFenPerKwh: Math.round(stations.reduce((s, x) => s + x.priceFenPerKwh, 0) / stations.length),
+  stations: stations.map((s) => ({ stationId: s.stationId, name: s.name, priceFenPerKwh: s.priceFenPerKwh })),
+}
+
+const priceDistance = stations
+  .map((s) => ({
+    stationId: s.stationId,
+    name: s.name,
+    distanceKm: haversineKm(TIANANMEN.lat, TIANANMEN.lng, s.latitude, s.longitude),
+    priceFenPerKwh: s.priceFenPerKwh,
+    idleCount: s.idleCount,
+  }))
+  .sort((a, b) => a.distanceKm - b.distanceKm)
+
+const idleRanking = stations
+  .map((s) => ({
+    stationId: s.stationId,
+    name: s.name,
+    idleCount: s.idleCount,
+    chargerCount: s.chargerCount,
+    idleRate: Number(((s.idleCount / s.chargerCount) * 100).toFixed(1)),
+  }))
+  .sort((a, b) => b.idleCount - a.idleCount)
+
+const peakHeatmap = {
+  hours: Array.from({ length: 24 }, (_, h) => `${pad(h)}:00`),
+  names: stations.map((s) => s.name),
+  values: stations.flatMap((s, si) =>
+    hourlyShape.map((factor, h) => [h, si, Math.round(factor * s.chargerCount * rf(0.7, 1.0))]),
+  ),
+}
+
+// ---- 充电站视角：逐站明细（利用率 / 快慢充结构 / 设备健康） ----
+const stationDetail = Object.fromEntries(
+  stations.map((s) => {
+    const fastCount = Math.round(s.chargerCount * rf(0.35, 0.45))
+    const slowCount = s.chargerCount - fastCount
+    const shift = ri(0, 3)
+    return [
+      String(s.stationId),
+      {
+        stationId: s.stationId,
+        name: s.name,
+        district: s.district,
+        chargerCount: s.chargerCount,
+        utilization: {
+          points: hourlyShape.map((factor, h) => ({
+            observedAt: iso(DEMO_DAY, (h + shift) % 24),
+            utilizationRate: Number(Math.min(98, factor * s.utilizationRate * rf(0.85, 1.15)).toFixed(1)),
+          })),
+        },
+        mix: {
+          fastCount,
+          slowCount,
+          fastPowerKw: 120,
+          slowPowerKw: 7,
+          fastOrderShare: Number(rf(0.55, 0.72).toFixed(2)),
+        },
+        health: {
+          faultRate: Number(rf(0.4, 3.2).toFixed(1)),
+          faultCount: ri(0, 3),
+          topChargers: Array.from({ length: 5 }, (_, i) => ({
+            code: `C-${pad(s.stationId)}-${pad(i + 1)}`,
+            chargeCount: ri(180, 460),
+            totalDurationSec: ri(36000, 120000),
+            faultFlag: rnd() < 0.15 ? 1 : 0,
+          })).sort((a, b) => b.chargeCount - a.chargeCount),
+        },
+      },
+    ]
+  }),
+)
+
+const coverage = stations.map((s) => ({
+  stationId: s.stationId,
+  name: s.name,
+  district: s.district,
+  longitude: s.longitude,
+  latitude: s.latitude,
+  chargerCount: s.chargerCount,
+  serviceRadiusKm: Number(rf(0.8, 3.2).toFixed(1)),
+}))
+
 const wrap = (data) => ({ ...SOURCE, data, generatedAt: iso(DEMO_DAY, 10, 5) })
 
 const files = {
@@ -230,6 +326,12 @@ const files = {
   'enterprise_user-growth.json': wrap({ days: 30, points: userGrowth }),
   'enterprise_user-rfm.json': wrap(userRfm),
   'enterprise_monthly.json': wrap(monthly),
+  'user_price-compare.json': wrap(priceCompare),
+  'user_price-distance.json': wrap(priceDistance),
+  'user_idle-ranking.json': wrap(idleRanking),
+  'user_peak-heatmap.json': wrap(peakHeatmap),
+  'station_coverage.json': wrap(coverage),
+  'station_detail.json': wrap(stationDetail),
 }
 
 for (const [name, body] of Object.entries(files)) {
