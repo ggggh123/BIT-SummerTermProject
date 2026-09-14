@@ -46,3 +46,9 @@ config.local.ini
 __pycache__/
 *.pyc
 *.pyo
+
+# Part2 generated data handoff packages
+/part2/scml/handoff/ods/
+/part2/scml/handoff/dwd/
+/part2/scml/handoff/dws/
+/part2/scml/handoff/ads/
