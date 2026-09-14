@@ -38,7 +38,7 @@ def main():
 
     # ---- ads_revenue_overview（日粒度）----
     daily = (orders.withColumn("dt", F.substring("started_at", 1, 10))
-             .groupBy("dt").agg(F.sum("revenue_fen").alias("revenue_fen"),
+             .groupBy("dt").agg(F.sum("amount_fen").alias("revenue_fen"),
                                 F.round(F.sum("energy_kwh"), 2).alias("energy_kwh"),
                                 F.count("*").alias("order_cnt"),
                                 F.countDistinct("user_id").alias("active_user_cnt")))

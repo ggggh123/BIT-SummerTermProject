@@ -13,7 +13,8 @@ from pyspark.sql import SparkSession, Window, functions as F
 BASE = os.path.dirname(os.path.abspath(__file__))
 DWD = os.environ.get("DWD_URI", "hdfs://TimeMachine:8020/ev-charging/dwd")
 DWS = os.environ.get("DWS_URI", "hdfs://TimeMachine:8020/ev-charging/dws")
-ADS = os.environ.get("ADS_URI", "hdfs://TimeMachine:8020/ev-charging/ads")
+# 读 #4 对齐后的 ADS（ads_schema.sql 口径）
+ADS = os.environ.get("SCML_ADS_URI", "hdfs://TimeMachine:8020/ev-charging/ads_scml")
 OUT = os.path.join(BASE, "handoff", "ads", "json")
 GEN_AT = "2026-09-14T10:05:00+08:00"
 CUTOFF = "2026-09-14"
@@ -66,7 +67,10 @@ def main():
     hourly = spark.read.parquet(f"{DWD}/dwd_station_hourly")
     station_day = spark.read.parquet(f"{DWS}/dws_station_day")
     user_day = spark.read.parquet(f"{DWS}/dws_user_day")
-    peak = spark.read.parquet(f"{ADS}/ads_peak_hour")
+    # 对齐后的 ads_peak_hour 是 dt×station×hour 粒度，这里按 station×hour 取均值供热力图使用
+    peak = (spark.read.parquet(f"{ADS}/ads_peak_hour")
+            .groupBy("station_id", "hour")
+            .agg(F.round(F.avg("busy_count"), 1).alias("avg_busy")))
 
     def dump(name, data):
         with open(os.path.join(OUT, f"{name}.json"), "w", encoding="utf-8") as fh:
@@ -203,8 +207,11 @@ def main():
     # orders 没有 district（第一阶段 schema），需经 station_id 关联 dim_stations
     orders_district = orders.join(
         stations.select(F.col("id").alias("station_id"), "district"), "station_id")
+    # 注意：started_at/reserved_at 是 "…T…+08:00" 的 ISO 串，unix_timestamp 的默认格式解析不了，
+    # 必须用 to_timestamp（Spark 3 默认解析 ISO 8601），否则平均等待会全变成 0
     wait = (orders_district.filter("reserved_at IS NOT NULL AND started_at IS NOT NULL")
-            .withColumn("wait_min", (F.unix_timestamp("started_at") - F.unix_timestamp("reserved_at")) / 60))
+            .withColumn("wait_min",
+                        (F.to_timestamp("started_at").cast("long") - F.to_timestamp("reserved_at").cast("long")) / 60.0))
     dump("gov_service-stats", [{
         "district": r["district"], "orderCount": int(r["c"]), "servedUserCnt": int(r["u"]),
         "avgWaitMin": round(float(r["w"] or 0), 1),

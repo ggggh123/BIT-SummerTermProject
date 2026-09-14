@@ -22,6 +22,8 @@ echo "=== 4/7 清洗到 DWD（老师第 4 步）==="
 $SUBMIT clean_to_dwd.py 2>&1 | grep -E '写出|->|剔除' | tail -14
 echo "=== 5/7 分层 DWS/ADS（老师第 6 步）==="
 $SUBMIT build_warehouse.py 2>&1 | grep -E 'dws_|ads.db|导出' | tail -16
+echo "=== 5.5/7 ADS 口径对齐 #4 的 ads_schema.sql ==="
+$SUBMIT align_to_scml_ads.py 2>&1 | grep -E 'ads_|对齐' | tail -10
 echo "=== 6/7 逐层对账（《04》§3.4 硬指标）==="
 $SUBMIT reconcile.py 2>&1 | grep -E '\[OK\]|\[FAIL\]|对账|全绿' | tail -20
 echo "=== 7/7 导出全部接口 JSON ==="
