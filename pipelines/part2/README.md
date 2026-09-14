@@ -1,0 +1,35 @@
+# 第二阶段数据管道（1/10 规模的参考骨架）
+
+> 提出人：#1（PM）｜用途：**在不依赖任何人的前提下先把「生成 → 质量 → 清洗 → 分层 → ADS」整条链路跑通**，
+> 作为 #3（质量/清洗）、#4（生成器/数仓）、#5（预测）的起点骨架；他们接手后按《03》《04》替换实现即可。
+> 口径以第一阶段 `database/schema.sql` 为唯一真源（金额整数分、时间 `+08:00` ISO 8601）。
+
+## 为什么先做这个
+
+`00` §8.2 的 D1 硬闸门要求「环境打通 + 数据入 HDFS + 质量作业就绪」，而现实是环境才刚打通一台。
+这份骨架用 1/10 规模把链路先贯通，D2 放量只需改 `gen_ods.py` 的 `SCALE` 常量。
+
+## 文件
+
+| 文件 | 作用 | 对应老师步骤 |
+|---|---|---|
+| `gen_ods.py` | 确定性生成模拟数据（注入 10 类质量问题），输出 `handoff/ods/` + `injection_log.json` + `manifest.json` | 第 2 步 |
+| `quality_check.py` | PySpark 统计画像 + 10 条规则检测，输出 `quality_report.json`（含注入/检出对账） | 第 3 步 |
+| `clean_to_dwd.py` | PySpark 去重/补缺/剔除/标准化，写 HDFS `/ev-charging/dwd`（Parquet） | 第 4 步 |
+| `build_warehouse.py` | SparkSQL 分层 ODS→DWD→DWS→ADS，导出 ADS 到 SQLite `ads.db` | 第 6 步 |
+| `run_all.sh` | 一键串联（HDFS 就绪前提下） | — |
+
+## 用法
+
+```bash
+cd /mnt/hgfs/BIT-SummerTermProject/pipelines/part2
+python3 gen_ods.py      # 生成 ODS（纯本地，秒级）
+./run_all.sh            # 质量 → 清洗 → 分层 → ADS（Spark on YARN）
+```
+
+## 已知扩展（与《04》数据字典的差异，实现时以此为准）
+
+1. `stations` 表在第一阶段 `schema.sql` 中**没有 `district`（行政区）列**，但区域/政府视角必需，生成器与分层显式新增该列，声明为「第二阶段扩展列」。
+2. 字段名以 `schema.sql` 为准：`users.mobile`（不是 phone）、`telemetry.energy_increment_kwh`（不是 energy_delta_kwh）、`orders` **无** `station_id`（经 `chargers.station_id` 关联）。
+3. `orders` 上有两个部分唯一索引（每用户/每桩最多一条 active 单），生成器已遵守。
+4. 遥测采样口径：本骨架按「充电中桩 5 分钟级」写入，规模随 `SCALE` 线性变化。
