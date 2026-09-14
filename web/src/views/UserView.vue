@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EChart from '@/components/EChart.vue'
 import { fetchGroup } from '@/api/client'
+import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
 import {
   buildIdleRankingOption,
@@ -28,7 +29,9 @@ async function load() {
   }
 }
 
-onMounted(load)
+let stop = null
+onMounted(() => { stop = startPolling(load, 60000) })
+onBeforeUnmount(() => stop?.())
 
 const cheapest = computed(() => {
   const rows = data.value?.priceCompare.stations ?? []

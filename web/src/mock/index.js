@@ -18,6 +18,11 @@ import userIdleRanking from './user_idle-ranking.json'
 import userPeakHeatmap from './user_peak-heatmap.json'
 import stationCoverage from './station_coverage.json'
 import stationDetail from './station_detail.json'
+import govCoverage from './gov_coverage.json'
+import govServiceStats from './gov_service-stats.json'
+import govCarbon from './gov_carbon.json'
+import govPeakLoad from './gov_peak-load.json'
+import govUtilization from './gov_utilization.json'
 
 const TABLE = {
   'overview/kpis': overviewKpis,
@@ -37,6 +42,11 @@ const TABLE = {
   'user/idle-ranking': userIdleRanking,
   'user/peak-heatmap': userPeakHeatmap,
   'station/coverage': stationCoverage,
+  'gov/coverage': govCoverage,
+  'gov/service-stats': govServiceStats,
+  'gov/carbon': govCarbon,
+  'gov/peak-load': govPeakLoad,
+  'gov/utilization': govUtilization,
 }
 
 export const MOCK_ENDPOINTS = Object.keys(TABLE)

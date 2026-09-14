@@ -29,4 +29,11 @@ export const ENDPOINTS = {
     userRfm: ['enterprise/user-rfm'],
     monthly: ['enterprise/monthly'],
   },
+  gov: {
+    coverage: ['gov/coverage'],
+    serviceStats: ['gov/service-stats'],
+    carbon: ['gov/carbon'],
+    peakLoad: ['gov/peak-load'],
+    utilization: ['gov/utilization'],
+  },
 }

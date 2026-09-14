@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EChart from '@/components/EChart.vue'
 import { fetchGroup } from '@/api/client'
+import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
 import { formatFen, formatKwh } from '@/lib/contracts'
 import {
@@ -31,7 +32,9 @@ async function load() {
   }
 }
 
-onMounted(load)
+let stop = null
+onMounted(() => { stop = startPolling(load, 60000) })
+onBeforeUnmount(() => stop?.())
 
 const windowPoints = computed(() => (data.value ? data.value.revenueTrend.slice(-days.value) : []))
 const trendOption = computed(() => (data.value ? buildRevenueTrendOption(windowPoints.value) : {}))

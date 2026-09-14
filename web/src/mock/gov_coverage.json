@@ -1,0 +1,42 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "district": "朝阳区",
+      "stationCount": 2,
+      "chargerCount": 74,
+      "population": 3450000,
+      "chargersPer10k": 0.2
+    },
+    {
+      "district": "海淀区",
+      "stationCount": 2,
+      "chargerCount": 66,
+      "population": 3130000,
+      "chargersPer10k": 0.2
+    },
+    {
+      "district": "丰台区",
+      "stationCount": 2,
+      "chargerCount": 83,
+      "population": 2010000,
+      "chargersPer10k": 0.4
+    },
+    {
+      "district": "通州区",
+      "stationCount": 1,
+      "chargerCount": 24,
+      "population": 1840000,
+      "chargersPer10k": 0.1
+    },
+    {
+      "district": "大兴区",
+      "stationCount": 1,
+      "chargerCount": 32,
+      "population": 1990000,
+      "chargersPer10k": 0.2
+    }
+  ],
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

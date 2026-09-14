@@ -302,6 +302,61 @@ const coverage = stations.map((s) => ({
   serviceRadiusKm: Number(rf(0.8, 3.2).toFixed(1)),
 }))
 
+// ---- 政府视角：行政区覆盖 / 服务指标 / 碳减排 / 全城负荷 / 利用率公平性 ----
+const DISTRICT_POP = {
+  朝阳区: 3450000, 海淀区: 3130000, 丰台区: 2010000, 通州区: 1840000, 大兴区: 1990000,
+}
+const districts = [...new Set(stations.map((s) => s.district))]
+
+const govCoverage = districts.map((d) => {
+  const rows = stations.filter((s) => s.district === d)
+  const chargerCount = rows.reduce((s, x) => s + x.chargerCount, 0)
+  const pop = DISTRICT_POP[d] ?? 1000000
+  return {
+    district: d,
+    stationCount: rows.length,
+    chargerCount,
+    population: pop,
+    chargersPer10k: Number(((chargerCount / pop) * 10000).toFixed(1)),
+  }
+})
+
+const govServiceStats = govCoverage.map((c) => ({
+  district: c.district,
+  orderCount: ri(9000, 42000),
+  servedUserCnt: ri(1200, 4600),
+  avgWaitMin: Number(rf(2.5, 18).toFixed(1)),
+}))
+
+const govCarbon = {
+  totalEnergyKwh: Number(kpis.totalEnergyKwh.toFixed(1)),
+  co2SavedTon: Number(((kpis.totalEnergyKwh / 1000) * 0.581).toFixed(1)),
+  factorTonPerMwh: 0.581,
+  factorNote: '按全国电网平均排放因子 0.581 tCO₂/MWh 折算（项目假设，答辩需注明来源）',
+  equivalentTrees: Math.round(((kpis.totalEnergyKwh / 1000) * 0.581 * 1000) / 18),
+}
+
+const govPeakLoad = {
+  points: Array.from({ length: 24 }, (_, h) => ({
+    hour: `${pad(h)}:00`,
+    loadKw: Number(
+      (stations.reduce((s, x) => s + x.chargerCount, 0) * 54 * hourlyShape[h] * rf(0.9, 1.08)).toFixed(1),
+    ),
+  })),
+}
+
+const govUtilization = districts.map((d) => {
+  const rows = stations.filter((s) => s.district === d)
+  return {
+    district: d,
+    chargerCount: rows.reduce((s, x) => s + x.chargerCount, 0),
+    stationCount: rows.length,
+    utilizationRate: Number(
+      (rows.reduce((s, x) => s + x.utilizationRate, 0) / rows.length).toFixed(1),
+    ),
+  }
+})
+
 const wrap = (data) => ({ ...SOURCE, data, generatedAt: iso(DEMO_DAY, 10, 5) })
 
 const files = {
@@ -332,6 +387,11 @@ const files = {
   'user_peak-heatmap.json': wrap(peakHeatmap),
   'station_coverage.json': wrap(coverage),
   'station_detail.json': wrap(stationDetail),
+  'gov_coverage.json': wrap(govCoverage),
+  'gov_service-stats.json': wrap(govServiceStats),
+  'gov_carbon.json': wrap(govCarbon),
+  'gov_peak-load.json': wrap(govPeakLoad),
+  'gov_utilization.json': wrap(govUtilization),
 }
 
 for (const [name, body] of Object.entries(files)) {

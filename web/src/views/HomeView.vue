@@ -1,14 +1,15 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import EChart from '@/components/EChart.vue'
 import { fetchGroup } from '@/api/client'
+import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
 import { buildHomeViewModel } from '@/lib/viewModel'
 import { formatFen, formatKwh } from '@/lib/contracts'
+import { buildRevenueTrendOption30d } from '@/lib/charts/overview'
 import {
   buildLoadForecastOption,
   buildRankingOption,
-  buildRevenueOption,
   buildStationOption,
   buildStatusOption,
 } from '@/lib/models'
@@ -16,33 +17,76 @@ import {
 const view = ref(null)
 const error = ref('')
 const selectedStation = ref(null)
+const fast = ref(null)
+const slow = ref(null)
 
-async function load() {
+function rebuild() {
+  if (!fast.value) return
+  view.value = buildHomeViewModel({
+    kpis: fast.value.kpis,
+    stations: fast.value.stations,
+    chargerStatus: fast.value.chargerStatus,
+    events: fast.value.events,
+    ranking: slow.value?.ranking ?? [],
+    // 《01》§3.1：主页营收趋势为「近 30 日」
+    revenueTrend: (slow.value?.revenueTrend?.points ?? []).slice(-30),
+    load24h: slow.value?.load24h?.points ?? [],
+    forecast24h: slow.value?.forecast24h?.points ?? [],
+    quality: slow.value?.quality ?? null,
+  })
+  if (selectedStation.value === null) selectedStation.value = view.value.stations[0]?.stationId ?? null
+}
+
+/** 高频：KPI / 桩状态 / 事件流 / 站点（5s） */
+async function loadFast() {
   try {
-    const raw = await fetchGroup(ENDPOINTS.home)
-    view.value = buildHomeViewModel({
-      kpis: raw.kpis,
-      stations: raw.stations,
-      chargerStatus: raw.chargerStatus,
-      ranking: raw.ranking,
-      // 接口按 days=7 请求，主页固定取最近 7 天
-      revenueTrend: (raw.revenueTrend?.points ?? raw.revenueTrend ?? []).slice(-7),
-      load24h: raw.load24h?.points ?? raw.load24h ?? [],
-      forecast24h: raw.forecast24h?.points ?? raw.forecast24h ?? [],
-      events: raw.events,
-      quality: raw.quality,
+    const raw = await fetchGroup({
+      kpis: ENDPOINTS.home.kpis,
+      stations: ENDPOINTS.home.stations,
+      chargerStatus: ENDPOINTS.home.chargerStatus,
+      events: ENDPOINTS.home.events,
     })
-    selectedStation.value = view.value.stations[0]?.stationId ?? null
+    fast.value = raw
+    error.value = ''
+  } catch (e) {
+    error.value = e?.message ?? String(e) // 保留上次成功数据
+  }
+  rebuild()
+}
+
+/** 低频：趋势 / 排行 / 负荷 / 预测 / 质量（60s） */
+async function loadSlow() {
+  try {
+    const raw = await fetchGroup({
+      revenueTrend: ENDPOINTS.home.revenueTrend,
+      ranking: ENDPOINTS.home.ranking,
+      load24h: ENDPOINTS.home.load24h,
+      forecast24h: ENDPOINTS.home.forecast24h,
+      quality: ENDPOINTS.home.quality,
+    })
+    slow.value = raw
     error.value = ''
   } catch (e) {
     error.value = e?.message ?? String(e)
   }
+  rebuild()
 }
 
-onMounted(load)
+let stopFast = null
+let stopSlow = null
+
+onMounted(() => {
+  stopFast = startPolling(loadFast, 5000)
+  stopSlow = startPolling(loadSlow, 60000)
+})
+
+onBeforeUnmount(() => {
+  stopFast?.()
+  stopSlow?.()
+})
 
 const kpis = computed(() => view.value?.kpis ?? {})
-const revenueOption = computed(() => (view.value ? buildRevenueOption(view.value) : {}))
+const revenueOption = computed(() => (view.value ? buildRevenueTrendOption30d(view.value) : {}))
 const statusOption = computed(() => (view.value ? buildStatusOption(view.value) : {}))
 const rankingOption = computed(() => (view.value ? buildRankingOption(view.value) : {}))
 const stationOption = computed(() => (view.value ? buildStationOption(view.value) : {}))
@@ -88,7 +132,7 @@ const totalQualityIssues = computed(() =>
 
   <section class="grid two" style="margin-top: 16px">
     <div class="panel">
-      <h2>近 7 日营收趋势（元）</h2>
+      <h2>近 30 日营收趋势（元）</h2>
       <EChart v-if="view" :option="revenueOption" />
     </div>
     <div class="panel">

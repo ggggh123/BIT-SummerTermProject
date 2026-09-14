@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import EChart from '@/components/EChart.vue'
 import { fetchEnvelope, fetchGroup } from '@/api/client'
+import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
 import {
   buildCoverageOption,
@@ -36,7 +37,9 @@ async function loadDetail() {
   detail.value = { utilization: u.data, mix: m.data, health: h.data }
 }
 
-onMounted(load)
+let stop = null
+onMounted(() => { stop = startPolling(load, 60000) })
+onBeforeUnmount(() => stop?.())
 watch(stationId, () => { loadDetail().catch((e) => { error.value = e?.message ?? String(e) }) })
 
 const stations = computed(() => data.value?.stations ?? [])
