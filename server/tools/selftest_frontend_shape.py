@@ -2,7 +2,7 @@
 
     python server/tools/selftest_frontend_shape.py
 
-做法：把 `web/src/mock/*.json`（前端同构 mock，字段真源）逐个与真实接口响应做
+做法：把 `web/tests/fixtures/*.json`（前端契约夹具，字段真源）逐个与真实接口响应做
 **结构性**比对：
 
   * mock 里出现的每个字段，接口必须都有且类型兼容 → 缺一个前端就读到 `undefined`
@@ -18,12 +18,17 @@ import json
 import sys
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import app  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MOCK_DIR = REPO_ROOT / "web" / "src" / "mock"
+MOCK_DIR = REPO_ROOT / "web" / "tests" / "fixtures"
 
 # (mock 文件, 接口路径, 查询参数)
 CASES: list[tuple[str, str, dict]] = [
@@ -107,7 +112,7 @@ def load_mock(name: str) -> dict:
 
 def main() -> int:
     if not MOCK_DIR.is_dir():
-        print(f"找不到 mock 目录：{MOCK_DIR}")
+        print(f"找不到前端契约夹具目录：{MOCK_DIR}")
         return 1
 
     all_problems: list[str] = []

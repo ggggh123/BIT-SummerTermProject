@@ -62,7 +62,7 @@ class PipelineEndToEndTest(unittest.TestCase):
                 "--ods", str(cls.ods), "--dws", str(cls.dws), "--ads", str(cls.ads),
                 "--generated-at", "2026-09-14T14:30:00+08:00",
             ],
-            capture_output=True, text=True,
+            capture_output=True, text=True, encoding="utf-8",
         )
         cls.build_stdout = result.stdout
         cls.build_stderr = result.stderr
@@ -74,7 +74,7 @@ class PipelineEndToEndTest(unittest.TestCase):
                 "--ods", str(cls.ods), "--dws", str(cls.dws),
                 "--ads", str(cls.ads / "ads.db"),
             ],
-            capture_output=True, text=True,
+            capture_output=True, text=True, encoding="utf-8",
         )
         cls.db = sqlite3.connect(f"{(cls.ads / 'ads.db').resolve().as_uri()}?mode=ro", uri=True)
         cls.db.row_factory = sqlite3.Row
