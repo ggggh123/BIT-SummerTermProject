@@ -29,11 +29,12 @@
 | `web/src/components/EChart.vue` | 改 | onMounted 增加 **`el.value.__echarts = chart`**（页面里没有全局 echarts），onBeforeUnmount `delete el.value?.__echarts` | **E2E 取实例用**（`convertToPixel` / `trigger('click')`） |
 | `web/src/lib/charts/beijingStation.js` | 改 | `geo` 增加 `layoutCenter:['50%','52%']`、`layoutSize:'94%'`、`scaleLimit`；`symbolSize` 由 `clamp(π/1.2, 12, 34)` 改为 **`clamp(chargerCount/2.2, 10, 16)`** | 主页地图；`web/tests/mapScale.test.mjs` |
 | `web/src/views/HomeView.vue` | 改 | ① 面板内容包进 `<DvFrame>`、加 `<Decoration10 class="home-deco">`、事件流换 **`ScrollBoard`**、标题改 `.panel-heading`；② **版面重排为三列大屏栅格**（左：营收趋势+桩状态｜中：北京地图 `h380`｜右：利用率排行+数据质量；底行：24h 负荷 `h220` + 事件流），使内容 ≤1080 设计 px | 主页 E2E、截图、抽验 |
-| `web/src/components/DvFrame.vue` | **新增** | DataV 边框封装：`BorderBox8` + 可选 `title` + `Decoration10`；props `{ title?: string }`，内容走默认 slot | `HomeView.vue` |
+| `web/src/components/DvFrame.vue` | **新增** | DataV 边框封装：`BorderBox8` + 可选 `title` + `Decoration10`；props `{ title?: string }`，内容走默认 slot | `HomeView.vue` + 4 个视角子页 |
+| `web/src/views/{UserView,StationView,EnterpriseView,GovView}.vue` | 改 | 所有面板（图表 + 月度汇总表 + 各区服务指标表等）包进 `DvFrame`，与主页统一 DataV 观感；带控件的标题保留 `.panel-heading` + `.panel-heading-extra`；**不套 `ScaleFrame`**（子页是响应式看板） | 子页 E2E 第 7 条、五页截图 |
 | `web/src/main.js` | 改 | `import '@kjgl77/datav-vue3/dist/style.css'` | 全部页面（DataV 样式） |
 | `web/package.json` | 改 | deps 增 `@kjgl77/datav-vue3@^1.7.4`；devDeps 增 `@playwright/test@^1.63.0`；增 `engines.node >= 23`；增 script `test:e2e` | 构建与测试 |
 | `web/playwright.config.mjs` | **新增** | `testDir: ./e2e`；`baseURL = PART2_BASE_URL ?? http://192.168.88.131:5000`；`channel = PART2_CHANNEL ?? 'chrome'`（用系统 Chrome，不下载浏览器）；viewport 1920×1080；`workers: 1` | E2E |
-| `web/e2e/dashboard.spec.mjs` | **新增** | **6 条**页面级用例（见 §3） | CI/本地验收 |
+| `web/e2e/dashboard.spec.mjs` | **新增** | **7 条**页面级用例（见 §3） | CI/本地验收 |
 | `web/README.md` | 改 | 重写测试段（36 项单测命令）、新增 Playwright E2E 段、新增 DataV 段、待办更新 | 人/AI 读文档 |
 
 **不属于本次改动、但同属 `web/`（早前一轮已完成，改动前请先读）**：`src/App.vue`（顶栏与 `.pill-error` 状态）、`src/api/{client,state,polling,endpoints}.js`（`USE_MOCK`/`VITE_API_BASE` 开关、轮询、四态）、`src/views/{UserView,StationView,EnterpriseView,GovView}.vue`、`src/lib/charts/*`、`src/mock/*`、`public/geo/beijing.json`、`scripts/gen-mock.mjs`、`scripts/use-ads-json.mjs`。
@@ -52,7 +53,7 @@ PART2_BASE_URL=http://localhost:5000 npm --prefix web run test:e2e
 python server/tools/selftest_contract.py && python server/tools/selftest_frontend_shape.py && python server/tools/selftest_static_dist.py
 ```
 
-E2E 6 条与它们证明的事：
+E2E 7 条与它们证明的事：
 
 | 用例 | 断言 | 依赖的契约 |
 |---|---|---|
@@ -62,8 +63,9 @@ E2E 6 条与它们证明的事：
 | 接口失败保留旧数据 | 拦截 `/api/**` 全部失败 → `.pill-error` 可见、页内提示出现、KPI 文本不变、图表数量不变 | `state.js` 语义 |
 | DataV 渲染 | `.dv-border-box-8` ≥5 且尺寸 >200×100；`.dv-scroll-board` 存在且高度 >100px | `DvFrame`/`ScrollBoard`/`.event-board` 高度 |
 | 主页版面 | `.scale-inner` 内容高 **≤1080 设计 px**；地图图表高 **≥380**；整页 `scrollHeight ≤ 视口+32` | 三列栅格、`.chart.h150/.h220/.h380`、`ScaleFrame` 预留高度 |
+| 子页 DataV 统一 | 逐页（`/#/user`、`/#/station`、`/#/enterprise`、`/#/gov`）断言图表数 4/4/4/3、`.dv-border-box-8` ≥3、控制台零报错 | 4 个子页的 `DvFrame` 包裹 |
 
-当前结果：单测 36/36、回归 36/36、E2E **6/6**、后端 55/55 + 46 项 0 不兼容 + 静态托管 OK。
+当前结果：单测 36/36、回归 36/36、E2E **7/7**、后端 55/55 + 46 项 0 不兼容 + 静态托管 OK。
 
 ## 4. 硬契约（改代码前必须知道；破坏会导致测试/抽验/演示失败）
 
@@ -95,7 +97,7 @@ E2E 6 条与它们证明的事：
 ## 6. 已知限制（不要误当 bug 修）
 
 1. **主页版面已重构**（`feat/part2-web-layout`）：内容压到 1080 设计高度以内、1920×1080 一屏放下，地图升为 380px 主视区（E2E 第 6 条守护）。**往主页加内容前先看这条断言**。
-2. **DataV 只在主页**：4 个视角子页仍是普通面板（可后续用 `DvFrame` 统一）。
+2. **DataV 已铺到五个页面**（主页 + 4 个子页，见 §2 的 `DvFrame` 行）；子页**不套 `ScaleFrame`**（响应式看板，只有主页做大屏等比缩放），这是有意为之，不要给子页加缩放。
 3. **预测仍是基线**：`ads_forecast_batch.is_baseline=1`（seasonal-naive），等 #5 的 `handoff/forecast` 批次数据用 `--forecast-handoff` 接入。
 4. **HDFS 上 `/dwd`、`/ads` 仍是旧数据**（`/ods` 104.7MB、360 分区 与 `/dws` 3.9MB 已是正式规模）：等 #3 的 `handoff/dwd`，再跑 `run_dws_ads.sh` 出官方 SparkSQL on YARN 链路与 YARN 记录。
 5. **KPI 在线率 99.3%** 偏理想：故障桩只有 2 个（状态分布已按利用率生成，非缺陷）。
@@ -134,3 +136,4 @@ E2E 6 条与它们证明的事：
 2. 改 `web/src/**` 前过一遍 §4 的硬契约；改完必须重跑单测 + E2E，并（若动了布局）刷新 `docs/test/evidence/part2-2026-09-15/screenshots/`。
 3. 改 `server/**`、`part2/**` 属队友范围：接口字段以 `docs/design/part2-api-contract.md` 为真源，**字段变更先改契约再改实现**，前端会自动跟着契约走。
 4. 数据相关结论（真值、规模、口径）以 `docs/test/evidence/part2-2026-09-15/README.md` 与 `docs/management/part2-analysis-dimensions.md` 为准，不要凭旧文档或聊天记录里的数字。
+

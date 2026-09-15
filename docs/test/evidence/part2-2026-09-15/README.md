@@ -101,3 +101,9 @@ E2E 落地：`web/e2e/dashboard.spec.mjs`（条数见 §7），`npm run test:e2e
 同时修了 `ScaleFrame` 的预留高度：原来固定预留 120px，而顶栏+页脚实际约 175px，导致整页比视口高约 55px、仍要滚一下；现在按**真实占位**（宿主顶部 + 页脚高度 + 12）预留。
 
 实测（`web/e2e/dashboard.spec.mjs` 第 6 条，打 VM 真实栈）：`.scale-inner` 内容高 **≤1080 设计 px**、地图图表高 **≥380px**、整页 `scrollHeight ≤ 视口 + 32px`。E2E 由 5 条扩到 **6 条，全部通过**；五页截图已按新版面刷新（`screenshots/01-home.png` 由 203KB 变 266KB，内容更密）。
+
+## 8. DataV 铺到 4 个视角子页（2026-09-15）
+
+老师第 5 条要求"使用 DataV 进行大屏展示"，上一轮只做了主页。本轮把 `DvFrame`（`dv-border-box-8` + `dv-decoration-10`）铺到 `UserView`/`StationView`/`EnterpriseView`/`GovView` 的所有面板（含月度汇总表、各区服务指标表等非图表面板）；带控件的标题（站点选择器、7/30 日切换）保留为 `.panel-heading` + `.panel-heading-extra`，与边框共存。子页**不套 `ScaleFrame`**——设计上子页是响应式看板，只有主页做大屏等比缩放。
+
+新增 E2E 第 7 条「四个视角子页统一使用 DataV 大屏件，且渲染无报错」：逐页断言图表数（用户 4 / 充电站 4 / 企业 4 / 政府 3）、DataV 边框 ≥3、控制台零报错 → **E2E 7 条全部通过**。五页截图已再次刷新（子页体积从 229/183/238/202KB 变为 183/185/195/161KB，即观感与留白变化）。
