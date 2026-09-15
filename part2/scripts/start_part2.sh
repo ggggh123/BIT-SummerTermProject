@@ -168,7 +168,16 @@ fi
 
 echo "[3/4] 启动 Flask 服务..."
 if payload="$(health_payload 2>/dev/null)"; then
-  echo "  已有健康服务占用端口，保持原进程，不重复启动。"
+  current_db="$($PYTHON -c 'import json,sys; print(json.load(sys.stdin).get("data",{}).get("dbPath", ""))' <<<"$payload")"
+  current_db="$(readlink -m -- "$current_db")"
+  if [[ "$current_db" != "$ADS_DB" ]]; then
+    echo "错误：端口 $PORT 上已有健康服务，但它读取的是另一份 ADS。" >&2
+    echo "  当前：$current_db" >&2
+    echo "  期望：$ADS_DB" >&2
+    echo "请先运行 part2/scripts/stop_part2.sh，或改用其他 PART2_PORT。" >&2
+    exit 1
+  fi
+  echo "  已有健康服务读取同一份 ADS，保持原进程，不重复启动。"
 else
   if tcp_open 127.0.0.1 "$PORT"; then
     echo "错误：端口 $PORT 已被非本项目健康服务占用。" >&2
