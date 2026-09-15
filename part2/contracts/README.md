@@ -73,7 +73,8 @@
 ## 7. 最小冻结清单
 
 1. #2／#4：将 DWS 时长解析修正为显式 TIMESTAMP cast，重跑对账。
-2. #4：明确 Q2 的“重复”是主键重复还是业务内容重复，并使注入器与文档一致。
+2. ~~#4：明确 Q2 的“重复”是主键重复还是业务内容重复，并使注入器与文档一致。~~
+   → **已解决（2026-09-15）**：#2 TL 拍板采纳「按业务主键判重」；注入器（`scml/data_generator/generator.py` 的 `_duplicate_payload`）、策略文件（`quality-policy` 的 `duplicate_policy`，版本升至 `0.2.0-draft`）与《03》§2.3/§3.2 已同步；检测端 `quality/rules.py` 本已按契约 `primary_key` 分组，无需改动。决策说明见 [Q2-duplicate-policy-decision.md](Q2-duplicate-policy-decision.md)。
 3. #4／#3：修正 Q3 中“乘 10 仍不超额定值”的标签，并明确 Q6 已丢失小数分位的处理。
 4. #2／#4／#5：决定 Q5 超占用小时是隔离还是裁剪、Q9 越界坐标是隔离还是回填，并确认 ML 如何处理小时缺口。
 5. #2／#1：确认 `ads_quality_*` 字段及页面对 FP/FN、级联影响和“未冻结”标志的展示口径。

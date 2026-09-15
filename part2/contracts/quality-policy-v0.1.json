@@ -1,5 +1,5 @@
 {
-  "policy_version": "0.1.0-draft",
+  "policy_version": "0.2.0-draft",
   "status": "DRAFT_PENDING_TEAM_REVIEW",
   "sample_limit": 5,
   "timestamp_year_range": [1900, 2100],
@@ -36,5 +36,5 @@
   },
   "beijing_bbox": {"latitude": [39.4, 41.1], "longitude": [115.4, 117.5]},
   "bbox_note": "项目近似包围框，不是真实行政边界。越界隔离，不猜测坐标。",
-  "duplicate_policy": "相同标准化业务内容保留字典序最小的 _row_id；同键冲突内容全部隔离，等待上游确认。"
+  "duplicate_policy": "按业务主键判重（契约 primary_key：orders 为 [id]，telemetry 为 [charger_id, recorded_at]）。同一业务主键、内容相同者按 _row_id 字典序保留最早一条（deduplicate）；同一业务主键但内容冲突者本组全部隔离（reject），等待上游确认。口径由 #2 TL 于 2026-09-15 拍板，证据与三方案对比见 contracts/Q2-duplicate-policy-decision.md。"
 }

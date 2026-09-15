@@ -58,7 +58,7 @@ quality/
 | 规则 ID | 问题类型 | PySpark 检测逻辑（示例） | 涉及表 |
 |---|---|---|---|
 | R01 | 缺失值 | `col.isNull()` 统计关键字段空值率；`status='completed' AND ended_at IS NULL` | orders、telemetry、users |
-| R02 | 重复记录 | `groupBy(业务主键).count() > 1`；整行 `df.exceptAll(df.dropDuplicates())` | orders、telemetry |
+| R02 | 重复记录 | **按契约 `primary_key` 分组判重**（orders 为 `id`；telemetry 为 `charger_id, recorded_at`）：同键同内容保留 `_row_id` 字典序最小者；同键但内容冲突者本组全部隔离 | orders、telemetry |
 | R03 | 异常值 | `energy_kwh < 0 OR energy_kwh > 单次上限`；`power_kw > 额定功率` | orders、telemetry |
 | R04 | 时间格式不一致 | 正则匹配 ISO 8601，统计非标准格式行数与格式类型分布 | 全部含时间字段表 |
 | R05 | 逻辑矛盾 | `ended_at < started_at`；`busy_count > pile_count` | orders、station_hourly |
@@ -101,7 +101,7 @@ clean/
 | 问题 | 策略 | 依据 |
 |---|---|---|
 | 缺失值 | 关键字段（订单时间、金额、外键）缺失 → **剔除**；非关键字段（昵称、头像）→ **默认值填充** | 关键字段不可推断，剔除不影响统计口径 |
-| 重复记录 | 按业务主键去重，保留 `recorded_at` 最早一条 | 重传数据语义等价 |
+| 重复记录 | **按业务主键判重**（口径见 `contracts/quality-policy-v0.1.json` 的 `duplicate_policy`）：同键同内容保留 `_row_id` 字典序最小者 → **去重**；同键但内容冲突者本组全部**隔离**待上游确认 | 重传数据语义等价；口径由 #2 TL 于 2026-09-15 拍板，证据与三方案对比见 `contracts/Q2-duplicate-policy-decision.md` |
 | 异常值 | 物理不可能值（负电量、超额定功率）→ **剔除**；单条遥测异常不影响订单金额（金额以订单为准） | 传感器故障数据不可信 |
 | 时间格式 | 多格式统一解析为 `+08:00` ISO 8601；解析失败 → **剔除** | 全平台时间契约 |
 | 逻辑矛盾 | `ended_at < started_at`；`busy_count > pile_count`（站点小时表）等 → **剔除** | 违反业务状态机 |

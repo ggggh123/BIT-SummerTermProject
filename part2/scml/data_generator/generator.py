@@ -602,9 +602,19 @@ def _events(config: GenerationConfig, rng: random.Random, base: datetime, orders
 
 
 def _duplicate_payload(rows: list[dict[str, object]], target: dict[str, object], rng: random.Random) -> None:
+    """把随机一行的**业务负载连同业务主键**复制到 target，形成一条“重复记录”。
+
+    口径（2026-09-15 由 #2 拍板，见 part2/contracts/Q2-duplicate-policy-decision.md）：
+    **Q2「重复记录」= 业务主键重复**，而不是“业务内容相同但主键不同”。
+
+    因此这里必须复制契约 primary_key 覆盖的字段（orders 为 ["id"]；telemetry 为
+    ["charger_id", "recorded_at"]）——旧实现跳过 `id` 不复制，导致注入行与源行业务主键不同，
+    检测端按 primary_key 分组时永远命中不到（即对账里的 FN 漏检）。
+    `_row_id` 仍保持唯一：它是行级追踪键，用于 injection_log 与检测结果逐条对账，不属于业务主键。
+    """
     source = rows[rng.randrange(len(rows))]
     for key, value in source.items():
-        if key not in ("_row_id", "id"):
+        if key != "_row_id":
             target[key] = value
 
 
