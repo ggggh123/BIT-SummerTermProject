@@ -98,6 +98,7 @@ def check_ads(ads: Path) -> dict[str, object]:
             if missing:
                 return fail("ADS database is missing contract tables", missing=missing)
             meta = dict(db.execute("SELECT key, value FROM ads_meta"))
+            forecast_point_count = db.execute("SELECT COUNT(1) FROM ads_forecast_24h").fetchone()[0]
     except sqlite3.Error as exc:
         return fail(f"cannot read ads.db: {exc}")
 
@@ -108,6 +109,7 @@ def check_ads(ads: Path) -> dict[str, object]:
         stationCount=int(meta.get("stationCount", 0)),
         chargerCount=int(meta.get("chargerCount", 0)),
         orderCount=int(meta.get("orderCount", 0)),
+        forecastPointCount=int(forecast_point_count),
     )
 
 
@@ -117,6 +119,20 @@ def check_dwd(dwd: Path, require_dwd: bool) -> dict[str, object]:
     if require_dwd:
         return fail(f"missing {dwd}")
     return skip(f"{dwd} not delivered yet; D group reconciliation is skipped")
+
+
+def check_scale(ods_check: dict[str, object], ads_check: dict[str, object]) -> dict[str, object]:
+    if ods_check.get("kind") != "ods-handoff":
+        return fail(
+            "formal delivery requires ODS manifest kind=ods-handoff; run scripts/run_scml_full.sh first",
+            actualKind=ods_check.get("kind"),
+        )
+    if int(ads_check.get("forecastPointCount", 0)) != 144:
+        return fail(
+            "formal delivery requires 144 forecast points (6 forecast stations x 24h)",
+            actualForecastPointCount=ads_check.get("forecastPointCount", 0),
+        )
+    return ok("formal delivery scale is confirmed", kind=ods_check.get("kind"), forecastPointCount=144)
 
 
 def check_reconcile(ods: Path, dws: Path, ads: Path, dwd: Path, require_dwd: bool) -> dict[str, object]:
@@ -148,6 +164,8 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
         "ads": check_ads(args.ads),
         "dwd": check_dwd(args.dwd, args.require_dwd),
     }
+    if args.require_full:
+        checks["scale"] = check_scale(checks["ods"], checks["ads"])
     if all(item["status"] in {"ok", "skip"} for item in checks.values()):
         checks["reconcile"] = check_reconcile(args.ods, args.dws, args.ads, args.dwd, args.require_dwd)
 
@@ -169,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ads", type=Path, default=Path("handoff/ads"))
     parser.add_argument("--dwd", type=Path, default=Path("handoff/dwd"))
     parser.add_argument("--require-dwd", action="store_true")
+    parser.add_argument("--require-full", action="store_true", help="fail unless the package is formal scale")
     parser.add_argument("--json", action="store_true", help="print machine-readable report")
     args = parser.parse_args(argv)
 

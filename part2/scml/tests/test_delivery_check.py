@@ -92,6 +92,15 @@ class DeliveryCheckTest(unittest.TestCase):
         self.assertEqual(report["checks"]["ads"]["status"], "fail")
         self.assertIn("ads.db", report["checks"]["ads"]["message"])
 
+    def test_require_full_rejects_sample_fixture(self):
+        result = self.run_check("--require-full")
+
+        self.assertEqual(result.returncode, 1)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(report["checks"]["scale"]["status"], "fail")
+        self.assertIn("ods-handoff", report["checks"]["scale"]["message"])
+
 
 if __name__ == "__main__":
     unittest.main()

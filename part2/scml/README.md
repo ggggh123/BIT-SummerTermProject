@@ -62,6 +62,8 @@ python3 warehouse/jobs/reconcile.py   --ods handoff/ods --dws handoff/dws --ads 
 # → 30 项，通过 29，跳过 1（D 组待 #3 的 DWD）  [OK] 对账全绿
 python3 scripts/check_scml_delivery.py --ods handoff/ods --dws handoff/dws --ads handoff/ads
 # → SCML delivery: ready
+python3 scripts/check_scml_delivery.py --ods handoff/ods --dws handoff/dws --ads handoff/ads --require-full
+# → 正式联调/答辩前使用；会拒绝 `prl-test-fixture` 小样例，要求 `ods-handoff` + 144 条预测点
 ```
 
 **虚拟机（伪分布式 Hadoop + Spark，出 YARN 记录）**
