@@ -1,5 +1,8 @@
 # 集成分支在 TimeMachine 虚拟机上的全栈实测（2026-09-15）
 
+> 🔄 **演示机迁址提示（2026-09-15 晚）**：团队演示机已由 `TimeMachine`（192.168.88.131）迁至 `niyujun01`（192.168.59.128）。
+> **本文是迁址前的历史实测记录，原文保留不改**；新演示机地址见 `docs/management/part2-defense-evidence.md` 与 `part2-metric-checklist.md`。
+
 > 执行人：#1 王浩恩（PM）｜目标：把 #2 的一键脚本与集成分支在**本组虚拟机**上实测（答辩硬闸门：单进程起全栈、两次无人工干预、Windows 可直接看大屏）
 > 机器：`TimeMachine`（Ubuntu 25.04 / JDK 17 / Hadoop 3.4.1 / Spark 3.5.7），共享目录 `/mnt/hgfs/BIT-SummerTermProject` = 仓库根
 > 代码：`feat/part2-integration` 合入 `origin/feat/part2-02`（`f744601`）后，含 `part2/scripts/{start,stop}_part2.sh` 与 `part2/plans/00–08`

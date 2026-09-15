@@ -11,10 +11,10 @@ import os
 from pyspark.sql import SparkSession, Window, functions as F
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-DWD = os.environ.get("DWD_URI", "hdfs://TimeMachine:8020/ev-charging/dwd")
-DWS = os.environ.get("DWS_URI", "hdfs://TimeMachine:8020/ev-charging/dws")
+DWD = os.environ.get("DWD_URI", "hdfs://niyujun01:8020/ev-charging/dwd")
+DWS = os.environ.get("DWS_URI", "hdfs://niyujun01:8020/ev-charging/dws")
 # 读 #4 对齐后的 ADS（ads_schema.sql 口径）
-ADS = os.environ.get("SCML_ADS_URI", "hdfs://TimeMachine:8020/ev-charging/ads_scml")
+ADS = os.environ.get("SCML_ADS_URI", "hdfs://niyujun01:8020/ev-charging/ads_scml")
 OUT = os.path.join(BASE, "handoff", "ads", "json")
 GEN_AT = "2026-09-14T10:05:00+08:00"
 CUTOFF = "2026-09-14"

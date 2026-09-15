@@ -5,6 +5,10 @@
 > 采集方式：VM（`TimeMachine`，192.168.88.131）上 Flask 单进程托管 `web/dist` + `/api/*`；宿主机 `node scripts/part2/62-capture-pages.mjs --out <本目录>/screenshots` 逐页截图**并同时导出图表真实 option**
 > 运行细节与脚本适配缺陷见同目录 [`vm-integration-run.md`](vm-integration-run.md)
 >
+> 🔄 **演示机迁址（2026-09-15 晚）**：团队演示机已由 `TimeMachine`（192.168.88.131）迁至 **`niyujun01`（192.168.59.128，VMware NAT）**，#2 已通知 #1。
+> 本文 §1 截图与 §2 抽验真值采集于**迁址前**的 `TimeMachine`，**属历史批次**（保留原文不改，以免伪造记录）；
+> 面向新演示机的重跑批次证据将随后重采更新，地址类材料（答辩步骤、E2E 默认值、截图脚本默认值）已同步切换。
+>
 > ⚠️ 本文按时间顺序记录 2026-09-15 一整天的工作，**§4 及 §3 里出现的是当天上午的本地 Python 物化批**
 > （8 站 / 287 桩 / 112,422 单），与现在的官方 PRL 批不是一套数据。以 §2、§9 与
 > `docs/management/part2-metric-checklist.md` 为准。

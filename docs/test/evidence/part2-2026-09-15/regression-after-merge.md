@@ -3,6 +3,9 @@
 > 触发：把 `origin/feat/part2_SCML`（#4，`13b18f0` 正式规模校验）与 `origin/feat/part2-ml`（#5，`53b2dd4` ML 预测批次 + 契约校验脚本）合进 `feat/part2-integration`
 > 合并结果：**两处零冲突**（合并提交 `da9d0d1` / `9af5d99`），工作区干净
 > 运行环境：Windows（Python 3.13 + `.venv-win`：flask 3.1.3 / flask-cors 6.0.5；Node 24.15.0）+ VM `TimeMachine`（Flask 托管 `web/dist` + `/api/*`）
+>
+> 🔄 **演示机迁址提示（2026-09-15 晚）**：团队演示机已由 `TimeMachine`（192.168.88.131）迁至 `niyujun01`（192.168.59.128）。
+> **本文是迁址前的历史回归记录，原文保留不改**；新演示机地址以 `docs/management/part2-defense-evidence.md` 与 `part2-metric-checklist.md` 为准。
 
 ## 回归结果（8 项全绿）
 

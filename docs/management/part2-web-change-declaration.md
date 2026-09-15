@@ -33,7 +33,7 @@
 | `web/src/views/{UserView,StationView,EnterpriseView,GovView}.vue` | 改 | 所有面板（图表 + 月度汇总表 + 各区服务指标表等）包进 `DvFrame`，与主页统一 DataV 观感；带控件的标题保留 `.panel-heading` + `.panel-heading-extra`；**不套 `ScaleFrame`**（子页是响应式看板） | 子页 E2E 第 7 条、五页截图 |
 | `web/src/main.js` | 改 | `import '@kjgl77/datav-vue3/dist/style.css'` | 全部页面（DataV 样式） |
 | `web/package.json` | 改 | deps 增 `@kjgl77/datav-vue3@^1.7.4`；devDeps 增 `@playwright/test@^1.63.0`；增 `engines.node >= 23`；增 script `test:e2e` | 构建与测试 |
-| `web/playwright.config.mjs` | **新增** | `testDir: ./e2e`；`baseURL = PART2_BASE_URL ?? http://192.168.88.131:5000`；`channel = PART2_CHANNEL ?? 'chrome'`（用系统 Chrome，不下载浏览器）；viewport 1920×1080；`workers: 1` | E2E |
+| `web/playwright.config.mjs` | **新增** | `testDir: ./e2e`；`baseURL = PART2_BASE_URL ?? http://192.168.59.128:5000`；`channel = PART2_CHANNEL ?? 'chrome'`（用系统 Chrome，不下载浏览器）；viewport 1920×1080；`workers: 1` | E2E |
 | `web/e2e/dashboard.spec.mjs` | **新增** | **9 条**页面级用例（见 §3）。地图用例新增「等 `geo` 就绪」的显式等待 + `PART2_SLOW_MAP` 复现开关：此前偶发失败（10 次里挂 1 次）的根因就是缺这个等待，详见缺陷记录 D13 | CI/本地验收 |
 | `web/src/api/endpoints.js` | 改 | 主页 `revenueTrend` 的 `days` 由 **7 改为 30**：此前接口只给 7 天，视图再 `slice(-30)` 也只有 7 个点，图上 7 根柱子却挂着「近 30 日」标题 | 主页营收趋势图、`viewModel.test.mjs`、E2E 第 8 条 |
 | `web/src/lib/charts/overview.js` | 改 | import 由 `@/lib/models` 改为相对路径 `../models.js`：Node 不认识 Vite 别名，改掉之后这层 30 日薄适配才能被 `node --test` 直接覆盖（页面行为不变） | `web/tests/viewModel.test.mjs` |

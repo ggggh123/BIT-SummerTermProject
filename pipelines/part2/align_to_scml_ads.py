@@ -19,9 +19,9 @@ import os
 from pyspark.sql import SparkSession, Window, functions as F
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-DWD = os.environ.get("DWD_URI", "hdfs://TimeMachine:8020/ev-charging/dwd")
-DWS = os.environ.get("DWS_URI", "hdfs://TimeMachine:8020/ev-charging/dws")
-ADS_OUT = os.environ.get("SCML_ADS_URI", "hdfs://TimeMachine:8020/ev-charging/ads_scml")
+DWD = os.environ.get("DWD_URI", "hdfs://niyujun01:8020/ev-charging/dwd")
+DWS = os.environ.get("DWS_URI", "hdfs://niyujun01:8020/ev-charging/dws")
+ADS_OUT = os.environ.get("SCML_ADS_URI", "hdfs://niyujun01:8020/ev-charging/ads_scml")
 CUTOFF = "2026-09-14"
 
 

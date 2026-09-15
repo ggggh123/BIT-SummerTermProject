@@ -13,9 +13,9 @@ import sqlite3
 from pyspark.sql import SparkSession, functions as F
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-DWD = os.environ.get("DWD_URI", "hdfs://TimeMachine:8020/ev-charging/dwd")
-DWS = os.environ.get("DWS_URI", "hdfs://TimeMachine:8020/ev-charging/dws")
-ADS = os.environ.get("ADS_URI", "hdfs://TimeMachine:8020/ev-charging/ads")
+DWD = os.environ.get("DWD_URI", "hdfs://niyujun01:8020/ev-charging/dwd")
+DWS = os.environ.get("DWS_URI", "hdfs://niyujun01:8020/ev-charging/dws")
+ADS = os.environ.get("ADS_URI", "hdfs://niyujun01:8020/ev-charging/ads")
 OUT = os.path.join(BASE, "handoff", "ads")
 GENERATED_AT = "2026-09-14T10:05:00+08:00"
 

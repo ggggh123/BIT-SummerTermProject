@@ -9,7 +9,7 @@
 //
 // 用法（在仓库根目录执行，需要 web/node_modules 里的 playwright + 本机 Chrome）：
 //   node scripts/part2/62-capture-pages.mjs
-//   node scripts/part2/62-capture-pages.mjs http://192.168.88.131:5000
+//   node scripts/part2/62-capture-pages.mjs http://192.168.59.128:5000
 //   node scripts/part2/62-capture-pages.mjs --out docs/test/evidence/part2-2026-09-15/screenshots
 //   node scripts/part2/62-capture-pages.mjs --no-shots          # 只取数据不截图
 //
@@ -29,7 +29,7 @@ const args = process.argv.slice(2)
 const flagOut = args.indexOf('--out')
 const shots = !args.includes('--no-shots')
 const positional = args.filter((a, i) => !a.startsWith('--') && i !== flagOut + 1)
-const BASE = positional[0] ?? process.env.PART2_BASE_URL ?? 'http://192.168.88.131:5000'
+const BASE = positional[0] ?? process.env.PART2_BASE_URL ?? 'http://192.168.59.128:5000'
 const OUT = resolve(
   flagOut >= 0 ? args[flagOut + 1] : join(REPO, 'runtime', 'page-capture'),
 )

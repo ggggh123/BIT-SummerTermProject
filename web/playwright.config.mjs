@@ -3,7 +3,7 @@
 // 默认使用系统已安装的 Chrome（channel: chrome），不下载 Playwright 自带浏览器。
 import { defineConfig } from '@playwright/test'
 
-const baseURL = process.env.PART2_BASE_URL ?? 'http://192.168.88.131:5000'
+const baseURL = process.env.PART2_BASE_URL ?? 'http://192.168.59.128:5000'
 
 export default defineConfig({
   testDir: './e2e',

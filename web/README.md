@@ -79,7 +79,7 @@ node --test dashboard/tests/contracts.test.mjs dashboard/tests/models.test.mjs d
 `@playwright/test` 是 **devDependency，不参与 `npm run build`**；默认用系统已安装的 Chrome（`channel: 'chrome'`），不下载 Playwright 自带浏览器。
 
 ```bash
-npm run test:e2e                                              # 默认打 http://192.168.88.131:5000（VM 演示栈需在跑）
+npm run test:e2e                                              # 默认打 http://192.168.59.128:5000（VM 演示栈需在跑）
 PART2_BASE_URL=http://localhost:5000 npm run test:e2e         # 或指向本地 Flask / vite preview
 ```
 
