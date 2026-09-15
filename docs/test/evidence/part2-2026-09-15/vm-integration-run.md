@@ -101,12 +101,28 @@ ADS_DB=$ADS_DB PORT=5000 setsid nohup ~/venvs/part2/bin/python server/app.py \
 
 主页「桩状态环图」在正式规模下只剩两个扇区（且 99.3% 在线率对答辩而言不像真实运营数据）。建议生成器按站点利用率/故障注入比例生成状态快照列（`idle/reserved/charging/fault/restarting`），使环图与「利用率」「故障率」两张图自洽。
 
-## 6. 复现方式
+## 6. C) 可移植一键启动（`scripts/part2/30-start-demo.sh` + `31-stop-demo.sh`）
+
+§4 的补丁建议归 #2 决定，本次**未改动他的文件**；改为在 #1 负责的 `scripts/part2/` 下新增可移植版，把同一能力交付出来（四件事自适应：仓库根按脚本位置推导、Python 自动挑能 `import flask` 的解释器、健康检查 curl→wget→urllib 三级回退、Hadoop 只在未运行时尝试启动且失败只提示）。
+
+在 `TimeMachine` 上四次调用实测：
+
+```text
+[1/5] 选择 Python 解释器 ...  OK: /home/spiderboy/venvs/part2/bin/python (Python 3.11.16)
+[2/5] 检查 Hadoop 守护进程 ...  HDFS 已在运行 / YARN 已在运行 / 守护进程: 5/5
+[3/5] 检查 ADS 库 ...  OK: 5.5M  /mnt/hgfs/BIT-SummerTermProject/handoff/ads/ads.db
+[4/5] 检查前端产物 ...  OK: web/dist（1.3M）
+[5/5] 启动 Flask ...  OK: 服务已就绪（runId=ads-20260914194230）
+```
+
+`30-start-demo.sh` → 再跑一次（幂等）→ `31-stop-demo.sh` → `30-start-demo.sh`（回到演示态），四步全部正常；结束后 Flask 在 `0.0.0.0:5000` 运行，供 Windows 侧直接开大屏。
+
+## 7. 复现方式
 
 ```bash
-# Windows：ssh vm 已配好（~/.ssh/config 的 Host vm，密钥 ~/.ssh/vm_ed25519 与默认 id_ed25519 均已授权）
-ssh vm "bash -l /mnt/hgfs/BIT-SummerTermProject/.local-tools/vm-start-test.sh"   # 起 Flask（venv python）
-# 或按 §3 的三行手工起
+# Windows：ssh vm 已配好（~/.ssh/config 的 Host vm；~/.ssh/vm_ed25519 与默认 id_ed25519 均已授权）
+ssh vm "bash -l /mnt/hgfs/BIT-SummerTermProject/scripts/part2/30-start-demo.sh"   # 一键起全栈
+ssh vm "bash -l /mnt/hgfs/BIT-SummerTermProject/scripts/part2/31-stop-demo.sh"    # 一键停（Flask）
 ```
 
 > 本次会话结束时：VM 上 Flask 仍在 `0.0.0.0:5000` 运行（演示态），HDFS/YARN 五进程在跑；Windows 侧 `handoff/ads/ads.db` 与 `handoff/{ods,dws}` 为本地物化产物（114 MB，均在 `.gitignore` 内）。
