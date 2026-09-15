@@ -24,8 +24,11 @@ from flask import g
 
 CN_TZ = timezone(timedelta(hours=8))
 
-# 默认库位置：<repo>/handoff/ads/ads.db（可用环境变量 ADS_DB 覆盖）
-DEFAULT_DB = Path(__file__).resolve().parents[2] / "handoff" / "ads" / "ads.db"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# 默认库位置：优先使用 #4 的 SCML 交接产物；显式 ADS_DB 仍可覆盖。
+PART2_SCML_DB = REPO_ROOT / "part2" / "scml" / "handoff" / "ads" / "ads.db"
+LEGACY_DB = REPO_ROOT / "handoff" / "ads" / "ads.db"
 
 # 演示参考点：天安门（用户视角「距离」口径，见契约 §4）
 TIANANMEN = {"lat": 39.9087, "lng": 116.3975}
@@ -77,7 +80,10 @@ class ApiError(RuntimeError):
 # 连接（每请求一个，请求结束随应用上下文回收）
 # --------------------------------------------------------------------------- #
 def db_path() -> Path:
-    return Path(os.environ.get("ADS_DB") or DEFAULT_DB)
+    configured = os.environ.get("ADS_DB")
+    if configured:
+        return Path(configured)
+    return PART2_SCML_DB if PART2_SCML_DB.is_file() else LEGACY_DB
 
 
 def get_connection() -> sqlite3.Connection:
