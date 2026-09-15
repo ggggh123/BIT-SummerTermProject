@@ -61,6 +61,10 @@
 **未来数据泄漏防护**：滞后用 `lag`、滚动窗口统一 `rowsBetween(-N, -1)`、标签用 `lead`，
 三者在结构上保证特征只来自预测起点 `t` 及其之前。
 
+**时间语义前提（缺口防护）**：上述三类算子都是**行偏移**语义，只有当站点序列逐小时
+连续时才等价于时间偏移。因此特征工程之前会先做整点网格对齐（`align_hourly_grid`），
+并以 `verify_coverage.py` 作为训练门禁 —— 详见 §12。
+
 ## 4. 模型与超参数
 
 | 项 | 设置 |
@@ -176,6 +180,12 @@ h=17  ████████████████████████�
 ## 10. 复现命令
 
 ```bash
+# 0) 前置门禁：小时覆盖核验（row_offset_safe=false 时不得跳过网格对齐，见 §12）
+spark-submit --master yarn --num-executors 1 --executor-cores 1 \
+  ml/verify_coverage.py \
+  --dwd hdfs://pangxiangzhen01:8020/ev-charging/dwd/dwd_station_hourly \
+  --report ./tmp/coverage.json
+
 # 1) 训练（54 个模型，约 25 分钟）
 spark-submit --master yarn --executor-memory 2g --driver-memory 2g \
   --num-executors 1 --executor-cores 2 ml/train.py \
@@ -210,3 +220,94 @@ python3 tmp/check_db.py ./handoff/forecast/forecast.db
 | 预测满足物理约束（非负、占用 ≤ 总桩数、无 NaN） | ✅ 见 §6（占用锚定 + 空闲桩守恒），不一致行数为 0 |
 | 预测批次经 ADS → API → 大屏可见；无结果显示「暂无预测」 | ✅ 三张契约表就位（`is_baseline=0`），Flask 缺表时按契约回 `code 4041` |
 | 作业运行于本机伪分布式 Spark on Hadoop，可出示 YARN 记录 | ✅ 见 §7 的应用 ID |
+
+## 12. 小时缺口策略与 #5 本机复验（2026-09-15）
+
+> 本节回应《03》§未冻结事项中「**#2／#4／#5 冻结小时缺口策略**」这一条，
+> 并记录在 Ubuntu 22.04 / JDK 17 / Hadoop 3.4.1 目标机上对 ML 链路的复验结论。
+
+### 12.1 问题：行偏移语义在缺口处会静默失效
+
+PRL 交付证据 [`../docs/evidence/2026-09-15-formal-full.json`](../docs/evidence/2026-09-15-formal-full.json) 明确给出：
+
+```json
+"hourlyCoverage": { "expected": 15120, "retained": 15073, "missing": 47, "rowOffsetMlSafe": false }
+```
+
+交接说明进一步写明「**小时缺口不能直接用于按行偏移的 ML 特征**」。本模块的
+`lag_1h` / `lag_24h` / `roll_6h` / `roll_24h` / `busy_*` / `y_load_h{h}` / `naive_*`
+**全部是行偏移语义**：只有当每个站点的序列逐小时连续时，「第 n 行之前」才等于
+「n 小时之前」。一旦存在缺口：
+
+| 位置 | 后果 |
+|---|---|
+| 特征侧 | `lag_24h` 取到的是缺口另一侧的值，而非 24 小时前的观测 |
+| 标签侧 | `lead(h)` 生成的标签同样错位 |
+| 共同点 | **两者都不会抛异常**，只会让离线指标虚高、线上预测失真 |
+
+### 12.2 处置：`ml/verify_coverage.py` + `align_hourly_grid()`
+
+| 环节 | 实现 | 作用 |
+|---|---|---|
+| **核验门禁** | `ml/verify_coverage.py` | 按站点统计应有 / 实际 / 缺失小时、最长连续缺口，输出 `row_offset_safe` 判定与缺口明细；`row_offset_safe=false` 时报告直接给出「禁止直接进入特征工程」的建议 |
+| **网格对齐** | `features.align_hourly_grid()` | 用 `sequence` 生成完整整点网格后 left join 事实列，缺口行的事实列显式为 `NULL`；桩数 / 额定功率属站点缓变维度，按站点常数回填 |
+| **样本淘汰** | 既有 `dropna(subset=label+cols)` 与 `VectorAssembler(handleInvalid="skip")` | 缺口行不再提供可用的滞后值，其后续样本因 `lag_1h` 为 NULL 被自动丢弃，**语义正确而非静默错位** |
+| **预测起点** | `predict.latest_base(feat, feature_cols)` | 只在**特征完整**的行上取每站最后一行，避免尾部缺口导致 `skip` 掉整行、预测列变 NULL 再被兜底成 0 |
+| **外生兜底** | `features.fill_missing_features()` | 仅对 `temperature_c` 做站点均值填充（策略与填充比例写入报告，供评审）；否则该站无法成为预测起点，会因站点集合不一致被 `merge_ads` 拒绝 |
+| **整列降级** | `features.resolve_feature_cols()` | 单列整列为空时从特征集中剔除（否则 `skip` 会跳过**全部**样本、写出 0 行且不报错） |
+
+### 12.3 本机复验证据
+
+| 证据 | 结果 |
+|---|---|
+| 覆盖核验（自测数据，YARN `application_1789433546680_0011`） | 8 站 / expected 17280 / actual 17280 / missing 0 / `row_offset_safe=true` |
+| 对齐恒等性诊断（`tmp/diag_align.py`） | 行数 17280→17280、`sum(load_kw)` 完全一致、逐站 `diff=0.0`、时间步长恒为 3600s —— **无缺口时对齐是无副作用的恒等操作** |
+| 回归测试 `ml/tests/test_grid_align.py` | **8/8 通过**；其中 `test_lag_stops_at_gap_instead_of_skipping_it` 与 `test_label_is_not_shifted_by_gap` 直接断言「未对齐会跨缺口错位、对齐后停止在缺口」 |
+| ML 契约测试 `ml/tests/test_ml_contract.py` | 3/3 通过（含 `mark_peak_hours` 的完整两小时窗口边界） |
+| 合并校验测试 `ml/tests/test_merge_ads.py` | 4/4 通过 |
+| 端到端回归（训练） | 修复后 h=1 负荷 `valid_mae=33.30`、`busy=0.700`，与修复前基线（32.77 / 0.700）一致 |
+
+> **回归验证抓到的真实缺陷**：首次接入 `resolve_feature_cols` 时把它作用在**原始表**上，
+> 而 `FEATURE_COLS` 全是特征工程产出的派生列，交集只命中 `temperature_c`，
+> 模型静默退化为**单特征训练**（h=1 负荷 MAE 从 32.77 恶化到 177.6，busy 从 0.700 到 3.36，
+> 且无任何报错）。现已在 `train.py` / `predict.py` 中改为作用于**特征表**，并补充防回归测试
+> `test_resolve_feature_cols_requires_built_features`。此事说明：**指标异常是发现静默错误的主要手段**。
+
+### 12.4 建议提交团队冻结的口径
+
+1. **契约层**：`dwd_station_hourly` 的交付必须附带覆盖核验结果；建议把
+   `row_offset_safe` 作为交接 manifest 的必填字段，而非仅出现在证据文档中。
+2. **ML 层**：接收方一律先跑 `verify_coverage.py`；缺口非 0 时**不得**跳过网格对齐。
+3. **策略选择**：本模块采用「**补齐网格 + 丢弃缺口样本**」（保守、语义正确、代价是损失
+   缺口邻域样本）而非「按时间戳自连接」，理由是改动面小且与既有窗口特征兼容。
+   若团队更希望保留样本量，可另议时间戳对齐方案。
+4. **缺口阈值**：当前门限为 `missing == 0`（`--max-gap-tolerance 0`）。若上游确认缺口
+   属于采集停机（而非数据丢失），可放宽阈值，但**必须同时**接受对齐后样本量的下降。
+
+### 12.5 目标机（Ubuntu 22.04 / JDK 17）真实批次复验
+
+2026-09-15 在本机按 `dev` 分支代码独立复现了完整链路
+（#4 生成器 → #3 PRL → #4 DWS/ADS → 本模块 ML → 合并回 ADS）：
+
+| 环节 | 结果 |
+|---|---|
+| ODS | `scml-20260914`：8 站 / 288 桩 / 5,000 用户 / 120,000 订单 / 1,000,000 遥测 |
+| PRL | `prl-clean-20260915T075040Z-37220`，YARN `application_1789433546680_0018`，308.89 s；DWD 7 表 883,731 行，断言 violations=0 |
+| 缺口 | `expected 15120 / retained 15073 / missing 47 / row_offset_ml_safe=false` —— 与 #3 正式批次逐项一致 |
+| **本模块训练** | YARN `application_1789433546680_0020`；**`rows raw=15120`**（对齐补齐 47 个缺口后的完整网格） |
+| 负荷 MAE (test) | 1h **48.60** / 6h **47.13** / 24h **50.82**（seasonal-naive 基线 79.32 / 79.35 / 80.63） |
+| 预测 | YARN `application_1789433546680_0021`；`forecast_enabled` 过滤 7 → **5 站**，**120 点**，`is_peak=10`，`busy/load 不一致行=0`，`zero_load=0` |
+| 合并 | `ads.db` 预测三表整体替换，`is_baseline=0`，**`wape < baseline_wape` 的步长 24/24** |
+
+**结论**：本模块在目标机（Ubuntu 22.04 / JDK 17 / Hadoop 3.4.1 / Spark 3.5.7）上可独立复现
+#3 在 Ubuntu 25.04 / JDK 8 上得到的同量级结果（h=1 负荷 MAE 48.60 vs 48.69），
+可补上 #3 交付证据中 `ubuntu22_verified: false` 的空缺。
+
+**运行适配说明（不修改上游代码）**：本机基线（Hadoop 3.4.1 / JDK 17）与 #3 的
+`install_global_runtime.sh`（要求独立安装 Hadoop 3.2.1 + JDK 8 + 自带 CPython，且拒绝覆盖既有
+`/usr/local/hadoop`）冲突，故用一层只读兼容 shim（`/usr/local/bin/ev-part2` + `env.sh`）
+把 `ev-part2 python|hdfs|spark-submit` 转发到本机工具链；另因 NameNode 只绑定
+`192.168.32.100:8020`，PRL 流水线用本地副本把硬编码的 `localhost:8020` 替换为主机名。
+**上游脚本与 SQL 均未改动。**
+
+

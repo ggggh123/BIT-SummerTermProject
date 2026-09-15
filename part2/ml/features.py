@@ -101,6 +101,114 @@ def read_hourly(spark: SparkSession, path: str) -> DataFrame:
 
 
 # --------------------------------------------------------------------------
+# 小时网格对齐与特征可用性（缺口防护）
+# --------------------------------------------------------------------------
+
+#: 站点级缓变维度：补齐网格时按站点常数回填，不参与逐小时的缺口语义
+GRID_DIM_COLS: tuple[str, ...] = ("pile_count", "rated_power_kw")
+
+#: 允许用站点统计量兜底填充的外生特征（缺失时上游未提供真实观测）
+FILLABLE_COLS: tuple[str, ...] = ("temperature_c",)
+
+
+def align_hourly_grid(
+    df: DataFrame, dim_cols: Sequence[str] = GRID_DIM_COLS
+) -> DataFrame:
+    """把每个站点的序列补齐到**完整整点网格**，缺失小时的事实列置 NULL。
+
+    为什么必须做
+    ------------
+    本模块的滞后 / 滚动 / 标签特征全部是**行偏移**语义（``lag(n)``、``lead(n)``、
+    ``rowsBetween(-N, -1)``）。只有当站点序列逐小时连续时，行偏移才等价于时间偏移。
+    上游 PRL 已明确 ``hourlyCoverage.rowOffsetMlSafe`` 可能为 false（正式批次
+    ``expected=15120 / retained=15073 / missing=47``），若不补齐：
+
+    * ``lag_24h`` 会静默取到「第 24 行之前」而不是「24 小时之前」的观测；
+    * ``lead(h)`` 生成的标签同样错位 —— 指标会虚高，且不会抛出任何异常。
+
+    补齐后每一行都对应一个真实整点，缺口行的 ``load_kw`` / ``busy_count`` /
+    ``temperature_c`` 为 NULL，训练侧由 ``dropna`` 与 ``VectorAssembler`` 的
+    ``handleInvalid="skip"`` 丢弃不可用样本，从而在结构上保证时间语义正确。
+
+    实现要点：用 ``sequence`` 生成网格后 left join 事实列；桩数、额定功率属于
+    站点缓变维度，按站点常数回填（它们不随小时变化，缺失不代表数据缺口）。
+    """
+    present_dims = [c for c in dim_cols if c in df.columns]
+    span = df.groupBy("station_id").agg(
+        F.min("observed_at").alias("_grid_first"),
+        F.max("observed_at").alias("_grid_last"),
+    )
+    grid = span.select(
+        F.col("station_id"),
+        F.explode(
+            F.sequence(
+                F.col("_grid_first"), F.col("_grid_last"), F.expr("INTERVAL 1 HOUR")
+            )
+        ).alias("observed_at"),
+    )
+    facts = df.drop(*present_dims) if present_dims else df
+    out = grid.join(facts, on=["station_id", "observed_at"], how="left")
+    if present_dims:
+        dims = df.groupBy("station_id").agg(*[F.max(c).alias(c) for c in present_dims])
+        out = out.join(dims, on="station_id", how="left")
+    return out
+
+
+def fill_missing_features(
+    df: DataFrame, cols: Sequence[str] = FILLABLE_COLS
+) -> tuple[DataFrame, dict]:
+    """对允许兜底的特征列做站点均值填充，返回 ``(df, 填充统计)``。
+
+    仅针对外生且非因果的特征（当前为 ``temperature_c``）。保留 NULL 会让该站点
+    无法成为预测起点，进而使预测站点集合与 ``forecast_enabled`` 不一致而被
+    ``merge_ads`` 拒绝合并 —— 这是比填充更严重的交付失败。
+
+    权衡说明：站点均值会用到期内全部观测（含未来），属于轻度信息泄漏，但该列是
+    外部天气量、不参与自回归因果链，且填充比例与策略会原样写入报告供团队评审。
+    """
+    stats: dict = {}
+    for col in cols:
+        if col not in df.columns:
+            continue
+        total = df.count()
+        missing = df.filter(F.col(col).isNull()).count()
+        if missing == 0:
+            stats[col] = {"missing_rows": 0, "total_rows": int(total), "strategy": "none"}
+            continue
+        overall = df.agg(F.avg(col)).first()[0]
+        fallback = 0.0 if overall is None else float(overall)
+        window = Window.partitionBy("station_id")
+        df = df.withColumn(
+            col,
+            F.coalesce(F.col(col), F.avg(col).over(window), F.lit(fallback)).cast("double"),
+        )
+        stats[col] = {
+            "missing_rows": int(missing),
+            "total_rows": int(total),
+            "missing_ratio": round(missing / total, 8) if total else None,
+            "strategy": "station_mean_then_global_mean",
+            "global_mean": round(fallback, 6),
+        }
+    return df, stats
+
+
+def resolve_feature_cols(
+    df: DataFrame, base: Sequence[str] = FEATURE_COLS
+) -> tuple[list[str], list[str]]:
+    """剔除在数据中**整列为空**的特征，返回 ``(可用特征, 被剔除特征)``。
+
+    单列全空时若仍交给 ``VectorAssembler``，``handleInvalid="skip"`` 会跳过
+    **全部**样本，最终写出 0 行预测且不报错。这里显式降级并把它记录进报告。
+    """
+    present = [c for c in base if c in df.columns]
+    if not present:
+        return [], []
+    counts = df.agg(*[F.count(c).alias(c) for c in present]).first()
+    dropped = [c for c in present if counts[c] == 0]
+    return [c for c in present if c not in dropped], dropped
+
+
+# --------------------------------------------------------------------------
 # 特征与标签
 # --------------------------------------------------------------------------
 
