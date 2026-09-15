@@ -25,7 +25,7 @@
 | `/api/overview/kpis` | — | `{ totalRevenueFen, totalEnergyKwh, totalOrders, chargerCount, idleCount, onlineRate, windowDays }` |
 | `/api/overview/stations` | — | `[{ stationId, name, district, longitude, latitude, chargerCount, idleCount, utilizationRate, revenueFen, priceFenPerKwh, orderCount, forecastEnabled }]` |
 | `/api/overview/charger-status` | — | `{ idle, reserved, charging, fault, restarting }`（五者之和 = 总桩数） |
-| `/api/overview/load-24h` | `stationId?` | `{ points: [{ stationId, observedAt, loadKw }] }`（8 站 × 24 点） |
+| `/api/overview/load-24h` | `stationId?` | `{ points: [{ stationId, observedAt, loadKw }] }`（**站点数 × 24 点**；当前官方批 7 站 = 168 点） |
 | `/api/overview/events` | `limit?` | `[{ eventType, message, createdAt }]`（倒序） |
 | `/api/quality/summary` | — | `{ runId, tables: [{ name, rowsBefore, rowsAfter }], issues: [{ rule, type, injected, detected, handled, recall }] }` |
 

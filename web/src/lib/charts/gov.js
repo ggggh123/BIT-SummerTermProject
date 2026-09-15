@@ -64,7 +64,13 @@ export function buildPeakLoadOption(data) {
         markPoint: { data: [{ coord: [peak, points[peak].loadKw], name: '峰值', value: points[peak].loadKw }] },
       },
     ],
-    meta: { peakHour: points[peak].hour, peakLoadKw: points[peak].loadKw },
+    // meta.date 必须带上：接口 /gov/peak-load 只返回**单日** 24 点，
+    // 大屏 KPI 是「当日峰值」而不是窗口峰值，界面要把这个口径显式说出来。
+    meta: {
+      date: data.dt ?? null,
+      peakHour: points[peak].hour,
+      peakLoadKw: points[peak].loadKw,
+    },
   }
 }
 

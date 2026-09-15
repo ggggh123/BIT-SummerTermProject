@@ -64,9 +64,9 @@ const utilOption = computed(() => (data.value ? buildUtilizationFairnessOption(d
       <p class="kpi-hint">按单棵树年固碳 18kg 估算</p>
     </div>
     <div class="panel kpi-card">
-      <h2 class="kpi-label">全城峰值负荷</h2>
+      <h2 class="kpi-label">全城峰值负荷（当日）</h2>
       <p class="kpi-value">{{ peakOption.meta ? Math.round(peakOption.meta.peakLoadKw).toLocaleString('zh-CN') : '—' }}<span style="font-size: 14px"> kW</span></p>
-      <p class="kpi-hint">出现在 {{ peakOption.meta?.peakHour ?? '—' }}</p>
+      <p class="kpi-hint">出现在 {{ peakOption.meta?.date ?? '—' }} {{ peakOption.meta?.peakHour ?? '—' }}（接口按日返回，非窗口峰值）</p>
     </div>
   </section>
 

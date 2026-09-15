@@ -55,14 +55,33 @@ test('主页营收趋势确实是近 30 日（不是 7 日）', async ({ page })
 })
 
 test('点击地图站点 → 跳转充电站视角且选中同一站点', async ({ page, request }) => {
+  // 复现开关：把底图 GeoJSON 人为延迟 N 毫秒，用来检验这条用例在「geo 迟到」时依然稳。
+  //   PART2_SLOW_MAP=1500 npx playwright test -g "点击地图站点"
+  // 这条用例曾经偶发失败，根因就是下面那个等待缺失（见下方注释）。
+  if (process.env.PART2_SLOW_MAP) {
+    await page.route('**/geo/beijing.json', async (route) => {
+      await new Promise((r) => setTimeout(r, Number(process.env.PART2_SLOW_MAP)))
+      await route.continue()
+    })
+  }
   await page.goto('/')
   await waitCharts(page, 5)
 
-  // 主页在 1920×1080 下需要滚动才能看到地图面板（内容高于设计高度），先滚到位再点
+  // 主页在 1920×1080 下一屏放下，这里只是把地图面板滚进视口，避免点击坐标落在视口外
   await page.locator('.panel', { hasText: '北京市站点分布' }).scrollIntoViewIfNeeded()
 
-  // 触发方式说明：主页地图面板只有 300px 高，底图受宽高比限制仅约 260px 宽，8 个站点像素
-  // 互相贴近（见 docs/test/evidence/part2-2026-09-15/README.md §5），像素级点击会抖动。
+  // 底图是异步加载的：geo 到位前 mapReady=false，图表先退化成经纬度散点（没有 geo）。
+  // 不在这一步等，取实例就会拿到"没有 geo 的图表"——那是**硬失败**（evaluate 里 throw，
+  // 不会重试）。实测把底图人为延迟 1.5s 时，5 个 canvas 已就绪而 geo 还没到（3/3 轮），
+  // 所以这个窗口是真会踩到的，而不是理论上的。
+  await page.waitForFunction(
+    () => [...document.querySelectorAll('.chart')].some((d) => d.__echarts?.getOption()?.geo),
+    null,
+    { timeout: 20000 },
+  )
+
+  // 触发方式说明：地图面板高 380px，底图受宽高比限制宽度有限，站点像素互相贴近
+  // （见 docs/test/evidence/part2-2026-09-15/README.md §5），像素级点击会抖动。
   // 因此这里通过 ECharts 实例的事件通道触发 click —— 走的仍是完整链路：
   // chart.on('click') → EChart emit('chart-click') → HomeView.onStationClick → router.push。
   const target = await page.evaluate(() => {
@@ -201,4 +220,38 @@ test('四个视角子页统一使用 DataV 大屏件，且渲染无报错', asyn
     expect(await page.locator('.dv-border-box-8').count()).toBeGreaterThanOrEqual(3)
   }
   expect(errors).toEqual([])
+})
+
+test('两处容易误读的口径在页面上写清楚了', async ({ page }) => {
+  // ① 政府页「全城峰值负荷」是**当日**口径：接口 /gov/peak-load 只返回单日 24 点，
+  //    窗口内最大要更高（约 10%）。标题与提示必须能自证是哪一天，否则一定被问住。
+  await page.goto('/#/gov')
+  await expect(page.locator('.chart canvas')).toHaveCount(3)
+  await expect(page.locator('.kpi-label:has-text("全城峰值负荷")')).toContainText('当日')
+  const hint = await page.locator('.kpi-card:has-text("全城峰值负荷") .kpi-hint').innerText()
+  expect(hint).toMatch(/\d{4}-\d{2}-\d{2}/)
+  expect(hint).toContain('非窗口峰值')
+
+  // ② 企业页「新增」实为窗口内首单新客（不是注册数），当前批次恒为 0。
+  //    名字与说明都要写对，否则那条零线看着像数据坏了。
+  await page.goto('/#/enterprise')
+  await expect(page.locator('.chart canvas')).toHaveCount(4)
+  const growth = await page.evaluate(() => {
+    const chart = [...document.querySelectorAll('.chart')].find((c) =>
+      c.__echarts?.getOption()?.series?.some((s) => s.name === '窗口内首单新客'),
+    )
+    if (!chart) return null
+    const opt = chart.__echarts.getOption()
+    return {
+      names: opt.series.map((s) => s.name),
+      legend: opt.legend?.[0]?.data ?? null,
+      points: opt.series[0].data.length,
+    }
+  })
+  expect(growth).not.toBeNull()
+  expect(growth.names).toContain('窗口内首单新客')
+  expect(growth.names).toContain('日活充电用户')
+  expect(growth.legend).toContain('窗口内首单新客')
+  expect(growth.points).toBeGreaterThan(0)
+  await expect(page.locator('.chart-note')).toContainText('不是注册数')
 })

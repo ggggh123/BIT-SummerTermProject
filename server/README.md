@@ -115,7 +115,9 @@ python server/app.py
   `/api/enterprise/revenue-trend?days=90` 的逐日汇总**严格相等** —— 由
   `ads_reader.window_totals()` 单一口径产出，不存在两套算法。
 * **五状态之和 = 总桩数**、**快慢桩数之和 = 该站总桩数**：都由清洗后的桩维度聚合，
-  天然自洽（当前验证值：287 桩，其中 1 个站的状态字段非法被 R08 剔除）。
+  天然自洽（当前验证值：**251 桩 / 7 站**，`idle 175 + charging 52 + reserved 23 + fault 1 + restarting 0 = 251`）。
+  注意这与生成器 ODS 侧的 **8 站 / 288 桩**不同：PRL 清洗后进入 DWD/ADS 的是 7 站 251 桩
+  （`dim_stations` 里没有 3 号站），见 `part2/docs/evidence/2026-09-15-formal-full.json` 的 `dwdTables`。
 * **营收只统计 `completed` 订单**；`cancelled` 不进 ADS（口径见 `ads_meta.cleaningSource`）。
 * **距离**以天安门 `39.9087, 116.3975` 为参考点，haversine 后**保留 2 位小数**
   （前端 `userStationModels.test.mjs` / `viewModel.test.mjs` 按 2 位校验排序）。

@@ -21,6 +21,38 @@ export function buildRevenueTrendOption(points) {
   }
 }
 
+/**
+ * 用户增长与活跃。
+ *
+ * 「新增」的口径必须写在名字里：ADS 的 `ads_daily.new_user_cnt` 是
+ * **窗口内完成首单的用户数（首单新客）**，不是注册数（见 `ads_meta.newUserNote`）。
+ * 生成器里 4,985 个用户的注册时间全部早于业务窗口，所以这根柱在当前批次恒为 0；
+ * 若标成「新增用户」，看上去就像数据坏了。名称与页面说明都按真实口径写。
+ */
+export function buildUserGrowthOption(points) {
+  const rows = [...points].sort((a, b) => (a.date < b.date ? -1 : 1))
+  return {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['窗口内首单新客', '日活充电用户'] },
+    xAxis: { type: 'category', data: rows.map((p) => p.date.slice(5)), name: '日期' },
+    yAxis: { type: 'value', name: '人' },
+    series: [
+      { name: '窗口内首单新客', type: 'bar', data: rows.map((p) => p.newUsers ?? 0) },
+      {
+        name: '日活充电用户',
+        type: 'line',
+        smooth: true,
+        data: rows.map((p) => p.activeUsers ?? 0),
+      },
+    ],
+    meta: {
+      caliber: 'newUsers = 窗口内完成首单的新客（不是注册数）',
+      zeroNewUserDays: rows.filter((p) => (p.newUsers ?? 0) === 0).length,
+      days: rows.length,
+    },
+  }
+}
+
 /** 站点营收排行（横向条形，按营收降序，附客单价与利用率） */
 export function buildStationRevenueRankingOption(rows) {
   const sorted = [...rows].sort((a, b) => (b.revenueFen ?? 0) - (a.revenueFen ?? 0))

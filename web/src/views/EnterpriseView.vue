@@ -11,6 +11,7 @@ import {
   buildRevenueTrendOption,
   buildRfmOption,
   buildStationRevenueRankingOption,
+  buildUserGrowthOption,
 } from '@/lib/charts/enterprise'
 
 const data = ref(null)
@@ -43,18 +44,7 @@ const rankingOption = computed(() => (data.value ? buildStationRevenueRankingOpt
 const rfmOption = computed(() => (data.value ? buildRfmOption(data.value.rfm) : {}))
 const monthlyRows = computed(() => (data.value ? buildMonthlyRows(data.value.monthly) : []))
 const growthOption = computed(() =>
-  data.value
-    ? {
-        tooltip: { trigger: 'axis' },
-        legend: { data: ['新增用户', '日活充电用户'] },
-        xAxis: { type: 'category', data: data.value.userGrowth.map((p) => p.date.slice(5)) },
-        yAxis: { type: 'value', name: '人' },
-        series: [
-          { name: '新增用户', type: 'bar', data: data.value.userGrowth.map((p) => p.newUsers) },
-          { name: '日活充电用户', type: 'line', smooth: true, data: data.value.userGrowth.map((p) => p.activeUsers) },
-        ],
-      }
-    : {},
+  data.value ? buildUserGrowthOption(data.value.userGrowth) : {},
 )
 const summary = computed(() => {
   const rows = windowPoints.value
@@ -138,6 +128,10 @@ const summary = computed(() => {
     <div class="panel panel--dv">
       <DvFrame title="用户增长与活跃">
         <EChart v-if="data" :option="growthOption" />
+        <p class="chart-note">
+          「窗口内首单新客」＝窗口内完成首单的用户数，不是注册数（注册时间均在窗口之前，故本批为 0）；
+          日活为当日在站点产生订单的去重用户数。
+        </p>
       </DvFrame>
     </div>
   </section>

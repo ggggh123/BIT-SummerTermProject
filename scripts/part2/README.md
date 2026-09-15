@@ -71,3 +71,63 @@ bash scripts/part2/40-verify.sh                  # 验收
 - `env-check.sh`：21 项全过
 - `40-verify.sh`：12 项全过，其中 Spark on YARN 读 HDFS 成功，YARN 留下 `FINISHED/SUCCEEDED` 记录
 - 宿主机浏览器可直接访问 `http://<VM-IP>:9870/`（HDFS）与 `:8088/`（YARN）
+
+## 跑数据链路（50–53）：没有全局运行时的机器怎么跑官方链路
+
+官方入口 `part2/scripts/run_pipeline.sh` 依赖全局运行时 `/usr/local/ev-part2`（JDK 8 + Python 3.10，
+由 `part2/scripts/install_global_runtime.sh` 配合 sudo 安装）。成员机上往往**拿不到 sudo 口令**，
+装不了那一套，于是「官方链路在成员机上跑不起来」成了最常见的阻塞。
+
+下面四个脚本用一层 shim 把官方脚本对全局运行时的调用映射到本机既有工具链
+（JDK 17 / Hadoop 3.4.1 / Spark 3.5.7 + 自建 venv），**不改动仓库里任何官方脚本**：
+
+| 脚本 | 作用 | 是否需要 sudo |
+|---|---|---|
+| `50-install-shims.sh` | 装 `~/ev-shim/ev-part2` 与 `~/ev-shim/spark-submit-derby.sh`（把 Derby 元数据与 warehouse 落到本机磁盘，避免共享目录上的锁/权限问题） | 否 |
+| `51-run-prl.sh` | 跑 PRL 质量检测 + 清洗（Spark on YARN），产出 `$HDFS_ROOT/quality/batches/<run-id>/`；**不碰**正式 `$HDFS_ROOT/dwd` | 否 |
+| `52-publish-dwd.sh` | 把批次里的 `dwd/` 发布到 `$HDFS_ROOT/dwd` → `spark-sql -f dwd_contract.sql` 注册 Hive 外部表 → 4 张分区表 `MSCK REPAIR` → 打印各表行数 | 否 |
+| `53-run-dws-ads.sh` | 调官方 `part2/scml/scripts/run_dws_ads.sh` 跑 DWS/ADS，并打印 `ads_meta` 关键值 | 否 |
+
+完整顺序（在共享文件夹路径下执行，注意用 **`bash -l`**，否则 PATH 里没有 JDK/Hadoop/Spark）：
+
+```bash
+bash -l scripts/part2/50-install-shims.sh
+bash -l scripts/part2/51-run-prl.sh --extra --accept-draft   # 策略未冻结时官方跑法需要 --accept-draft
+bash -l scripts/part2/52-publish-dwd.sh                      # 默认用 51 记下的 last-run-id
+bash -l scripts/part2/53-run-dws-ads.sh --skip-reconcile     # 见下面「对账假报警」
+```
+
+**为什么 52 不能省**：`run_dws_ads.sh` **不会**执行 `dwd_contract.sql`。只把 DWD 传上 HDFS 就跑
+DWS/ADS，会直接报 `TABLE_OR_VIEW_NOT_FOUND ev_charging.dwd_station_hourly`；不 `MSCK REPAIR`
+则 4 张分区事实表查出来是 0 行。
+
+## 体检与取证（60–63）：数字从哪来，怎么当众重跑
+
+| 脚本 | 作用 | 在哪跑 |
+|---|---|---|
+| `60-status.sh` | 一键体检：5 个 Hadoop 守护进程 / 演示服务 HTTP + `dbPath` + KPI / HDFS 各层大小与条目数 / `ads.db` 的 `ads_meta` 与预测行数。只读，退出码 0=全正常 | 虚拟机 |
+| `61-dump-api.sh` | 抓全部 27 个契约端点的原始 JSON（无 curl 时自动回退 wget） | 虚拟机或宿主机 |
+| `62-capture-pages.mjs` | 进真实页面取每个图表**实际渲染的 option**（`EChart.vue` 把实例挂在 `.chart` 容器的 `__echarts` 上），并可选截图；输出 `NN-<page>.json` 与 `NN-<page>.png` | 宿主机（要 `web/node_modules` 的 playwright + Chrome） |
+| `63-ads-truth.py` | 从 `ads.db` 导出 ADS 真值（kpis/monthly/chargers/stations/districts/rfm/price/peak/quality/forecast 十段） | 任意有 python3 的机器 |
+
+三个取证脚本正好对应 `part2-metric-checklist.md` 抽验表的**三段取值**：ADS 真值（63）、接口值（61）、
+大屏显示值（62）。图里的数字用 `getOption()` 取而不是看截图读数：截图读数有误差也不可复现，
+而 option 就是图表渲染的那组数，可以随时重跑。
+
+```bash
+bash -l scripts/part2/60-status.sh
+bash -l scripts/part2/61-dump-api.sh
+node scripts/part2/62-capture-pages.mjs --out docs/test/evidence/part2-2026-09-15/screenshots
+python3 scripts/part2/63-ads-truth.py --out runtime/ads-truth.json
+```
+
+## 已知缺陷：`run_dws_ads.sh` 的内置对账会「假报警」
+
+第 5 步对账在新布局下必然报错（本机实测 24/30、6 项失败），**不是数据问题**：
+
+1. 小时表容差写死 0（15,073 vs 15,120，缺的 47 小时是 PRL 已声明的事实）；
+2. 它的「重算」走 SCML 的 Python 清洗口径（112,422 单 / 287 桩），与 PRL 清洗后的官方口径（97,804 单 / 251 桩）不可比；
+3. 找 DWD 时不认 `dt=` 分区目录。
+
+看干净产出用 `53-run-dws-ads.sh --skip-reconcile`，把对账结论单独记录，别让它掩盖真实产出。
+修复归属见 `docs/management/part2-defect-log.md`。
