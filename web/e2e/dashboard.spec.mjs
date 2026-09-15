@@ -146,3 +146,24 @@ test('主页版面：1920×1080 一屏放下，地图占据主视区', async ({ 
   // 整页在 1080 高度内放下（留 32px 容差给顶栏/页脚）
   expect(layout.pageScrollHeight).toBeLessThanOrEqual(layout.viewportHeight + 32)
 })
+
+test('四个视角子页统一使用 DataV 大屏件，且渲染无报错', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', (err) => errors.push(String(err)))
+  page.on('console', (msg) => msg.type() === 'error' && errors.push(msg.text()))
+
+  // [路由, 该页图表数]
+  const pages = [
+    ['/#/user', 4],
+    ['/#/station', 4],
+    ['/#/enterprise', 4],
+    ['/#/gov', 3],
+  ]
+  for (const [hash, charts] of pages) {
+    await page.goto(hash)
+    await expect(page.locator('.chart canvas')).toHaveCount(charts)
+    // 每页至少有 3 个 DataV 边框面板（子页统一观感）
+    expect(await page.locator('.dv-border-box-8').count()).toBeGreaterThanOrEqual(3)
+  }
+  expect(errors).toEqual([])
+})
