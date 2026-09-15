@@ -1,0 +1,64 @@
+{
+ "charts": [
+  {
+   "className": "chart tall",
+   "series": [
+    {
+     "name": "利用率",
+     "type": "line",
+     "data": "[27.8,19.4,16.7,11.1,13.9,19.4,44.4,72.2,97.2,94.4,72.2,69.4,61.1,58.3,52.8,58.3,75,88.9,97.2,97.2,69.4,61.1,41.7,38.9]",
+     "markLine": null,
+     "markPoint": null
+    }
+   ],
+   "xAxisData": "[\"00:00\",\"01:00\",\"02:00\",\"03:00\",\"04:00\",\"05:00\",\"06:00\",\"07:00\",\"08:00\",\"09:00\",\"10:00\",\"11:00\",\"12:00\",\"13:00\",\"14:00\",\"15:00\",\"16:00\",\"17:00\",\"18:00\",\"19:00\",\"20:00\",\"21:00\",\"22:00\",\"23:00\"]",
+   "legend": null
+  },
+  {
+   "className": "chart",
+   "series": [
+    {
+     "name": "桩结构",
+     "type": "pie",
+     "data": "[{\"name\":\"快充 120kW\",\"value\":14},{\"name\":\"慢充 30kW\",\"value\":22}]",
+     "markLine": null,
+     "markPoint": null
+    }
+   ],
+   "xAxisData": "null",
+   "legend": null
+  },
+  {
+   "className": "chart",
+   "series": [
+    {
+     "name": "累计充电次数",
+     "type": "bar",
+     "data": "[241,240,237,219,219]",
+     "markLine": null,
+     "markPoint": null
+    }
+   ],
+   "xAxisData": "null",
+   "legend": null
+  },
+  {
+   "className": "chart tall",
+   "series": [
+    {
+     "name": "站点覆盖",
+     "type": "scatter",
+     "data": "[{\"name\":\"朝阳区1号充电站\",\"district\":\"朝阳区\",\"chargerCount\":36,\"radius\":3.2,\"value\":[116.441954,39.894109],\"symbolSize\":22.5},{\"name\":\"海淀区2号充电站\",\"district\":\"海淀区\",\"chargerCount\":36,\"radius\":3.2,\"value\":[116.557169,39.950051],\"symbolSize\":22.5},{\"name\":\"通州区4号充电站\",\"district\":\"通州区\",\"chargerCount\":36,\"radius\":3.2,\"value\":[116.399969,39.988997],\"symbolSize\":22.5},{\"name\":\"大兴区5号充电站\",\"district\":\"大兴区\",\"chargerCount\":36,\"radius\":3.2,\"value\":[116.497118,39.771511],\"symbolSize\":22.5},{\"name\":\"朝阳区6号充电站\",\"district\":\"朝阳区\",\"chargerCount\":36,\"radius\":3.2,\"value\":[116.158089,39.868709],\"symbolSize\":22.5},{\"name\":\"海淀区7号充电站\",\"district\":\"海淀区\",\"chargerCount\":36,\"radius\":3.2,\"value\":[116.5694,39.925546],\"symbolSize\":22.5},{\"name\":\"丰台区8号充电站\",\"district\":\"丰台区\",\"chargerCount\":35,\"radius\":3.1,\"value\":[116.34466,39.915351],\"symbolSize\":21.875}]",
+     "markLine": null,
+     "markPoint": null
+    }
+   ],
+   "xAxisData": "null",
+   "legend": null
+  }
+ ],
+ "texts": [
+  "单站利用率时段曲线（%） 站点 朝阳区1号充电站 海淀区2号充电站 通州区4号充电站 大兴区5号充电站 朝阳区6号充电站 海淀区7号充电站 丰台区8号充电站",
+  "金额单位：元（后端为整数分，前端统一除 100）｜时间口径 +08:00 ISO 8601｜预测模块无结果时显示「暂无预测」"
+ ]
+}

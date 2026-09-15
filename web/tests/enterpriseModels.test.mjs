@@ -6,6 +6,7 @@ import {
   buildRevenueTrendOption,
   buildRfmOption,
   buildStationRevenueRankingOption,
+  buildUserGrowthOption,
 } from '../src/lib/charts/enterprise.js'
 
 import revenueTrend from './fixtures/enterprise_revenue-trend.json' with { type: 'json' }
@@ -69,4 +70,22 @@ test('用户增长：新增与日活均为非负数', () => {
   const points = userGrowth.data.points
   assert.equal(points.length, 30)
   assert.ok(points.every((p) => p.newUsers >= 0 && p.activeUsers >= 0))
+})
+
+test('用户增长：口径写进图例，且不为空数据渲染出 NaN', () => {
+  const opt = buildUserGrowthOption(userGrowth.data.points)
+  assertClean(opt)
+  // 「新增」实为窗口内首单新客（不是注册数）。名字写错会在答辩时被当成数据故障，
+  // 所以这里把口径钉在测试里。
+  assert.deepEqual(opt.series.map((s) => s.name), ['窗口内首单新客', '日活充电用户'])
+  assert.deepEqual(opt.legend.data, ['窗口内首单新客', '日活充电用户'])
+  assert.equal(opt.series[0].data.length, userGrowth.data.points.length)
+  assert.equal(opt.series[1].data.length, userGrowth.data.points.length)
+  assert.ok(opt.meta.caliber.includes('不是注册数'))
+  // 缺字段时按 0 处理，不能把 undefined 带进图表
+  const sparse = buildUserGrowthOption([{ date: '2026-09-14' }])
+  assertClean(sparse)
+  assert.deepEqual(sparse.series[0].data, [0])
+  assert.deepEqual(sparse.series[1].data, [0])
+  assert.equal(sparse.meta.zeroNewUserDays, 1)
 })

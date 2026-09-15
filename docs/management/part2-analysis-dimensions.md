@@ -3,7 +3,9 @@
 > 维护人：#1 王浩恩（PM）｜日期：2026-09-15
 > 老师要求原文：「使用 spark 进行数据清洗 数据分析，其中**分析的维度不少于 8 个**，**需要至少两个维度的数据对比分析**，使用 flask 进行 web 请求处理，获取数据，进行数据响应」
 > 用法：答辩问答直接照本表念；每行都给「来源表 → 接口 → 页面」三段证据，可当场点开页面核对。
-> 数据口径：正式规模（`runId=ads-20260915101224`，8 站 / 287 桩 / 112,422 单 / 90 天，窗口 2026-06-17→09-14）。
+> 数据口径：**官方 PRL 清洗链路的正式规模批**（`handoff/ads/ads.db`，`runId=ads-20260915145956`，
+> **7 站 / 251 桩 / 97,804 单 / 90 天**，窗口 2026-06-17→09-14）。
+> 上一版填的 8 站 / 287 桩 / 112,422 单是本地 Python 物化批，与官方 PRL 链路不是一套数据，已整体替换（详见 `part2-metric-checklist.md`）。
 
 ## 1. 分析维度（共 15 条，要求 ≥8）
 
@@ -37,15 +39,25 @@
 
 > 答辩口径建议：老师问"哪两个维度对比"，答 **A（快充/慢充）与 B（区/区）**，两者都能当场点开页面看数值，且字段在 ADS 表里可核对。
 
+> **维度 7（用户增长）的现状提醒**：`ads_daily.new_user_cnt` 整列为 0，新增用户曲线是一条贴地零线——
+> 生成器的 4,985 个用户注册时间全部早于业务窗口（`ads_meta.newUserNote`），窗口期内没有注册事件。
+> 答辩被问到这条线时按此说明，或先与 #4 定下口径（改标题为「窗口内首单新客」/ 让生成器在窗口内注入注册时间）。
+
 ## 3. 与"文件存储放 Hadoop"的对应（老师第 2 条）
 
-| 层 | HDFS 路径 | 现状（2026-09-15 11:00） | 产出方式 |
+| 层 | HDFS 路径 | 现状（2026-09-15 已全部由官方链路产出） | 产出方式 |
 |---|---|---|---|
-| ODS | `/ev-charging/ods` | **104.7 MB / 360 个 `dt=` 分区**（含 `manifest.json`、`injection_log.json`、`_SUCCESS`） | `part2/scml/scripts/hdfs_put_ods.sh`（正式规模） |
-| DWS | `/ev-charging/dws` | **3.9 MB**：`dws_station_day`/`dws_charger_day`/`dws_user_day`/`dws_region_day` + `manifest.json` | 本地物化后 `hdfs dfs -put` |
-| DWD / ADS | `/ev-charging/dwd`、`/ads` | 仍是 9-14 的旧数据 | **待官方 SparkSQL on YARN 路线**（`run_dws_ads.sh`），阻塞项：`handoff/dwd`（#3） |
+| ODS | `/ev-charging/ods` | **104.7 MB**：`ods_orders`/`ods_telemetry`/`ods_users`/`ods_chargers`/`ods_stations`/`ods_events`/`ods_station_hourly` + `manifest.json`、`injection_log.json`、`_SUCCESS` | `part2/scml/scripts/hdfs_put_ods.sh`（正式规模，`run_id=scml-20260914`） |
+| DWD | `/ev-charging/dwd` | **19.5 MB / 8 张**：`dwd_order_detail`、`dwd_station_hourly`、`dwd_telemetry_detail`、`dwd_event`、`dim_stations`、`dim_chargers`、`dim_users`、`dim_date` | **Spark on YARN** PRL 清洗（`application_1789453914196_0001`，712.83 秒） |
+| DWS | `/ev-charging/dws` | **1.0 MB / 4 张**：`dws_station_day`、`dws_charger_day`、`dws_user_day`、`dws_region_day` + `manifest.json` | SparkSQL `run_dws_ads.sh`（`dws_etl.sql`） |
+| ADS | `/ev-charging/ads` | **179.4 KB / 11 张 Parquet**：`ads_daily`、`ads_station`、`ads_station_day`、`ads_station_hourly`、`ads_charger`、`ads_charger_health`、`ads_district`、`ads_gov_service`、`ads_peak_hour`、`ads_station_ranking`、`ads_user_rfm` | SparkSQL `ads_etl.sql` + `export_ads_db.py` |
+| ADS（本地交接库） | `handoff/ads/ads.db` | **15 张表**：Spark 侧导出的业务表 + Python 侧旁路表（`ads_event`、`ads_quality_issue`、`ads_quality_table`、`ads_quality_meta`、`ads_meta`）+ 预测三表 | `export_ads_db.py`（Spark 侧指标 + Python 侧旁路） |
+| 质量批次 | `/ev-charging/quality/batches` | **961.6 MB**（每次清洗一批，含报告与隔离数据） | PRL `spark_quality_clean.py` |
 
-> 如实声明：当前大屏读取的 `handoff/ads/ads.db` 由 `build_local.py` 物化（与 SparkSQL 同口径的第二实现），正式链路（Spark on YARN 出 DWD/DWS/ADS + YARN 记录）在拿到 #3 的 `handoff/dwd` 后执行。
+> 如实声明：**DWD 及以下全部层现在都由官方 SparkSQL on YARN 链路产出，不再是本地物化**；
+> 但 `ads.db` 里的数据质量面板（`ads_quality_*`）仍由 `export_ads_db.py` 的 Python 旁路复算，
+> 其订单口径（112,422）与业务表（97,804）不同源，见 `part2-metric-checklist.md` 备注④。
+> 小时表另有 47 个小时缺口（expected 15,120 / actual 15,073），ML 侧已按整点网格对齐处理，见 `part2/ml/MODEL_REPORT.md` §12。
 
 ## 4. 版本基线（老师第 1、4 条）
 

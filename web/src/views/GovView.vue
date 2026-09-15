@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EChart from '@/components/EChart.vue'
+import DvFrame from '@/components/DvFrame.vue'
 import { fetchGroup } from '@/api/client'
 import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
@@ -63,47 +64,51 @@ const utilOption = computed(() => (data.value ? buildUtilizationFairnessOption(d
       <p class="kpi-hint">按单棵树年固碳 18kg 估算</p>
     </div>
     <div class="panel kpi-card">
-      <h2 class="kpi-label">全城峰值负荷</h2>
+      <h2 class="kpi-label">全城峰值负荷（当日）</h2>
       <p class="kpi-value">{{ peakOption.meta ? Math.round(peakOption.meta.peakLoadKw).toLocaleString('zh-CN') : '—' }}<span style="font-size: 14px"> kW</span></p>
-      <p class="kpi-hint">出现在 {{ peakOption.meta?.peakHour ?? '—' }}</p>
+      <p class="kpi-hint">出现在 {{ peakOption.meta?.date ?? '—' }} {{ peakOption.meta?.peakHour ?? '—' }}（接口按日返回，非窗口峰值）</p>
     </div>
   </section>
 
-  <section class="panel" style="margin-top: 16px">
-    <h2>行政区覆盖密度（桩数 / 每万人桩数）</h2>
-    <EChart v-if="data" :option="coverageOption" tall />
+  <section class="panel panel--dv" style="margin-top: 16px">
+    <DvFrame title="行政区覆盖密度（桩数 / 每万人桩数）">
+      <EChart v-if="data" :option="coverageOption" tall />
+    </DvFrame>
   </section>
 
   <section class="grid two" style="margin-top: 16px">
-    <div class="panel">
-      <h2>各区服务指标（订单 / 服务用户 / 平均等待）</h2>
-      <table class="data-table">
-        <thead>
-          <tr><th>行政区</th><th>订单量</th><th>服务用户</th><th>平均等待</th><th>人均单量</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in serviceRows" :key="r.district">
-            <td>{{ r.district }}</td>
-            <td>{{ r.orderCount.toLocaleString('zh-CN') }}</td>
-            <td>{{ r.servedUserCnt.toLocaleString('zh-CN') }}</td>
-            <td>{{ r.avgWaitMin }} 分钟</td>
-            <td>{{ r.ordersPerUser }}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="panel panel--dv">
+      <DvFrame title="各区服务指标（订单 / 服务用户 / 平均等待）">
+        <table class="data-table">
+          <thead>
+            <tr><th>行政区</th><th>订单量</th><th>服务用户</th><th>平均等待</th><th>人均单量</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in serviceRows" :key="r.district">
+              <td>{{ r.district }}</td>
+              <td>{{ r.orderCount.toLocaleString('zh-CN') }}</td>
+              <td>{{ r.servedUserCnt.toLocaleString('zh-CN') }}</td>
+              <td>{{ r.avgWaitMin }} 分钟</td>
+              <td>{{ r.ordersPerUser }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>设施利用率公平性（识别「建而不用」）</h2>
-      <EChart v-if="data" :option="utilOption" tall />
+    <div class="panel panel--dv">
+      <DvFrame title="设施利用率公平性（识别「建而不用」）">
+        <EChart v-if="data" :option="utilOption" tall />
+      </DvFrame>
     </div>
   </section>
 
-  <section class="panel" style="margin-top: 16px">
-    <h2>全城 24 小时负荷曲线（辅助电网调度）</h2>
-    <EChart v-if="data" :option="peakOption" tall />
-    <p v-if="carbon" class="note">
-      碳减排口径：{{ carbon.note }}；已校验「减排量 = 电量(MWh) × 因子」自洽：
-      {{ carbon.consistent ? '一致' : '不一致（需核对）' }}。
-    </p>
+  <section class="panel panel--dv" style="margin-top: 16px">
+    <DvFrame title="全城 24 小时负荷曲线（辅助电网调度）">
+      <EChart v-if="data" :option="peakOption" tall />
+      <p v-if="carbon" class="note">
+        碳减排口径：{{ carbon.note }}；已校验「减排量 = 电量(MWh) × 因子」自洽：
+        {{ carbon.consistent ? '一致' : '不一致（需核对）' }}。
+      </p>
+    </DvFrame>
   </section>
 </template>

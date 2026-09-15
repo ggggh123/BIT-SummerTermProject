@@ -1,0 +1,22 @@
+{
+ "home": {
+  "charts": 5,
+  "texts": 6
+ },
+ "user": {
+  "charts": 4,
+  "texts": 4
+ },
+ "station": {
+  "charts": 4,
+  "texts": 2
+ },
+ "enterprise": {
+  "charts": 4,
+  "texts": 6
+ },
+ "gov": {
+  "charts": 3,
+  "texts": 5
+ }
+}

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EChart from '@/components/EChart.vue'
+import DvFrame from '@/components/DvFrame.vue'
 import { fetchGroup } from '@/api/client'
 import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
@@ -10,6 +11,7 @@ import {
   buildRevenueTrendOption,
   buildRfmOption,
   buildStationRevenueRankingOption,
+  buildUserGrowthOption,
 } from '@/lib/charts/enterprise'
 
 const data = ref(null)
@@ -42,18 +44,7 @@ const rankingOption = computed(() => (data.value ? buildStationRevenueRankingOpt
 const rfmOption = computed(() => (data.value ? buildRfmOption(data.value.rfm) : {}))
 const monthlyRows = computed(() => (data.value ? buildMonthlyRows(data.value.monthly) : []))
 const growthOption = computed(() =>
-  data.value
-    ? {
-        tooltip: { trigger: 'axis' },
-        legend: { data: ['新增用户', '日活充电用户'] },
-        xAxis: { type: 'category', data: data.value.userGrowth.map((p) => p.date.slice(5)) },
-        yAxis: { type: 'value', name: '人' },
-        series: [
-          { name: '新增用户', type: 'bar', data: data.value.userGrowth.map((p) => p.newUsers) },
-          { name: '日活充电用户', type: 'line', smooth: true, data: data.value.userGrowth.map((p) => p.activeUsers) },
-        ],
-      }
-    : {},
+  data.value ? buildUserGrowthOption(data.value.userGrowth) : {},
 )
 const summary = computed(() => {
   const rows = windowPoints.value
@@ -90,48 +81,58 @@ const summary = computed(() => {
     </div>
   </section>
 
-  <section class="panel" style="margin-top: 16px">
-    <h2>
-      营收 / 订单 / 电量趋势
-      <span style="float: right; font-weight: 400; font-size: 13px">
-        <button v-for="d in [7, 30]" :key="d" :disabled="days === d" @click="days = d">近 {{ d }} 日</button>
-      </span>
-    </h2>
-    <EChart v-if="data" :option="trendOption" tall />
+  <section class="panel panel--dv" style="margin-top: 16px">
+    <DvFrame>
+      <h2 class="panel-heading">
+        营收 / 订单 / 电量趋势
+        <span class="panel-heading-extra">
+          <button v-for="d in [7, 30]" :key="d" :disabled="days === d" @click="days = d">近 {{ d }} 日</button>
+        </span>
+      </h2>
+      <EChart v-if="data" :option="trendOption" tall />
+    </DvFrame>
   </section>
 
   <section class="grid two" style="margin-top: 16px">
-    <div class="panel">
-      <h2>站点营收排行（元）</h2>
-      <EChart v-if="data" :option="rankingOption" tall />
+    <div class="panel panel--dv">
+      <DvFrame title="站点营收排行（元）">
+        <EChart v-if="data" :option="rankingOption" tall />
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>用户 RFM 分层（人）</h2>
-      <EChart v-if="data" :option="rfmOption" tall />
+    <div class="panel panel--dv">
+      <DvFrame title="用户 RFM 分层（人）">
+        <EChart v-if="data" :option="rfmOption" tall />
+      </DvFrame>
     </div>
   </section>
 
   <section class="grid two" style="margin-top: 16px">
-    <div class="panel">
-      <h2>月度经营汇总</h2>
-      <table class="data-table">
-        <thead>
-          <tr><th>月份</th><th>营收</th><th>电量</th><th>订单</th><th>单桩日均收益</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in monthlyRows" :key="r.month">
-            <td>{{ r.month }}</td>
-            <td>{{ formatFen(r.revenueFen) }}</td>
-            <td>{{ formatKwh(r.energyKwh) }}</td>
-            <td>{{ r.orderCount.toLocaleString('zh-CN') }}</td>
-            <td>{{ formatFen(r.revenuePerChargerFen) }}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="panel panel--dv">
+      <DvFrame title="月度经营汇总">
+        <table class="data-table">
+          <thead>
+            <tr><th>月份</th><th>营收</th><th>电量</th><th>订单</th><th>单桩日均收益</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in monthlyRows" :key="r.month">
+              <td>{{ r.month }}</td>
+              <td>{{ formatFen(r.revenueFen) }}</td>
+              <td>{{ formatKwh(r.energyKwh) }}</td>
+              <td>{{ r.orderCount.toLocaleString('zh-CN') }}</td>
+              <td>{{ formatFen(r.revenuePerChargerFen) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>用户增长与活跃</h2>
-      <EChart v-if="data" :option="growthOption" />
+    <div class="panel panel--dv">
+      <DvFrame title="用户增长与活跃">
+        <EChart v-if="data" :option="growthOption" />
+        <p class="chart-note">
+          「窗口内首单新客」＝窗口内完成首单的用户数，不是注册数（注册时间均在窗口之前，故本批为 0）；
+          日活为当日在站点产生订单的去重用户数。
+        </p>
+      </DvFrame>
     </div>
   </section>
 </template>

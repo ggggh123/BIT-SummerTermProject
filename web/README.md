@@ -89,21 +89,22 @@ PART2_BASE_URL=http://localhost:5000 npm run test:e2e         # 或指向本地 
 
 ### DataV 大屏件（老师要求第 5 条）
 
-依赖 **`@kjgl77/datav-vue3@1.7.4`**（DataV 的 Vue3 版），样式随包引入（`main.js` 里 `import '@kjgl77/datav-vue3/dist/style.css'`）。当前落在**主页大屏**：
+依赖 **`@kjgl77/datav-vue3@1.7.4`**（DataV 的 Vue3 版），样式随包引入（`main.js` 里 `import '@kjgl77/datav-vue3/dist/style.css'`）。当前**五个页面统一使用**（主页大屏 + 4 个视角子页；子页不套 `ScaleFrame`，因为设计上子页是响应式看板，只有主页做大屏等比缩放）：
 
 | 位置 | DataV 件 |
 |---|---|
-| 每个图表面板（营收趋势/桩状态/24h 负荷/利用率排行/北京地图） | `dv-border-box-8` 边框（封装在 `src/components/DvFrame.vue`） |
+| 每个面板（五页共 20+ 个：各页图表、数据质量、月度汇总表、各区服务指标表等） | `dv-border-box-8` 边框（封装在 `src/components/DvFrame.vue`） |
 | 面板标题右侧 | `dv-decoration-10` 装饰条 |
-| KPI 行下方 | `dv-decoration-10` 分隔条 |
-| 实时事件流 | **`dv-scroll-board`** 滚动榜单（替代原朴素列表） |
+| 主页 KPI 行下方 | `dv-decoration-10` 分隔条 |
+| 主页实时事件流 | **`dv-scroll-board`** 滚动榜单（替代原朴素列表） |
+| 带控件的标题（主页负荷站点选择器、充电站页站点选择器、企业页 7/30 日切换） | 保留为 `.panel-heading` + `.panel-heading-extra`，与边框共存 |
 
-E2E 里有一条专门断言它们真的渲染出来且有非零尺寸（`DataV 大屏件已渲染`）。ECharts 图表类型保持 5 类（bar/line/scatter/pie/heatmap）不变，DataV 负责大屏骨架与装饰。
+E2E 有两条断言它们真的渲染：`DataV 大屏件已渲染`（主页边框 ≥5 且尺寸非零、滚动榜单高度 >100px）与 `四个视角子页统一使用 DataV 大屏件`（子页边框 ≥3、图表数正确、控制台零报错）。ECharts 图表类型保持 5 类（bar/line/scatter/pie/heatmap）不变，DataV 负责大屏骨架与装饰。
 
 > 离线打包提醒：`node_modules` 现在多了 DataV（含 `@kjgl77/datav-vue3` 与其依赖），给离线机器准备环境时需整体重新打包；`dist` 已把 DataV 打进 bundle，演示机不需要 Node。
 
 ## 待办
 
-1. 当前正式 ADS 已合并 Spark MLlib 批次 `ml-20260915-111604`（`isBaseline=false`）；若后续重新构建 ADS 而未传入 forecast handoff，数仓脚本仍会按设计回退到 seasonal-naive，并在接口中如实标注，不能把回退批次当作当前正式演示结果。
-2. DataV 目前只用在主页大屏；4 个视角子页仍是普通面板，如需统一观感可把 `DvFrame` 铺到各子页（改动小，但要重跑 E2E 与截图）。
+1. 当前正式 ADS 已合并 Spark MLlib 批次 `ml-20260915-111604`（`isBaseline=false`）；若后续重新构建 ADS 而未传入 forecast handoff，数仓脚本仍会按设计回退到 seasonal-naive，并在接口中如实标注，不能把回退批次当作当前正式演示结果。**这条已经踩过一次**：2026-09-15 15:00 在 TimeMachine 上重建 `ads.db` 时没带 `FORECAST_HANDOFF`，预测又退回基线，需要重跑 ML 阶段再接回去。
+2. DataV 已铺到 4 个视角子页（本分支完成）；后续新增页面照 `DvFrame` 的用法包一层即可。
 3. 主页在 1920×1080 下已"一屏放下"（三列栅格 + 地图 380px 主视区）；若后续往主页加面板，先看 E2E 第 6 条的 `.scale-inner` 内容高 ≤1080 断言，避免又回到需要滚动。

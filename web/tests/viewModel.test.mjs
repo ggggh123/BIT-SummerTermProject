@@ -7,10 +7,11 @@ import { buildHomeViewModel } from '../src/lib/viewModel.js'
 import {
   buildLoadForecastOption,
   buildRankingOption,
-  buildRevenueOption,
   buildStationOption,
   buildStatusOption,
 } from '../src/lib/models.js'
+// 主页真正用的是这层 30 日薄适配，护栏要对准页面实际调用的构造器
+import { buildRevenueTrendOption30d } from '../src/lib/charts/overview.js'
 
 import kpis from './fixtures/overview_kpis.json' with { type: 'json' }
 import stations from './fixtures/overview_stations.json' with { type: 'json' }
@@ -25,8 +26,8 @@ const view = buildHomeViewModel({
   stations: stations.data,
   chargerStatus: chargerStatus.data,
   ranking: ranking.data,
-  // 与主页一致：接口给 90 天，页面固定取最近 7 天
-  revenueTrend: revenueTrend.data.points.slice(-7),
+  // 与主页一致：接口按 days 返回，页面固定取最近 30 天
+  revenueTrend: revenueTrend.data.points.slice(-30),
   load24h: load24h.data.points,
   forecast24h: forecast24h.data.points,
   events: [],
@@ -53,7 +54,7 @@ function assertCleanNumbers(node, path = 'option') {
 
 test('mock 接口数据被映射成 models.js 期望的字段', () => {
   assert.equal(view.stations.length, 8)
-  assert.equal(view.revenue7d.length, 7)
+  assert.equal(view.revenue7d.length, 30)
   assert.equal(view.stationRanking.length, 8)
   assert.equal(view.actualLoad24h.length, 8 * 24)
   assert.equal(view.forecast24h.length, 6 * 24)
@@ -62,14 +63,18 @@ test('mock 接口数据被映射成 models.js 期望的字段', () => {
 
 test('5 个图表 option 全部可生成且不含 undefined/NaN', () => {
   const options = {
-    revenue: buildRevenueOption(view),
+    revenue: buildRevenueTrendOption30d(view),
     status: buildStatusOption(view),
     ranking: buildRankingOption(view),
     station: buildStationOption(view),
     load: buildLoadForecastOption(view, view.stations[0].stationId),
   }
   for (const [name, option] of Object.entries(options)) assertCleanNumbers(option, name)
-  assert.equal(options.revenue.xAxis.data.length, 7)
+  // 主页营收趋势是「近 30 日」：标题、点数、横轴必须一致
+  assert.equal(options.revenue.series[0].name, '近 30 日营收')
+  assert.equal(options.revenue.series[0].data.length, 30)
+  assert.equal(options.revenue.xAxis.data.length, 30)
+  assert.equal(options.revenue.meta.days, 30)
   assert.equal(options.station.series[0].data.length, 8)
 })
 

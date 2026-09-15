@@ -7,7 +7,9 @@ export const ENDPOINTS = {
     chargerStatus: ['overview/charger-status'],
     load24h: ['overview/load-24h'],
     events: ['overview/events'],
-    revenueTrend: ['enterprise/revenue-trend', { days: 7 }],
+    // 《01》§3.1：主页营收趋势是「近 30 日」；此前这里写 days: 7，
+    // 视图层再 slice(-30) 也只能拿到 7 个点，图上 7 根柱子却挂着「近 30 日」的标题。
+    revenueTrend: ['enterprise/revenue-trend', { days: 30 }],
     ranking: ['enterprise/station-ranking'],
     forecast24h: ['forecast/24h'],
     quality: ['quality/summary'],

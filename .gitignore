@@ -41,6 +41,10 @@ web/dist/
 !docs/test/evidence/final-2026-09-08/*.log
 config.local.ini
 .env
+web/test-results/
+web/playwright-report/
+# 演示服务的运行日志与 PID（part2/scripts/start_part2.sh 写入；pid 不能被提交）
+/logs/
 
 # Python
 __pycache__/

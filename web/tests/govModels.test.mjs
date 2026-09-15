@@ -58,6 +58,9 @@ test('全城负荷：24 点且峰值元数据与最大值一致', () => {
   const max = Math.max(...opt.series[0].data)
   assert.equal(opt.meta.peakLoadKw, max)
   assert.ok(opt.series[0].markPoint.data.length === 1)
+  // 接口按「单日」返回，界面必须能说出这是哪一天——否则 KPI 的
+  //「全城峰值负荷」会被读成窗口口径（两者相差约 10%）
+  assert.equal(opt.meta.date, peakLoad.data.dt)
 })
 
 test('利用率公平性：按利用率升序并带全市均值参考线', () => {
