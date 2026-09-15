@@ -25,6 +25,35 @@ test('主页：5 个图表渲染 + KPI 有值 + 控制台零报错', async ({ pa
   expect(errors).toEqual([])
 })
 
+test('主页营收趋势确实是近 30 日（不是 7 日）', async ({ page }) => {
+  await page.goto('/')
+  await waitCharts(page, 5)
+
+  // 面板标题与图表实际点数必须一致：此前接口写死 days=7，
+  // 于是图上只有 7 根柱子却挂着「近 30 日」的标题。
+  const panel = page.locator('.dv-border-box-8:has-text("近 30 日营收趋势")')
+  await expect(panel).toHaveCount(1)
+
+  const series = await page.evaluate(() => {
+    const chart = [...document.querySelectorAll('.chart')].find(
+      (c) => c.__echarts?.getOption()?.series?.[0]?.name === '近 30 日营收',
+    )
+    if (!chart) return null
+    const opt = chart.__echarts.getOption()
+    return {
+      points: opt.series[0].data.length,
+      nonEmpty: opt.series[0].data.filter((v) => v !== null && v !== undefined).length,
+      labels: (opt.xAxis?.[0]?.data ?? []).length,
+      unit: opt.series[0].unit ?? null,
+    }
+  })
+
+  expect(series).not.toBeNull()
+  expect(series.points).toBe(30)
+  expect(series.nonEmpty).toBe(30)
+  expect(series.labels).toBe(30)
+})
+
 test('点击地图站点 → 跳转充电站视角且选中同一站点', async ({ page, request }) => {
   await page.goto('/')
   await waitCharts(page, 5)

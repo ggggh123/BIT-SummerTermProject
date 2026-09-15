@@ -41,6 +41,8 @@ web/dist/
 !docs/test/evidence/final-2026-09-08/*.log
 config.local.ini
 .env
+web/test-results/
+web/playwright-report/
 
 # Python
 __pycache__/
