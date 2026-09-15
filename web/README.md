@@ -2,6 +2,8 @@
 
 老师第二阶段要求：数据可视化：Flask + Vue + ECharts。本工程是其中的前端部分。
 
+> **改这个工程前先读 [`docs/management/part2-web-change-declaration.md`](../docs/management/part2-web-change-declaration.md)**：#1 的变更声明，列了改过哪些组件、E2E/抽验依赖的 DOM 与路由硬契约、以及"不要动"的地方（例如 `EChart.vue` 暴露的 `__echarts` 钩子、`ScaleFrame` 的内容驱动高度）。
+
 ## 复用原则（不做重复工作）
 
 第一阶段的 ECharts 逻辑**不重写、不复制**，通过 `src/lib/` 直接引用 `dashboard/assets/` 下的纯模块：
@@ -62,18 +64,42 @@ VITE_USE_MOCK=false VITE_API_BASE=http://<flask-host>:5000/api npm run build
 ## 测试
 
 ```bash
-# 前端 28 项（复用边界 5 + 企业 6 + 用户/充电站 8 + 政府 5 + 轮询 4）
-node --test web/tests/viewModel.test.mjs web/tests/enterpriseModels.test.mjs web/tests/userStationModels.test.mjs web/tests/govModels.test.mjs web/tests/polling.test.mjs
+# 前端纯函数单测 36 项（视图模型/图表 option/轮询调度/地图与缩放）
+node --test web/tests/*.test.mjs
 # 第一阶段回归 36 项
 node --test dashboard/tests/contracts.test.mjs dashboard/tests/models.test.mjs dashboard/tests/poller.test.mjs
 ```
 
-五页端到端渲染验收（Chrome headless）：主页 5 图 / 用户 4 图 / 充电站 4 图 / 企业 4 图 / 政府 3 图，控制台零报错。
+### 页面级 E2E（Playwright，补纯函数测不到的三条）
+
+`@playwright/test` 是 **devDependency，不参与 `npm run build`**；默认用系统已安装的 Chrome（`channel: 'chrome'`），不下载 Playwright 自带浏览器。
+
+```bash
+npm run test:e2e                                              # 默认打 http://192.168.88.131:5000（VM 演示栈需在跑）
+PART2_BASE_URL=http://localhost:5000 npm run test:e2e         # 或指向本地 Flask / vite preview
+```
+
+覆盖 4 条（`web/e2e/dashboard.spec.mjs`）：主页 5 图渲染且控制台零报错；**点击地图站点 → 跳转 `/#/station?station=<id>` 且充电站视角选中同一站**；**5s 轮询真的重绘**（拦截接口改值后页面数值随之变化）；**接口失败保留旧数据**并显示「数据已过期 / 数据加载失败」，不白屏。
+
+> 地图点击在测试里通过 ECharts 实例的事件通道触发（`inst.trigger('click', …)`），链路与真实点击一致（`chart.on('click')` → `emit` → `router.push`）；原因是主页地图面板偏扁、站点像素互相贴近，像素级点击结果不稳定，见 `docs/test/evidence/part2-2026-09-15/README.md` §5。
+
+### DataV 大屏件（老师要求第 5 条）
+
+依赖 **`@kjgl77/datav-vue3@1.7.4`**（DataV 的 Vue3 版），样式随包引入（`main.js` 里 `import '@kjgl77/datav-vue3/dist/style.css'`）。当前落在**主页大屏**：
+
+| 位置 | DataV 件 |
+|---|---|
+| 每个图表面板（营收趋势/桩状态/24h 负荷/利用率排行/北京地图） | `dv-border-box-8` 边框（封装在 `src/components/DvFrame.vue`） |
+| 面板标题右侧 | `dv-decoration-10` 装饰条 |
+| KPI 行下方 | `dv-decoration-10` 分隔条 |
+| 实时事件流 | **`dv-scroll-board`** 滚动榜单（替代原朴素列表） |
+
+E2E 里有一条专门断言它们真的渲染出来且有非零尺寸（`DataV 大屏件已渲染`）。ECharts 图表类型保持 5 类（bar/line/scatter/pie/heatmap）不变，DataV 负责大屏骨架与装饰。
+
+> 离线打包提醒：`node_modules` 现在多了 DataV（含 `@kjgl77/datav-vue3` 与其依赖），给离线机器准备环境时需整体重新打包；`dist` 已把 DataV 打进 bundle，演示机不需要 Node。
 
 ## 待办
 
-1. 北京 GeoJSON 底图（本地文件，不走 CDN）——主页站点图现在是经纬度散点。
-2. 与 #2 冻结 `src/api/endpoints.js` 的字段清单。
-3. 用户页「低拥堵推荐榜」等 #5 的 `ads_forecast_result` 就绪后接入（无结果显示「暂无预测」）。
-4. Flask 静态托管联调（`dist` 交 Flask 托管，单进程起全栈）。
-5. 主页 1920×1080 等比缩放（《01》§5.1 的 `transform: scale`；当前为响应式栅格）。
+1. 用户页「低拥堵推荐榜」等 #5 的 `handoff/forecast` 批次接进 `ads.db` 后即为真实预测（当前为 seasonal-naive 基线）。
+2. 主页版面重构：内容实际高约 1632 设计 px（>1080），现已改为"不裁切、可滚动"，但**大屏观感应在 1080 内排布**（建议按《01》§3.1 的三列栅格，把地图放大到主视区中央），详见 `docs/test/evidence/part2-2026-09-15/README.md` §5。
+3. DataV 目前只用在主页大屏；4 个视角子页仍是普通面板，如需统一观感可把 `DvFrame` 铺到各子页（改动小，但要重跑 E2E 与截图）。

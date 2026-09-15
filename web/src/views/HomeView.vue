@@ -2,7 +2,9 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import EChart from '@/components/EChart.vue'
+import DvFrame from '@/components/DvFrame.vue'
 import ScaleFrame from '@/components/ScaleFrame.vue'
+import { ScrollBoard, Decoration10 } from '@kjgl77/datav-vue3'
 import { fetchGroup } from '@/api/client'
 import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
@@ -115,6 +117,20 @@ const quality = computed(() => view.value?.quality ?? null)
 const totalQualityIssues = computed(() =>
   (quality.value?.issues ?? []).reduce((sum, i) => sum + (i.detected ?? 0), 0),
 )
+
+// DataV 滚动榜单：实时事件流（大屏件，替代朴素列表）
+const eventBoard = computed(() => ({
+  header: ['时间', '事件'],
+  data: events.value.slice(0, 30).map((e) => [e.createdAt?.slice(11, 16) ?? '', e.message ?? '']),
+  rowNum: 5,
+  headerBGC: 'rgba(30, 58, 95, 0.6)',
+  oddRowBGC: 'rgba(20, 38, 64, 0.45)',
+  evenRowBGC: 'rgba(14, 28, 50, 0.45)',
+  columnWidth: [80, 320],
+  align: ['center', 'left'],
+  index: false,
+  waitTime: 3000,
+}))
 </script>
 
 <template>
@@ -123,6 +139,7 @@ const totalQualityIssues = computed(() =>
   </p>
 
   <ScaleFrame>
+  <Decoration10 class="home-deco" />
   <section class="grid kpi" aria-label="核心指标">
     <div class="panel kpi-card">
       <h2 class="kpi-label">累计营收</h2>
@@ -147,65 +164,70 @@ const totalQualityIssues = computed(() =>
   </section>
 
   <section class="grid two" style="margin-top: 16px">
-    <div class="panel">
-      <h2>近 30 日营收趋势（元）</h2>
-      <EChart v-if="view" :option="revenueOption" />
+    <div class="panel panel--dv">
+      <DvFrame title="近 30 日营收趋势（元）">
+        <EChart v-if="view" :option="revenueOption" />
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>充电桩状态分布（个）</h2>
-      <EChart v-if="view" :option="statusOption" />
+    <div class="panel panel--dv">
+      <DvFrame title="充电桩状态分布（个）">
+        <EChart v-if="view" :option="statusOption" />
+      </DvFrame>
     </div>
   </section>
 
-  <section class="panel" style="margin-top: 16px">
-    <h2>
-      24 小时实际负荷与未来 24 小时预测（kW）
-      <label style="float: right; font-weight: 400; font-size: 13px">
-        站点
-        <select v-model.number="selectedStation">
-          <option v-for="s in stations" :key="s.stationId" :value="s.stationId">{{ s.name }}</option>
-        </select>
-      </label>
-    </h2>
-    <EChart v-if="view" :option="loadOption" tall />
-    <p v-if="forecastMissing" class="note">该站点暂无预测（模型未产出或未启用），仅显示实际负荷。</p>
+  <section class="panel panel--dv" style="margin-top: 16px">
+    <DvFrame>
+      <h2 class="panel-heading">
+        24 小时实际负荷与未来 24 小时预测（kW）
+        <label class="panel-heading-extra">
+          站点
+          <select v-model.number="selectedStation">
+            <option v-for="s in stations" :key="s.stationId" :value="s.stationId">{{ s.name }}</option>
+          </select>
+        </label>
+      </h2>
+      <EChart v-if="view" :option="loadOption" tall />
+      <p v-if="forecastMissing" class="note">该站点暂无预测（模型未产出或未启用），仅显示实际负荷。</p>
+    </DvFrame>
   </section>
 
   <section class="grid two" style="margin-top: 16px">
-    <div class="panel">
-      <h2>站点利用率排行（%）</h2>
-      <EChart v-if="view" :option="rankingOption" />
+    <div class="panel panel--dv">
+      <DvFrame title="站点利用率排行（%）">
+        <EChart v-if="view" :option="rankingOption" />
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>北京市站点分布（点击站点跳转充电站视角）</h2>
-      <EChart v-if="view" :option="stationOption" @chart-click="onStationClick" />
-      <p v-if="!mapReady" class="note">北京 GeoJSON 底图加载失败，已降级为经纬度散点（离线文件：public/geo/beijing.json）。</p>
+    <div class="panel panel--dv">
+      <DvFrame title="北京市站点分布（点击站点跳转充电站视角）">
+        <EChart v-if="view" :option="stationOption" @chart-click="onStationClick" />
+        <p v-if="!mapReady" class="note">北京 GeoJSON 底图加载失败，已降级为经纬度散点（离线文件：public/geo/beijing.json）。</p>
+      </DvFrame>
     </div>
   </section>
 
   <section class="grid two-even" style="margin-top: 16px">
-    <div class="panel">
-      <h2>数据质量（PySpark 探查与清洗对账）</h2>
-      <p v-if="!quality" class="note">暂无质量报告，等待 #3 的 quality_report.json。</p>
-      <template v-else>
-        <p class="note">10 类问题累计检出 {{ totalQualityIssues.toLocaleString('zh-CN') }} 条</p>
-        <ul class="event-list">
-          <li v-for="i in quality.issues" :key="i.rule">
-            <span class="time">{{ i.rule }}</span>
-            <span>{{ i.type }}</span>
-            <span style="margin-left: auto">注入 {{ i.injected }} / 检出 {{ i.detected }}</span>
-          </li>
-        </ul>
-      </template>
+    <div class="panel panel--dv">
+      <DvFrame title="数据质量（PySpark 探查与清洗对账）">
+        <p v-if="!quality" class="note">暂无质量报告，等待 #3 的 quality_report.json。</p>
+        <template v-else>
+          <p class="note">10 类问题累计检出 {{ totalQualityIssues.toLocaleString('zh-CN') }} 条</p>
+          <ul class="event-list">
+            <li v-for="i in quality.issues" :key="i.rule">
+              <span class="time">{{ i.rule }}</span>
+              <span>{{ i.type }}</span>
+              <span style="margin-left: auto">注入 {{ i.injected }} / 检出 {{ i.detected }}</span>
+            </li>
+          </ul>
+        </template>
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>实时事件流</h2>
-      <ul class="event-list">
-        <li v-for="e in events" :key="e.createdAt + e.eventType">
-          <span class="time">{{ e.createdAt?.slice(11, 16) }}</span>
-          <span>{{ e.message }}</span>
-        </li>
-      </ul>
+    <div class="panel panel--dv">
+      <DvFrame title="实时事件流（DataV 滚动榜单）">
+        <div class="event-board">
+          <ScrollBoard :config="eventBoard" />
+        </div>
+      </DvFrame>
     </div>
   </section>
   </ScaleFrame>
