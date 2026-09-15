@@ -97,9 +97,16 @@ def main() -> int:
     algos = [a.strip() for a in args.algos.split(",") if a.strip()]
     horizons = parse_horizons(args.horizons)
     rf_horizons = set(parse_horizons(args.rf_horizons))
+    if not horizons or any(horizon < 1 or horizon > 24 for horizon in horizons):
+        raise SystemExit("--horizons 必须是 1..24 的非空子集")
+    if not algos or any(algo not in {"gbt", "rf"} for algo in algos):
+        raise SystemExit("--algos 只支持 gbt,rf")
+    os.makedirs(os.path.dirname(os.path.abspath(args.metrics)), exist_ok=True)
 
     spark = SparkSession.builder.appName("part2-forecast-train").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
     spark.conf.set("spark.sql.shuffle.partitions", str(args.shuffle_partitions))
+    spark.conf.set("spark.sql.session.timeZone", "Asia/Shanghai")
     print(f"[train] master={spark.sparkContext.master} app={spark.sparkContext.applicationId}")
     print(f"[train] horizons={horizons[0]}..{horizons[-1]} ({len(horizons)} 个) 对照组={sorted(rf_horizons)}")
 
@@ -107,8 +114,15 @@ def main() -> int:
     feat = ft.add_naive_baseline(ft.build_features(raw, horizons), horizons)
 
     train_df, valid_df, test_df, bounds = ft.split_by_time(feat, horizons)
+    # 54 个模型共享同一组窗口特征；不缓存会为每个模型重复构造完整窗口计划。
+    train_df.cache()
+    valid_df.cache()
+    test_df.cache()
     n_raw = raw.count()
-    print(f"[train] rows raw={n_raw} train={train_df.count()} valid={valid_df.count()} test={test_df.count()}")
+    split_counts = (train_df.count(), valid_df.count(), test_df.count())
+    if not all(split_counts):
+        raise ValueError(f"时间切分产生空数据集：train/valid/test={split_counts}")
+    print(f"[train] rows raw={n_raw} train={split_counts[0]} valid={split_counts[1]} test={split_counts[2]}")
     print(f"[train] bounds={bounds}")
 
     run_id = dt.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -213,6 +227,9 @@ def main() -> int:
                   f"test_mae={e['models'][e['selected']['algo']]['test']['mae'] if e['selected']['algo'] != 'naive' else e['baseline']['test']['mae']} "
                   f"baseline_mae={e['baseline']['test']['mae']}")
 
+    train_df.unpersist()
+    valid_df.unpersist()
+    test_df.unpersist()
     spark.stop()
     print("TRAIN_DONE")
     return 0

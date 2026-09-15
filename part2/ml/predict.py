@@ -87,6 +87,37 @@ def latest_base(feat):
     return feat.withColumn("_rn", F.row_number().over(w)).filter(F.col("_rn") == 1).drop("_rn")
 
 
+def mark_peak_hours(frame, max_horizon: int):
+    """每站选唯一的最佳完整两小时窗口，并把窗口内两个点标为峰值。"""
+    ordered = Window.partitionBy("station_id").orderBy("horizon_h")
+    pair_average = F.avg("predicted_load_kw").over(ordered.rowsBetween(0, 1))
+    ranked = Window.partitionBy("station_id").orderBy(
+        F.col("_pair").desc_nulls_last(), F.col("horizon_h").asc()
+    )
+    return (
+        frame.withColumn(
+            "_pair",
+            F.when(F.col("horizon_h") < F.lit(max_horizon), pair_average),
+        )
+        .withColumn("_pair_rank", F.row_number().over(ranked))
+        .withColumn(
+            "_pair_start",
+            (F.col("_pair_rank") == 1) & F.col("_pair").isNotNull(),
+        )
+        .withColumn(
+            "_follows_pair_start",
+            F.coalesce(F.lag("_pair_start", 1).over(ordered), F.lit(False)),
+        )
+        .withColumn(
+            "is_peak",
+            F.when(F.col("_pair_start") | F.col("_follows_pair_start"), 1)
+            .otherwise(0)
+            .cast("int"),
+        )
+        .drop("_pair", "_pair_rank", "_pair_start", "_follows_pair_start")
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Part2 预测生成")
     ap.add_argument("--dwd", required=True)
@@ -100,10 +131,14 @@ def main() -> int:
     args = ap.parse_args()
 
     horizons = parse_horizons(args.horizons)
+    if not horizons or horizons != list(range(1, max(horizons) + 1)) or max(horizons) > 24:
+        raise SystemExit("预测输出要求 --horizons 从 1 连续覆盖到不超过 24")
     run_id = args.run_id or f"f-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
     spark = SparkSession.builder.appName("part2-forecast-predict").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
     spark.conf.set("spark.sql.shuffle.partitions", "8")
+    spark.conf.set("spark.sql.session.timeZone", "Asia/Shanghai")
     print(f"[predict] master={spark.sparkContext.master} app={spark.sparkContext.applicationId}")
     print(f"[predict] run_id={run_id} horizons={horizons[0]}..{horizons[-1]} ({len(horizons)} 个)")
 
@@ -135,7 +170,12 @@ def main() -> int:
     if not selection:
         print("[predict] 未提供 metrics.json，全部 horizon 使用 --default-algo")
 
-    frames, versions = [], {}
+    # 每个 horizon 的输出只有“启用站点数”行（正式数据为 5 行）。不能把 24 个
+    # PipelineModel 的 transform 直接 union 成一张超长 lineage：Spark 会把全部树模型
+    # 一次序列化给同一个 executor，低内存演示机在最终 write 时容易 OOM。这里在每个
+    # horizon 完成后只 collect 这个有明确上限的小结果，再构造 24h 轻量 DataFrame。
+    # collect 的不是 DWD 原始数据，最大规模为 station_count × 24（本项目 ≤ 192 行）。
+    prediction_rows, versions = [], {}
     for h in horizons:
         acc = base.select("station_id", "observed_at", "pile_count", "rated_power_kw")
         for name, out_col in TARGETS:
@@ -162,7 +202,7 @@ def main() -> int:
         acc = ft.clip_to_physical(acc, "predicted_load_kw", None, 0.0)
         acc = ft.clip_to_physical(acc, "predicted_busy_count", "pile_count", 0.0)
 
-        frames.append(
+        frame = (
             acc.withColumn("horizon_h", F.lit(h))
             .withColumn("forecast_at_col", F.col("observed_at") + F.expr(f"INTERVAL {h} HOURS"))
             .select(
@@ -170,10 +210,14 @@ def main() -> int:
                 "predicted_load_kw", "predicted_busy_count", "pile_count",
             )
         )
+        prediction_rows.extend(row.asDict(recursive=True) for row in frame.collect())
 
-    allp = frames[0]
-    for fr in frames[1:]:
-        allp = allp.unionByName(fr)
+    expected_prediction_rows = n_station * len(horizons)
+    if len(prediction_rows) != expected_prediction_rows:
+        raise ValueError(
+            f"预测行数异常：{len(prediction_rows)}，期望 {n_station} × {len(horizons)}"
+        )
+    allp = spark.createDataFrame(prediction_rows)
 
     # ---- 1) 占用整数化：仅做上下界裁剪，不做下界抬升 ----
     allp = allp.withColumn(
@@ -229,20 +273,10 @@ def main() -> int:
         )
     )
 
-    # ---- 4) is_peak：未来 24h 内负荷最大的「连续 2h」，该 2h 两个点都标 1 ----
-    w_st = Window.partitionBy("station_id").orderBy("horizon_h")
-    allp = allp.withColumn("_pair", F.avg("predicted_load_kw").over(w_st.rowsBetween(0, 1)))
-    best = allp.groupBy("station_id").agg(F.max("_pair").alias("_best"))
-    allp = allp.join(best, on="station_id", how="left")
-    allp = allp.withColumn("_pair_is_best", F.col("_pair") >= F.col("_best"))
-    allp = allp.withColumn(
-        "_second_of_best_pair",
-        F.coalesce(F.lead("_pair_is_best", 1).over(w_st), F.lit(False)),
-    )
-    allp = allp.withColumn(
-        "is_peak",
-        F.when(F.col("_pair_is_best") | F.col("_second_of_best_pair"), 1).otherwise(0).cast("int"),
-    )
+    # ---- 4) is_peak：最佳完整两小时窗口；并列时取最早窗口 ----
+    # mark_peak_hours 同时保证每个站点只产生两个连续峰值点，且不会把第 24
+    # 小时这个不完整的单点窗口误选为峰值。
+    allp = mark_peak_hours(allp, max(horizons))
 
     result = allp.select(
         F.lit(run_id).cast("string").alias("run_id"),
