@@ -92,6 +92,8 @@ def main() -> int:
                     help="对照组（非 GBT）只在这些步长上训练，控制总耗时")
     ap.add_argument("--seed", type=int, default=20260914)
     ap.add_argument("--shuffle-partitions", type=int, default=8)
+    ap.add_argument("--no-grid-align", action="store_true",
+                    help="跳过整点网格对齐（仅用于对照实验；缺口数据下会产生错位标签）")
     args = ap.parse_args()
 
     algos = [a.strip() for a in args.algos.split(",") if a.strip()]
@@ -111,7 +113,23 @@ def main() -> int:
     print(f"[train] horizons={horizons[0]}..{horizons[-1]} ({len(horizons)} 个) 对照组={sorted(rf_horizons)}")
 
     raw = ft.read_hourly(spark, args.dwd)
+    # ---- 缺口防护：先对齐整点网格，再填充外生特征，最后确定可用特征集 ----
+    # 行偏移语义仅在逐小时连续序列上成立；PRL 已明确 rowOffsetMlSafe 可能为 false。
+    preflight: dict = {"grid_align": not args.no_grid_align}
+    if not args.no_grid_align:
+        preflight["rows_before_align"] = int(raw.count())
+        raw = ft.align_hourly_grid(raw)
+    raw, preflight["fill_stats"] = ft.fill_missing_features(raw)
+
     feat = ft.add_naive_baseline(ft.build_features(raw, horizons), horizons)
+    # 特征可用性必须在**特征工程之后**判定：FEATURE_COLS 是派生列（lag_*/roll_*/hour…），
+    # 若在 raw 上求交集只会命中 temperature_c 等同名列，模型将静默退化为单特征训练。
+    feature_cols, preflight["dropped_feature_cols"] = ft.resolve_feature_cols(feat)
+    if not feature_cols:
+        raise ValueError("没有任何可用特征列，无法训练")
+    preflight["feature_cols"] = feature_cols
+    if preflight["dropped_feature_cols"]:
+        print(f"[train] 警告：整列为空，已剔除特征 {preflight['dropped_feature_cols']}")
 
     train_df, valid_df, test_df, bounds = ft.split_by_time(feat, horizons)
     # 54 个模型共享同一组窗口特征；不缓存会为每个模型重复构造完整窗口计划。
@@ -133,10 +151,11 @@ def main() -> int:
         "master": spark.sparkContext.master,
         "dwd_path": args.dwd,
         "rows": {"raw": n_raw},
+        "preflight": preflight,
         "split_bounds": bounds,
         "horizons_trained": horizons,
         "rf_horizons": sorted(rf_horizons),
-        "feature_cols": list(ft.FEATURE_COLS),
+        "feature_cols": list(feature_cols),
         "horizons": {},
     }
 
@@ -145,7 +164,7 @@ def main() -> int:
         for name, label_tpl, naive_tpl, upper in TARGETS:
             label = label_tpl.format(h=h)
             naive = naive_tpl.format(h=h)
-            cols = list(ft.FEATURE_COLS)
+            cols = list(feature_cols)
 
             tr = train_df.dropna(subset=[label] + cols)
             va = valid_df.dropna(subset=[label] + cols)
