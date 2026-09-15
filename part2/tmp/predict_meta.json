@@ -1,6 +1,6 @@
 {
-  "run_id": "f-20260915-092641",
-  "generated_at": "2026-09-15T09:36:49",
+  "run_id": "f-20260915-100721",
+  "generated_at": "2026-09-15T10:18:35",
   "horizons": [
     1,
     2,
@@ -31,6 +31,8 @@
   "stations": 8,
   "rows": 192,
   "peak_rows": 16,
+  "zero_load_rows": 9,
+  "busy_load_inconsistent_rows": 0,
   "model_versions": {
     "h1_load": "gbt@hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/load_h1_gbt",
     "h1_busy": "gbt@hdfs://pangxiangzhen01:8020/ev-charging/forecast/models/busy_h1_gbt",

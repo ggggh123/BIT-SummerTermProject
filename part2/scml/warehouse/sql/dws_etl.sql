@@ -101,15 +101,16 @@ SELECT hr.dt,
 -- DWS-2 充电桩 × 日
 -- -----------------------------------------------------------------------------
 -- 稀疏表：只对「当日有完成订单」或「当日有故障上报」的桩出行。
--- `charge_duration_sec` 用 `UNIX_TIMESTAMP` 差值而不是 `TIMESTAMPDIFF`，
--- 后者在字符串时间戳上会隐式转换，遇到边缘格式会返回 NULL。
+-- DWD 契约中的时间是 ISO 8601 +08:00 STRING。Spark 3.5 不能由
+-- `UNIX_TIMESTAMP(string)` 稳定解析该格式，必须先显式转换为 TIMESTAMP。
 INSERT OVERWRITE TABLE ev_charging.dws_charger_day
 WITH ord AS (
     SELECT dt,
            charger_id,
            COUNT(1)                                                  AS order_cnt,
            SUM(energy_kwh)                                           AS energy_kwh,
-           SUM(UNIX_TIMESTAMP(ended_at) - UNIX_TIMESTAMP(started_at)) AS charge_duration_sec
+           SUM(UNIX_TIMESTAMP(CAST(ended_at AS TIMESTAMP))
+               - UNIX_TIMESTAMP(CAST(started_at AS TIMESTAMP)))       AS charge_duration_sec
       FROM ev_charging.dwd_order_detail
      WHERE status = 'completed'
      GROUP BY dt, charger_id

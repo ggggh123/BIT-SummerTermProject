@@ -22,7 +22,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import sys
 from collections import Counter
 from datetime import datetime
@@ -52,6 +54,53 @@ SPARK_TABLES = [
     "ads_user_rfm",
     "ads_district",
 ]
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def build_ads_manifest(
+    *,
+    db_path: Path,
+    payload: dict[str, list[dict]],
+    meta: dict,
+    quality_issue: list[dict],
+    batch: dict | None,
+    data_window: dict,
+) -> dict:
+    """为 Spark 导出路径生成与本地同构路径一致的 ADS 交接清单。"""
+    return {
+        "contractVersion": "ads-flask-v1",
+        "runId": meta["runId"],
+        "generatedAt": meta["generatedAt"],
+        "source": "ods-handoff",
+        "sourceRunId": meta["sourceRunId"],
+        "dataWindow": data_window,
+        "database": db_path.name,
+        "databaseSha256": sha256_file(db_path),
+        "tables": {name: len(rows) for name, rows in sorted(payload.items())},
+        "quality": {
+            "injected": sum(int(row["injected"]) for row in quality_issue),
+            "detected": sum(int(row["detected"]) for row in quality_issue),
+        },
+        "forecast": {
+            "source": batch["model_version"] if batch else "none",
+            "isBaseline": bool(batch),
+        },
+    }
+
+
+def write_json_atomic(path: Path, payload: dict) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    os.replace(temporary, path)
 
 
 def read_parquet_tables(spark, root: str) -> dict[str, list[dict]]:
@@ -143,13 +192,38 @@ def main() -> int:
         telemetry_removed,
         generated_at,
     )
+    # 业务 ADS 站点来自正式 DWD，可能已有维度行因质量规则被剔除。预测必须只引用
+    # 仍存在于 ads_station 的站点，否则会生成无法下钻的孤儿预测点。
+    ads_station_ids = {int(row["station_id"]) for row in tables["ads_station"]}
+    forecast_stations = {
+        station_id: row for station_id, row in stations.items()
+        if station_id in ads_station_ids
+    }
+    forecast_hourly = [
+        row for row in hourly if int(row["station_id"]) in ads_station_ids
+    ]
     if args.forecast_handoff:
         batch, forecast_points, metrics = extras.load_forecast_handoff(
             args.forecast_handoff, generated_at
         )
     else:
-        batch, forecast_points = extras.build_baseline_forecast(hourly, stations, generated_at)
-        metrics = extras.build_baseline_metrics(hourly, stations) if batch else []
+        batch, forecast_points = extras.build_baseline_forecast(
+            forecast_hourly, forecast_stations, generated_at
+        )
+        metrics = (
+            extras.build_baseline_metrics(forecast_hourly, forecast_stations) if batch else []
+        )
+
+    enabled_station_ids = {
+        int(row["station_id"]) for row in tables["ads_station"]
+        if int(row.get("forecast_enabled") or 0) == 1
+    }
+    point_station_ids = {int(row["station_id"]) for row in forecast_points}
+    if point_station_ids != enabled_station_ids:
+        raise ValueError(
+            "预测交接站点与清洗后 forecast_enabled 站点不一致："
+            f"forecast={sorted(point_station_ids)} ads={sorted(enabled_station_ids)}"
+        )
 
     # ---- 窗口与总量：取自 Spark 侧产出的 ads_daily，保证 meta 与业务表自洽 ----
     daily = sorted(tables["ads_daily"], key=lambda row: row["dt"])
@@ -201,12 +275,26 @@ def main() -> int:
     db_path = args.out / "ads.db"
     write_ads_db(db_path, payload, load_schema())
 
+    data_window = {"start": window_start, "end": window_end, "days": len(daily)}
+    manifest = build_ads_manifest(
+        db_path=db_path,
+        payload=payload,
+        meta=meta,
+        quality_issue=quality_issue,
+        batch=batch,
+        data_window=data_window,
+    )
+    manifest_path = args.out / "ads_manifest.json"
+    write_json_atomic(manifest_path, manifest)
+
     result = {
         "ok": True,
         "database": str(db_path),
+        "manifest": str(manifest_path),
+        "databaseSha256": manifest["databaseSha256"],
         "runId": run_id,
         "tables": {name: len(rows) for name, rows in sorted(payload.items())},
-        "dataWindow": {"start": window_start, "end": window_end, "days": len(daily)},
+        "dataWindow": data_window,
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

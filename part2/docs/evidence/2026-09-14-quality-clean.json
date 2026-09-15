@@ -1,0 +1,283 @@
+{
+  "recorded_date": "2026-09-14",
+  "scope": "草案／PRL小夹具，不是正式全量验收",
+  "runtime_result": {
+    "contract_version": "0.1.0-draft",
+    "policy_version": "0.1.0-draft",
+    "contract_status": "DRAFT_PENDING_TL_SCML_PE_REVIEW",
+    "run_id": "prl-clean-20260914T071218Z-32272",
+    "source_run_id": "prl-fixture-v1",
+    "source_kind": "prl-test-fixture",
+    "data_cutoff": null,
+    "generated_at": "2026-09-14T15:13:52.180774+08:00",
+    "application_id": "application_1789369907188_0001",
+    "master": "yarn",
+    "spark": "3.5.7",
+    "driver_python": "3.10.21",
+    "worker_python": [
+      "3.10.21",
+      "3.10.21"
+    ],
+    "money_reference": {
+      "reference": "constant_station_price",
+      "relative_tolerance": "0.01",
+      "absolute_tolerance_fen": "1",
+      "repair_exact_yuan_factor": true,
+      "note": "仅为当前模拟数据提案：批次内站点单价恒定。真实变价订单须补充价格快照，不能用当前价回算历史账单。"
+    },
+    "output": "hdfs://localhost:8020/ev-charging/quality/batches/prl-clean-20260914T071218Z-32272",
+    "ubuntu22_verified": false,
+    "ok": true,
+    "scope": "draft-quality-clean-fixture",
+    "elapsed_seconds": 91.73,
+    "dwd_tables": 6,
+    "dwd_rows": 16,
+    "input_rows": 24,
+    "quarantined_rows": 7,
+    "assertions": [
+      {
+        "table": "dim_users",
+        "ok": true,
+        "rows": 2,
+        "keys": 2,
+        "row_ids": 2,
+        "violations": 0
+      },
+      {
+        "table": "dim_stations",
+        "ok": true,
+        "rows": 2,
+        "keys": 2,
+        "row_ids": 2,
+        "violations": 0
+      },
+      {
+        "table": "dim_chargers",
+        "ok": true,
+        "rows": 3,
+        "keys": 3,
+        "row_ids": 3,
+        "violations": 0
+      },
+      {
+        "table": "dwd_order_detail",
+        "ok": true,
+        "rows": 6,
+        "keys": 6,
+        "row_ids": 6,
+        "violations": 0
+      },
+      {
+        "table": "dwd_telemetry_detail",
+        "ok": true,
+        "rows": 1,
+        "keys": 1,
+        "row_ids": 1,
+        "violations": 0
+      },
+      {
+        "table": "dwd_station_hourly",
+        "ok": true,
+        "rows": 2,
+        "keys": 2,
+        "row_ids": 2,
+        "violations": 0
+      }
+    ]
+  },
+  "injection_comparison": {
+    "Q1": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    },
+    "Q2": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    },
+    "Q3": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    },
+    "Q4": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    },
+    "Q5": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    },
+    "Q6": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    },
+    "Q7": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    },
+    "Q8": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    },
+    "Q9": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    },
+    "Q10": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1,
+      "precision": 1
+    }
+  },
+  "cleaning_tables": {
+    "users": {
+      "before": 3,
+      "quarantined": 1,
+      "repaired_retained_rows": 0,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 1,
+      "after": 2,
+      "retention_rate": 0.6666666666666666,
+      "dwd_table": "dim_users"
+    },
+    "stations": {
+      "before": 3,
+      "quarantined": 1,
+      "repaired_retained_rows": 1,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 2,
+      "after": 2,
+      "retention_rate": 0.6666666666666666,
+      "dwd_table": "dim_stations"
+    },
+    "chargers": {
+      "before": 3,
+      "quarantined": 0,
+      "repaired_retained_rows": 0,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 0,
+      "after": 3,
+      "retention_rate": 1,
+      "dwd_table": "dim_chargers"
+    },
+    "orders": {
+      "before": 10,
+      "quarantined": 4,
+      "repaired_retained_rows": 2,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 6,
+      "after": 6,
+      "retention_rate": 0.6,
+      "dwd_table": "dwd_order_detail"
+    },
+    "telemetry": {
+      "before": 2,
+      "quarantined": 1,
+      "repaired_retained_rows": 0,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 1,
+      "after": 1,
+      "retention_rate": 0.5,
+      "dwd_table": "dwd_telemetry_detail"
+    },
+    "station_hourly": {
+      "before": 2,
+      "quarantined": 0,
+      "repaired_retained_rows": 0,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 0,
+      "after": 2,
+      "retention_rate": 1,
+      "dwd_table": "dwd_station_hourly"
+    },
+    "events": {
+      "before": 1,
+      "quarantined": 0,
+      "repaired_retained_rows": 0,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 0,
+      "after": 1,
+      "retention_rate": 1,
+      "dwd_table": null
+    }
+  },
+  "order_amount_reconciliation": {
+    "raw_declared_fen_numeric_sum": "6010.000000",
+    "quarantined_raw_numeric_sum": "4000.000000",
+    "retained_repair_delta_fen": "990.000000",
+    "output_amount_fen": "3000.000000",
+    "unparseable_or_missing_amount_rows": 0,
+    "balanced": true,
+    "note": "原始合计按原列声明的分口径统计，不代表真实营收；无法解析的金额不参与数值合计并单独计数。修正差额、隔离量均显式保留。"
+  },
+  "verification": {
+    "pure_python": {
+      "tests": 58,
+      "seconds": 3.604,
+      "passed": true,
+      "log": "/home/hushengyuan/ev-part2/evidence/quality-unit-tests-final-20260914.log",
+      "sha256": "4f4012e5aeec14540c002f4b9bd1567ac9bce8221fc942f86a7aa26ccdc228be"
+    },
+    "local_spark": {
+      "tests": 14,
+      "seconds": 65.575,
+      "passed": true,
+      "log": "/home/hushengyuan/ev-part2/evidence/quality-spark-regression-final-20260914.log",
+      "sha256": "9cf1ad95c81b212f059ca589b13cdbe0ae211704293a88f3d3ef86e5442825f0"
+    },
+    "yarn_log": {
+      "path": "/home/hushengyuan/ev-part2/evidence/prl-clean-20260914T071218Z-32272/spark.log",
+      "sha256": "ece28c172862ca6dcf0c4db6cfb4ff93610498fc4c463d88fbe2406eccfcaced"
+    },
+    "python_bundle_sha256": "57007a50cc4560e7ba9f6a25daee372c27d144fc8fba9d1a9ebd9fa9f48658e5",
+    "original_contract_sha256": "460d9528239fea2a9ff470264d0f1e9ca9d83ecf06374b8e59135d091a406f17",
+    "exported_manifest_sha256": "24523fc7f65f445cbc816fe3fc10e4e02f2023f892d753a5b9d39092fe004e06",
+    "export_path": "/home/hushengyuan/ev-part2/evidence/prl-clean-20260914T071218Z-32272/dwd-handoff",
+    "exported_hashes_reverified": true,
+    "services_stopped_after_run": true,
+    "formal_dwd_unchanged": true,
+    "remote_pushed": false
+  },
+  "known_limits": [
+    "#4 尚未确认契约，未收到正式交接数据。",
+    "本机 Ubuntu 25.04；未在 Ubuntu 22.04 集成机复验。",
+    "未运行百万级性能与 dt 物理分区测试。",
+    "dim_date 尚未提供；DWS/ADS、Flask、Web、ML 非本次验收范围。",
+    "单价、阈值、年份范围、审计列、报告和交接包字段仍是提案。"
+  ]
+}

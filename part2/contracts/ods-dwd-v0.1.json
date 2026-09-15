@@ -1,0 +1,217 @@
+{
+  "contract_version": "0.1.0-draft",
+  "status": "DRAFT_PENDING_TL_SCML_PE_REVIEW",
+  "source_schema": "database/schema.sql @ 1bd4b89",
+  "raw_read_type": "string",
+  "encoding": "UTF-8",
+  "csv_null": "\\N",
+  "metadata_columns": [
+    "_row_id"
+  ],
+  "time_zone": "Asia/Shanghai",
+  "canonical_time": "ISO8601 +08:00",
+  "money_unit": "fen",
+  "sample_kind": "prl-test-fixture",
+  "tables": {
+    "users": {
+      "source_table": "users",
+      "format": "csv",
+      "primary_key": [
+        "id"
+      ],
+      "columns": {
+        "id": "long",
+        "mobile": "string",
+        "nickname": "string",
+        "avatar_path": "string",
+        "balance_fen": "long",
+        "status": "string",
+        "registered_at": "timestamp"
+      },
+      "rename": {
+        "id": "user_id",
+        "mobile": "phone"
+      },
+      "dwd_table": "dim_users"
+    },
+    "stations": {
+      "source_table": "stations",
+      "format": "csv",
+      "primary_key": [
+        "id"
+      ],
+      "columns": {
+        "id": "long",
+        "name": "string",
+        "address": "string",
+        "latitude": "double",
+        "longitude": "double",
+        "price_fen_per_kwh": "long",
+        "forecast_enabled": "integer",
+        "created_at": "timestamp",
+        "district": "string"
+      },
+      "rename": {
+        "id": "station_id"
+      },
+      "dwd_table": "dim_stations"
+    },
+    "chargers": {
+      "source_table": "chargers",
+      "format": "csv",
+      "primary_key": [
+        "id"
+      ],
+      "columns": {
+        "id": "long",
+        "station_id": "long",
+        "code": "string",
+        "type": "string",
+        "power_kw": "double",
+        "status": "string",
+        "charge_count": "long",
+        "total_duration_sec": "long",
+        "updated_at": "timestamp"
+      },
+      "rename": {
+        "id": "charger_id",
+        "power_kw": "rated_power_kw"
+      },
+      "dwd_table": "dim_chargers"
+    },
+    "orders": {
+      "source_table": "orders",
+      "format": "csv",
+      "primary_key": [
+        "id"
+      ],
+      "columns": {
+        "id": "long",
+        "user_id": "long",
+        "charger_id": "long",
+        "status": "string",
+        "reserved_at": "timestamp",
+        "started_at": "timestamp",
+        "ended_at": "timestamp",
+        "energy_kwh": "decimal(18,6)",
+        "amount_fen": "long"
+      },
+      "rename": {
+        "id": "order_id"
+      },
+      "dwd_table": "dwd_order_detail",
+      "derived": [
+        "station_id (chargers.station_id)"
+      ]
+    },
+    "telemetry": {
+      "source_table": "telemetry",
+      "format": "csv",
+      "primary_key": [
+        "charger_id",
+        "recorded_at"
+      ],
+      "columns": {
+        "id": "long",
+        "charger_id": "long",
+        "recorded_at": "timestamp",
+        "power_kw": "double",
+        "energy_increment_kwh": "decimal(18,6)",
+        "event_type": "string"
+      },
+      "rename": {
+        "energy_increment_kwh": "energy_delta_kwh"
+      },
+      "dwd_table": "dwd_telemetry_detail"
+    },
+    "station_hourly": {
+      "source_table": "station_hourly_history",
+      "format": "csv",
+      "primary_key": [
+        "station_id",
+        "observed_at"
+      ],
+      "columns": {
+        "station_id": "long",
+        "observed_at": "timestamp",
+        "pile_count": "integer",
+        "rated_power_kw": "double",
+        "temperature_c": "double",
+        "is_holiday": "integer",
+        "busy_count": "integer",
+        "load_kw": "double"
+      },
+      "rename": {},
+      "dwd_table": "dwd_station_hourly"
+    },
+    "events": {
+      "source_table": "events",
+      "format": "jsonl",
+      "primary_key": [
+        "id"
+      ],
+      "columns": {
+        "id": "long",
+        "event_type": "string",
+        "entity_type": "string",
+        "entity_id": "long",
+        "message": "string",
+        "created_at": "timestamp"
+      },
+      "rename": {},
+      "dwd_table": null
+    }
+  },
+  "rules": [
+    {
+      "id": "Q1",
+      "name": "缺失值",
+      "policy": "按状态判断订单时间；数值空值不得静默变为零"
+    },
+    {
+      "id": "Q2",
+      "name": "重复记录",
+      "policy": "业务键去重；保留与剔除的记录标识必须确定"
+    },
+    {
+      "id": "Q3",
+      "name": "物理异常",
+      "policy": "电量非负、功率不超过额定；阈值待 #4 确认"
+    },
+    {
+      "id": "Q4",
+      "name": "时间格式混杂",
+      "policy": "统一时区；区分可解析的非标准格式与不可解析时间"
+    },
+    {
+      "id": "Q5",
+      "name": "逻辑矛盾",
+      "policy": "结束早于开始、占用超过桩数等"
+    },
+    {
+      "id": "Q6",
+      "name": "金额口径错误",
+      "policy": "Decimal 分/元转换；金额校验按状态及冻结的单价口径"
+    },
+    {
+      "id": "Q7",
+      "name": "孤儿引用",
+      "policy": "维度清洗后再校验外键，记录级联影响"
+    },
+    {
+      "id": "Q8",
+      "name": "非法字段值",
+      "policy": "手机号、状态、类型枚举等"
+    },
+    {
+      "id": "Q9",
+      "name": "经纬度越界",
+      "policy": "北京包围框仅作项目规则，不等同真实行政边界"
+    },
+    {
+      "id": "Q10",
+      "name": "文本脏数据",
+      "policy": "空白、全半角标准化；不可恢复乱码单独处置"
+    }
+  ]
+}

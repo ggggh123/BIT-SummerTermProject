@@ -163,63 +163,67 @@ const eventBoard = computed(() => ({
     </div>
   </section>
 
-  <section class="grid two" style="margin-top: 16px">
-    <div class="panel panel--dv">
-      <DvFrame title="近 30 日营收趋势（元）">
-        <EChart v-if="view" :option="revenueOption" />
-      </DvFrame>
+  <!-- 主视区：左（趋势+桩状态）/ 中（北京地图，主视区中心）/ 右（利用率+数据质量） -->
+  <section class="grid home-main">
+    <div class="dv-col">
+      <div class="panel panel--dv">
+        <DvFrame title="近 30 日营收趋势（元）">
+          <EChart v-if="view" :option="revenueOption" class="h150" />
+        </DvFrame>
+      </div>
+      <div class="panel panel--dv">
+        <DvFrame title="充电桩状态分布（个）">
+          <EChart v-if="view" :option="statusOption" class="h150" />
+        </DvFrame>
+      </div>
     </div>
-    <div class="panel panel--dv">
-      <DvFrame title="充电桩状态分布（个）">
-        <EChart v-if="view" :option="statusOption" />
-      </DvFrame>
-    </div>
-  </section>
 
-  <section class="panel panel--dv" style="margin-top: 16px">
-    <DvFrame>
-      <h2 class="panel-heading">
-        24 小时实际负荷与未来 24 小时预测（kW）
-        <label class="panel-heading-extra">
-          站点
-          <select v-model.number="selectedStation">
-            <option v-for="s in stations" :key="s.stationId" :value="s.stationId">{{ s.name }}</option>
-          </select>
-        </label>
-      </h2>
-      <EChart v-if="view" :option="loadOption" tall />
-      <p v-if="forecastMissing" class="note">该站点暂无预测（模型未产出或未启用），仅显示实际负荷。</p>
-    </DvFrame>
-  </section>
-
-  <section class="grid two" style="margin-top: 16px">
-    <div class="panel panel--dv">
-      <DvFrame title="站点利用率排行（%）">
-        <EChart v-if="view" :option="rankingOption" />
-      </DvFrame>
-    </div>
     <div class="panel panel--dv">
       <DvFrame title="北京市站点分布（点击站点跳转充电站视角）">
-        <EChart v-if="view" :option="stationOption" @chart-click="onStationClick" />
+        <EChart v-if="view" :option="stationOption" class="h380" @chart-click="onStationClick" />
         <p v-if="!mapReady" class="note">北京 GeoJSON 底图加载失败，已降级为经纬度散点（离线文件：public/geo/beijing.json）。</p>
       </DvFrame>
     </div>
+
+    <div class="dv-col">
+      <div class="panel panel--dv">
+        <DvFrame title="站点利用率排行（%）">
+          <EChart v-if="view" :option="rankingOption" class="h150" />
+        </DvFrame>
+      </div>
+      <div class="panel panel--dv">
+        <DvFrame title="数据质量（PySpark 探查与清洗对账）">
+          <p v-if="!quality" class="note">暂无质量报告，等待 #3 的 quality_report.json。</p>
+          <template v-else>
+            <p class="note">10 类问题累计检出 {{ totalQualityIssues.toLocaleString('zh-CN') }} 条</p>
+            <ul class="event-list quality-list">
+              <li v-for="i in quality.issues" :key="i.rule">
+                <span class="time">{{ i.rule }}</span>
+                <span>{{ i.type }}</span>
+                <span style="margin-left: auto">注入 {{ i.injected }} / 检出 {{ i.detected }}</span>
+              </li>
+            </ul>
+          </template>
+        </DvFrame>
+      </div>
+    </div>
   </section>
 
-  <section class="grid two-even" style="margin-top: 16px">
+  <!-- 底行：负荷与预测（宽）+ 实时事件流 -->
+  <section class="grid home-bottom">
     <div class="panel panel--dv">
-      <DvFrame title="数据质量（PySpark 探查与清洗对账）">
-        <p v-if="!quality" class="note">暂无质量报告，等待 #3 的 quality_report.json。</p>
-        <template v-else>
-          <p class="note">10 类问题累计检出 {{ totalQualityIssues.toLocaleString('zh-CN') }} 条</p>
-          <ul class="event-list">
-            <li v-for="i in quality.issues" :key="i.rule">
-              <span class="time">{{ i.rule }}</span>
-              <span>{{ i.type }}</span>
-              <span style="margin-left: auto">注入 {{ i.injected }} / 检出 {{ i.detected }}</span>
-            </li>
-          </ul>
-        </template>
+      <DvFrame>
+        <h2 class="panel-heading">
+          24 小时实际负荷与未来 24 小时预测（kW）
+          <label class="panel-heading-extra">
+            站点
+            <select v-model.number="selectedStation">
+              <option v-for="s in stations" :key="s.stationId" :value="s.stationId">{{ s.name }}</option>
+            </select>
+          </label>
+        </h2>
+        <EChart v-if="view" :option="loadOption" class="h220" />
+        <p v-if="forecastMissing" class="note">该站点暂无预测（模型未产出或未启用），仅显示实际负荷。</p>
       </DvFrame>
     </div>
     <div class="panel panel--dv">
