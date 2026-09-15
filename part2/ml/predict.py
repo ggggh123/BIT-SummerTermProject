@@ -43,6 +43,7 @@ import datetime as dt
 import json
 import os
 import sys
+from typing import Sequence
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -81,10 +82,17 @@ def load_selection(metrics_path: str, default_algo: str) -> dict:
     return sel
 
 
-def latest_base(feat):
-    """每个站点取最后一行作为预测起点，该行已带全部滞后 / 滚动特征。"""
+def latest_base(feat, required: Sequence[str] | None = None):
+    """每个站点取**最后一个特征完整**的观测行作为预测起点。
+
+    网格对齐后序列尾部可能出现缺口行（事实列为 NULL）。若不加约束，起点会落在
+    缺口行上：``VectorAssembler(handleInvalid="skip")`` 会跳过该行，预测列为 NULL，
+    再被物理约束兜底成 0 —— 静默产出错误结果且不报错。因此这里要求
+    ``required`` 中的滞后特征全部非空。
+    """
+    valid = feat if not required else feat.dropna(subset=list(required))
     w = Window.partitionBy("station_id").orderBy(F.col("observed_at").desc())
-    return feat.withColumn("_rn", F.row_number().over(w)).filter(F.col("_rn") == 1).drop("_rn")
+    return valid.withColumn("_rn", F.row_number().over(w)).filter(F.col("_rn") == 1).drop("_rn")
 
 
 def mark_peak_hours(frame, max_horizon: int):
@@ -128,6 +136,8 @@ def main() -> int:
     ap.add_argument("--horizons", default="1-24")
     ap.add_argument("--default-algo", default="gbt")
     ap.add_argument("--run-id", default="")
+    ap.add_argument("--no-grid-align", action="store_true",
+                    help="跳过整点网格对齐（仅用于对照实验；缺口数据下会产生错位特征）")
     args = ap.parse_args()
 
     horizons = parse_horizons(args.horizons)
@@ -143,11 +153,24 @@ def main() -> int:
     print(f"[predict] run_id={run_id} horizons={horizons[0]}..{horizons[-1]} ({len(horizons)} 个)")
 
     raw = ft.read_hourly(spark, args.dwd)
+    # ---- 缺口防护：与 train.py 完全一致的前置处理，保证训练与预测同源 ----
+    preflight: dict = {"grid_align": not args.no_grid_align}
+    if not args.no_grid_align:
+        preflight["rows_before_align"] = int(raw.count())
+        raw = ft.align_hourly_grid(raw)
+    raw, preflight["fill_stats"] = ft.fill_missing_features(raw)
+    feature_cols, preflight["dropped_feature_cols"] = ft.resolve_feature_cols(raw)
+    if not feature_cols:
+        raise SystemExit("没有任何可用特征列，无法预测")
+    preflight["feature_cols"] = feature_cols
+    if preflight["dropped_feature_cols"]:
+        print(f"[predict] 警告：整列为空，已剔除特征 {preflight['dropped_feature_cols']}")
+
     feat = ft.add_naive_baseline(ft.build_features(raw, horizons), horizons)
 
-    base = latest_base(feat).select(
+    base = latest_base(feat, feature_cols).select(
         *(c for c in ["station_id", "observed_at", "pile_count", "rated_power_kw"]
-          + list(ft.FEATURE_COLS)
+          + list(feature_cols)
           + [f"naive_load_h{h}" for h in horizons]
           + [f"naive_busy_h{h}" for h in horizons]
           if c in feat.columns)
@@ -310,7 +333,7 @@ def main() -> int:
                  "horizons": horizons, "t0": str(t0), "stations": n_station,
                  "rows": n_out, "peak_rows": peak_cnt, "zero_load_rows": zero_load,
                  "busy_load_inconsistent_rows": inconsistent, "model_versions": versions,
-                 "output": args.out},
+                 "preflight": preflight, "output": args.out},
                 fh, ensure_ascii=False, indent=2,
             )
     except OSError as exc:
