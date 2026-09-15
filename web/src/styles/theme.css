@@ -73,7 +73,7 @@ body {
 .chart.tall { height: 320px; }
 
 /* 主页 1920×1080 等比缩放容器 */
-.scale-host { position: relative; width: 100%; overflow: hidden; }
+.scale-host { position: relative; width: 100%; overflow: visible; }
 .scale-inner { transform-origin: top left; }
 .scale-inner .chart { height: 300px; }
 .scale-inner .chart.tall { height: 360px; }
