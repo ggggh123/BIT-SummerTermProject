@@ -19,7 +19,12 @@ const contentHeight = ref(props.baseHeight)
 
 function update() {
   const width = host.value?.clientWidth ?? window.innerWidth
-  const height = window.innerHeight - props.reservedHeight
+  // 预留高度按**真实占位**算：宿主顶部（顶栏等）+ 页脚 + 间距。
+  // 早期固定 120 时，顶栏+页脚实际约 175px，导致整页比视口高 ~55px，1920×1080 下仍要滚一下。
+  const top = (host.value?.getBoundingClientRect().top ?? 0) + window.scrollY
+  const footer = document.querySelector('.footnote')?.offsetHeight ?? 0
+  const reserved = Math.max(props.reservedHeight, Math.ceil(top + footer + 12))
+  const height = Math.max(320, window.innerHeight - reserved)
   scale.value = computeScale(width, height, props.baseWidth, props.baseHeight)
   contentHeight.value = Math.max(props.baseHeight, inner.value?.scrollHeight ?? props.baseHeight)
 }
