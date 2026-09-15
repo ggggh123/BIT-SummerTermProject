@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EChart from '@/components/EChart.vue'
+import DvFrame from '@/components/DvFrame.vue'
 import { fetchGroup } from '@/api/client'
 import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
@@ -68,32 +69,37 @@ const heatOption = computed(() => (data.value ? buildPeakHeatmapOption(data.valu
   </section>
 
   <section class="grid two" style="margin-top: 16px">
-    <div class="panel">
-      <h2>各站电价对比（元/度，含全市均价）</h2>
-      <EChart v-if="data" :option="priceOption" tall />
+    <div class="panel panel--dv">
+      <DvFrame title="各站电价对比（元/度，含全市均价）">
+        <EChart v-if="data" :option="priceOption" tall />
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>距离-价格散点（找「近且便宜」，点大小=空闲桩）</h2>
-      <EChart v-if="data" :option="distanceOption" tall />
+    <div class="panel panel--dv">
+      <DvFrame title="距离-价格散点（找「近且便宜」，点大小=空闲桩）">
+        <EChart v-if="data" :option="distanceOption" tall />
+      </DvFrame>
     </div>
   </section>
 
   <section class="grid two" style="margin-top: 16px">
-    <div class="panel">
-      <h2>各站当前空闲桩排行（个）</h2>
-      <EChart v-if="data" :option="idleOption" tall />
+    <div class="panel panel--dv">
+      <DvFrame title="各站当前空闲桩排行（个）">
+        <EChart v-if="data" :option="idleOption" tall />
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>充电时段热力图（站点 × 24h 占用桩数）</h2>
-      <EChart v-if="data" :option="heatOption" tall />
+    <div class="panel panel--dv">
+      <DvFrame title="充电时段热力图（站点 × 24h 占用桩数）">
+        <EChart v-if="data" :option="heatOption" tall />
+      </DvFrame>
     </div>
   </section>
 
-  <section class="panel" style="margin-top: 16px">
-    <h2>低拥堵推荐榜（选做）</h2>
-    <p class="note">
-      该模块依赖 #5 的 `ads_forecast_result`（未来 1h 预测空闲桩与拥堵等级），接口 `GET /api/forecast/recommend` 就绪后接入；
-      当前无预测结果时按《01》要求显示「暂无预测」，不伪造曲线。
-    </p>
+  <section class="panel panel--dv" style="margin-top: 16px">
+    <DvFrame title="低拥堵推荐榜（选做）">
+      <p class="note">
+        该模块依赖 #5 的 `ads_forecast_result`（未来 1h 预测空闲桩与拥堵等级），接口 `GET /api/forecast/recommend` 就绪后接入；
+        当前无预测结果时按《01》要求显示「暂无预测」，不伪造曲线。
+      </p>
+    </DvFrame>
   </section>
 </template>

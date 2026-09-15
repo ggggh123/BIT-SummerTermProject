@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EChart from '@/components/EChart.vue'
+import DvFrame from '@/components/DvFrame.vue'
 import { fetchGroup } from '@/api/client'
 import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
@@ -90,48 +91,54 @@ const summary = computed(() => {
     </div>
   </section>
 
-  <section class="panel" style="margin-top: 16px">
-    <h2>
-      营收 / 订单 / 电量趋势
-      <span style="float: right; font-weight: 400; font-size: 13px">
-        <button v-for="d in [7, 30]" :key="d" :disabled="days === d" @click="days = d">近 {{ d }} 日</button>
-      </span>
-    </h2>
-    <EChart v-if="data" :option="trendOption" tall />
+  <section class="panel panel--dv" style="margin-top: 16px">
+    <DvFrame>
+      <h2 class="panel-heading">
+        营收 / 订单 / 电量趋势
+        <span class="panel-heading-extra">
+          <button v-for="d in [7, 30]" :key="d" :disabled="days === d" @click="days = d">近 {{ d }} 日</button>
+        </span>
+      </h2>
+      <EChart v-if="data" :option="trendOption" tall />
+    </DvFrame>
   </section>
 
   <section class="grid two" style="margin-top: 16px">
-    <div class="panel">
-      <h2>站点营收排行（元）</h2>
-      <EChart v-if="data" :option="rankingOption" tall />
+    <div class="panel panel--dv">
+      <DvFrame title="站点营收排行（元）">
+        <EChart v-if="data" :option="rankingOption" tall />
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>用户 RFM 分层（人）</h2>
-      <EChart v-if="data" :option="rfmOption" tall />
+    <div class="panel panel--dv">
+      <DvFrame title="用户 RFM 分层（人）">
+        <EChart v-if="data" :option="rfmOption" tall />
+      </DvFrame>
     </div>
   </section>
 
   <section class="grid two" style="margin-top: 16px">
-    <div class="panel">
-      <h2>月度经营汇总</h2>
-      <table class="data-table">
-        <thead>
-          <tr><th>月份</th><th>营收</th><th>电量</th><th>订单</th><th>单桩日均收益</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in monthlyRows" :key="r.month">
-            <td>{{ r.month }}</td>
-            <td>{{ formatFen(r.revenueFen) }}</td>
-            <td>{{ formatKwh(r.energyKwh) }}</td>
-            <td>{{ r.orderCount.toLocaleString('zh-CN') }}</td>
-            <td>{{ formatFen(r.revenuePerChargerFen) }}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="panel panel--dv">
+      <DvFrame title="月度经营汇总">
+        <table class="data-table">
+          <thead>
+            <tr><th>月份</th><th>营收</th><th>电量</th><th>订单</th><th>单桩日均收益</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in monthlyRows" :key="r.month">
+              <td>{{ r.month }}</td>
+              <td>{{ formatFen(r.revenueFen) }}</td>
+              <td>{{ formatKwh(r.energyKwh) }}</td>
+              <td>{{ r.orderCount.toLocaleString('zh-CN') }}</td>
+              <td>{{ formatFen(r.revenuePerChargerFen) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </DvFrame>
     </div>
-    <div class="panel">
-      <h2>用户增长与活跃</h2>
-      <EChart v-if="data" :option="growthOption" />
+    <div class="panel panel--dv">
+      <DvFrame title="用户增长与活跃">
+        <EChart v-if="data" :option="growthOption" />
+      </DvFrame>
     </div>
   </section>
 </template>
