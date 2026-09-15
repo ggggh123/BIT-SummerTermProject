@@ -21,12 +21,13 @@ part2/scml/
 │   ├── run_scml_full.sh          全量生成 + 校验
 │   ├── run_scml_sample.sh        小样例生成 + 校验
 │   ├── validate_handoff.py       行数 / SHA-256 / 分区 / 注入日志校验
+│   ├── check_scml_delivery.py    ODS/DWS/ADS/DWD 状态一键体检
 │   ├── hdfs_put_ods.sh           ODS → HDFS
 │   ├── run_dim_date.sh           DWD 的 dim_date（Spark on YARN）
 │   └── run_dws_ads.sh            ★ DWS + ADS + 导出 + 对账（虚拟机一键）
 ├── warehouse/                    ★ DWS/ADS 全部加工与导出，见 warehouse/README.md
 ├── contracts/handoff_contract.md ODS/DWD/DWS/ADS 的接口契约（含 DWD 字段清单）
-├── tests/                        38 项单测
+├── tests/                        40 项单测
 └── handoff/                      交接包落盘位置（被 .gitignore 忽略）
 ```
 
@@ -59,6 +60,10 @@ bash scripts/hdfs_put_ods.sh           # 可选：入 HDFS
 python3 warehouse/jobs/build_local.py --ods handoff/ods --dws handoff/dws --ads handoff/ads
 python3 warehouse/jobs/reconcile.py   --ods handoff/ods --dws handoff/dws --ads handoff/ads/ads.db
 # → 30 项，通过 29，跳过 1（D 组待 #3 的 DWD）  [OK] 对账全绿
+python3 scripts/check_scml_delivery.py --ods handoff/ods --dws handoff/dws --ads handoff/ads
+# → SCML delivery: ready
+python3 scripts/check_scml_delivery.py --ods handoff/ods --dws handoff/dws --ads handoff/ads --require-full
+# → 正式联调/答辩前使用；会拒绝 `prl-test-fixture` 小样例，要求 `ods-handoff` + 144 条预测点
 ```
 
 **虚拟机（伪分布式 Hadoop + Spark，出 YARN 记录）**
@@ -74,7 +79,7 @@ bash scripts/run_dws_ads.sh           # 或先 --dry-run 看要执行的 SQL
 ### 自测
 
 ```bash
-python3 -m unittest discover -s tests -v      # 38 项
+python3 -m unittest discover -s tests -v      # 40 项
 ```
 
 ---
