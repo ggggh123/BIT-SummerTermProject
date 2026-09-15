@@ -2,6 +2,8 @@
 
 老师第二阶段要求：数据可视化：Flask + Vue + ECharts。本工程是其中的前端部分。
 
+> **改这个工程前先读 [`docs/management/part2-web-change-declaration.md`](../docs/management/part2-web-change-declaration.md)**：#1 的变更声明，列了改过哪些组件、E2E/抽验依赖的 DOM 与路由硬契约、以及"不要动"的地方（例如 `EChart.vue` 暴露的 `__echarts` 钩子、`ScaleFrame` 的内容驱动高度）。
+
 ## 复用原则（不做重复工作）
 
 第一阶段的 ECharts 逻辑**不重写、不复制**，通过 `src/lib/` 直接引用 `dashboard/assets/` 下的纯模块：
