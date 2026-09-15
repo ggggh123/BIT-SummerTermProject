@@ -21,7 +21,8 @@ ODS（#4 交接包，1,162,576 行）
 可以在不启动 Hadoop 的演示模式下直接打开已物化 ADS：
 
 ```bash
-cd /mnt/hgfs/Desktop/SummerTermProject/worktrees/part2-prl
+# 下同：cd 到**你自己的仓库根**即可（本仓库脚本一律从自身位置推导根目录，无需改任何路径）
+cd "$(git rev-parse --show-toplevel)"
 
 # handoff/ads/ 为当前机器生成的交付数据（受 .gitignore 保护，不提交大库）
 PART2_SKIP_HADOOP=1 bash part2/scripts/start_part2.sh
@@ -74,7 +75,7 @@ PART2_SKIP_HADOOP=1 ADS_DB=/absolute/path/ads.db PART2_PORT=5051 \
 从仓库根目录执行。`ev-part2` 是本机已配置好的 Java/Hadoop/Spark/Python 运行时包装器。
 
 ```bash
-cd /mnt/hgfs/Desktop/SummerTermProject/worktrees/part2-prl
+cd "$(git rev-parse --show-toplevel)"   # 你的仓库根
 
 # Python 单元与本地 Spark 回归
 ev-part2 python -m unittest discover -s part2/tests -p 'test_*.py' -v

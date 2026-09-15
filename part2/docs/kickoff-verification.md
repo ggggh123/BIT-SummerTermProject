@@ -6,6 +6,9 @@
 
 工作区：`/mnt/hgfs/Desktop/SummerTermProject/worktrees/part2-prl`；本地分支 `feat/part2-prl`，基于远端 dev `1bd4b89f4049b3b735fd2bc5d29e40092cc12bba`。本轮未推送远端，未修改第一阶段其他工作区。
 
+> **说明（2026-09-15 补注）**：上面记录的是当时那台机器的实际工作树路径，属**历史留档**，其他人不必照此修改——仓库内脚本一律从自身位置推导根目录（如 `run_pipeline.sh` 的 `script_dir/../..`），在任何机器上 `cd` 到自己的仓库根即可。
+> 该记录中「**Ubuntu 22.04 尚未复验**」这一结论已于 2026-09-15 由集成机（`niyujun01`，Ubuntu 22.04.3）完成复验：使用同一份 ODS 交接包（seed `20260914`，1,162,576 行）在 Spark on YARN 上产出 DWD 7 表，详见 `part2/plans/10-主线整合记录.md` §4 与 `part2/docs/evidence/2026-09-15-integration-host-ubuntu2204.json`。
+
 ## 已验证
 
 | 项目 | 结果／证据 |

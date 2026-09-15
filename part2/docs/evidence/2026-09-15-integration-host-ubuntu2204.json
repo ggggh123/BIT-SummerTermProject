@@ -1,0 +1,70 @@
+{
+  "ok": true,
+  "scope": "integration-host-ubuntu2204",
+  "ubuntu22_verified": true,
+  "os": "Ubuntu 22.04.3 LTS",
+  "python": "/usr/bin/python3",
+  "expected": {
+    "java": "17",
+    "hadoop": "3.4.1",
+    "spark": "3.5.7",
+    "python": "3.8-3.11"
+  },
+  "checks": [
+    {
+      "name": "架构",
+      "ok": true,
+      "detail": "x86_64"
+    },
+    {
+      "name": "Python（3.8–3.11 或显式指定）",
+      "ok": true,
+      "detail": "Python 3.10.12"
+    },
+    {
+      "name": "Java（基线 17）",
+      "ok": true,
+      "detail": "含 17"
+    },
+    {
+      "name": "Hadoop（基线 3.4.1）",
+      "ok": true,
+      "detail": "Hadoop 3.4.1"
+    },
+    {
+      "name": "Spark",
+      "ok": true,
+      "detail": "version 3.5.7"
+    },
+    {
+      "name": "Python 可直接导入 PySpark",
+      "ok": true,
+      "detail": "3.5.7"
+    },
+    {
+      "name": "五个守护进程",
+      "ok": true,
+      "detail": [
+        "org.apache.hadoop.hdfs.server.datanode.DataNode",
+        "org.apache.hadoop.hdfs.server.namenode.NameNode",
+        "org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode",
+        "org.apache.hadoop.yarn.server.nodemanager.NodeManager",
+        "org.apache.hadoop.yarn.server.resourcemanager.ResourceManager"
+      ]
+    },
+    {
+      "name": "HDFS 可读",
+      "ok": true,
+      "detail": "Found 7 items\ndrwxr-xr-x   - hadoop supergroup          0 2026-09-14 17:24 /ev-charging/_health\ndrwxr-xr-x   - hadoop supergroup          0 2026-09-15 11:35 /ev-charging/ads\ndrwxr-xr-x   - hadoop supergroup          0 2026-09-14 16:36 /ev-charging/dwd\ndrwxr-xr-x   - hadoop supergroup          0 2026-09-15 11:35 /ev-charging/dws\ndrwxr-xr-x   - hadoop supergroup          0 2026-09-14 16:36 /ev-charging/forecast\ndrwxr-xr-x   - hadoop supergroup          0 2026-09-15 15:20 /ev-charging/ods\ndrwxr-xr-x   - hadoop supergroup          0 2026-09-15 15:39 /ev-charging/quality"
+    },
+    {
+      "name": "YARN API",
+      "ok": true,
+      "detail": {
+        "state": "STARTED",
+        "hadoopVersion": "3.4.1",
+        "resourceManagerVersion": "3.4.1"
+      }
+    }
+  ]
+}

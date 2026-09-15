@@ -15,7 +15,7 @@
 从本机工作树执行：
 
 ```bash
-cd /mnt/hgfs/Desktop/SummerTermProject/worktrees/part2-prl
+cd "$(git rev-parse --show-toplevel)"   # 你的仓库根
 ev-part2 python -m unittest discover -s part2/tests -p 'test_*.py' -v
 ev-part2 python -m unittest part2.tests.spark_checks -v
 ev-part2 start

@@ -4,6 +4,7 @@
 """
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from pyspark.sql import SparkSession, functions as F, types as T
@@ -33,8 +34,17 @@ def main():
             raise ValueError("验收证据要求 --master yarn，不能用 local 冒充")
         spark.sparkContext.setLogLevel("WARN")
         worker_versions = spark.sparkContext.parallelize([1, 2], 2).map(worker_version).collect()
-        if set(worker_versions) != {"3.10.21"} or sys.version.split()[0] != "3.10.21":
-            raise ValueError("driver 与 worker 必须均使用已锁定的 Python 3.10.21")
+        # 不锁定具体小版本：验收要求是「driver 与各 worker 使用同一解释器」，
+        # 而不是某个固定补丁号（22.04 用系统 3.10.x，25.04 可能用自建 3.10/3.11）。
+        driver_python = sys.version.split()[0]
+        if len(set(worker_versions)) != 1 or driver_python != worker_versions[0]:
+            raise ValueError(
+                f"driver 与 worker 必须使用同一 Python 解释器：driver={driver_python}, worker={sorted(set(worker_versions))}"
+            )
+        # 可选强校验：需要固定版本时设 EV_PART2_EXPECT_PYTHON=<版本>
+        expected_python = os.environ.get("EV_PART2_EXPECT_PYTHON")
+        if expected_python and driver_python != expected_python:
+            raise ValueError(f"期望 Python {expected_python}，实际 {driver_python}")
         profiles = []
         for item in manifest["files"]:
             if "table" not in item:
