@@ -634,3 +634,89 @@ echo "通过 $pass 项，失败 $fail 项"
 - §5.5 / §5.6 / §6 的环境变量按本记录采用**全局 `/etc/profile.d/hadoop-env.sh`** 方案（原因见 §5.5 说明），其他机器请照此执行，以保证 `check_env.sh` 与跨机脚本行为一致；
 - 本机内存仅 7.7 GiB，已按 §5.7(7) 设置 YARN 内存上限 4096 MB，并按 §10.2 限制 Spark executor/driver 为 2g；内存更充裕的机器可忽略；
 - 本机 `/etc/hosts` 为 `192.168.59.128 niyujun01`。若虚拟机 DHCP 更换 IP，需同步更新该行（或绑定静态 IP），否则 `hdfs://niyujun01:8020` 会失联。
+
+---
+
+## 12. 附加组件：Node.js（老师要求 Node 23 及以上）
+
+> 老师后续下发要求「nodejs 使用 23 及以上版本，前端使用 vue3」。前端工程 Vue **3.5.13** 已达标，Node 需从 20 升到 23+。
+
+### 12.1 安装方式：官方 tarball（与 JDK/Hadoop/Spark 风格一致，便于离线分发）
+
+```bash
+# 1) 下载（清华镜像，约 30 MB）
+cd /tmp
+curl -LO https://mirrors.tuna.tsinghua.edu.cn/nodejs-release/v23.11.1/node-v23.11.1-linux-x64.tar.xz
+
+# 2) 解压到 /usr/local/node
+sudo rm -rf /usr/local/node /usr/local/node-v23.11.1-linux-x64
+sudo tar -xJf node-v23.11.1-linux-x64.tar.xz -C /usr/local
+sudo mv /usr/local/node-v23.11.1-linux-x64 /usr/local/node
+sudo chown -R root:root /usr/local/node
+
+# 3) 软链接（/usr/local/bin 优先级高于 NodeSource 装在 /usr/bin 的旧版）
+sudo ln -sf /usr/local/node/bin/node /usr/local/bin/node
+sudo ln -sf /usr/local/node/bin/npm  /usr/local/bin/npm
+sudo ln -sf /usr/local/node/bin/npx  /usr/local/bin/npx
+
+# 4) 写入全局 PATH（login shell 生效）
+echo "export PATH=/usr/local/node/bin:\$PATH" | sudo tee -a /etc/profile.d/hadoop-env.sh
+
+# 5) 验证
+node -v    # 期望 v23.11.1
+npm -v     # 期望 10.9.2
+```
+
+### 12.2 升级后必须复验前端
+
+```bash
+cd web
+rm -rf node_modules          # Node 大版本变更后必须重装依赖
+npm ci --no-audit --no-fund
+npm run build                # 期望：✓ built in ~20s，产物 web/dist
+```
+
+> 实测（集成机 `niyujun01`，2026-09-15）：Node **v23.11.1** + npm 10.9.2，`npm ci` 65 个包 11 秒、`npm run build` 21 秒成功，**无回归**。
+
+### 12.3 若原来用 NodeSource 安装
+
+NodeSource 会把 `node`/`npm` 装在 `/usr/bin`。本方案装在 `/usr/local/node` 并软链到 `/usr/local/bin`（PATH 优先级更高），**无需卸载旧包**即可切换；如需彻底清理可执行 `sudo apt remove nodejs` 并删除 `/etc/apt/sources.list.d/nodesource.list`。
+
+---
+
+## 13. 数据落 HDFS（老师要求「答辩尽量放到 hadoop 上存储」）
+
+> 老师要求「代码测试过程在本地，**答辩尽量放到 hadoop 上存储（hadoop 3.x 版本）**」。即：数据文件要写进 HDFS，能演示"从 Hadoop 存储读取"，而不是只留在虚拟机本地磁盘。
+
+### 13.1 建业务目录
+
+```bash
+sudo -u hadoop bash -lc "hdfs dfs -mkdir -p /ev-charging/{ods,dwd,dws,ads,quality,forecast}"
+```
+
+### 13.2 写入数据
+
+ODS/DWS 用 #4 提供的脚本，或用命令行直接上传：
+
+```bash
+# 以 hadoop 身份上传（注意：HDFS 里 root 不是超级用户，若用 sudo 执行需声明身份）
+sudo bash -lc "source /etc/profile.d/hadoop-env.sh; export HADOOP_USER_NAME=hadoop; \
+  hdfs dfs -put -f /home/<用户>/part2/part2/scml/handoff/ods/* /ev-charging/ods/"
+```
+
+> **易错点**：`sudo hdfs dfs -put ...` 会报 `Permission denied: user=root, access=WRITE`——HDFS 的超级用户是启动 NameNode 的用户（`hadoop`），root 反而不是。解决方式是 `export HADOOP_USER_NAME=hadoop` 声明身份，或用 `sudo -u hadoop` 执行（但后者要求 hadoop 用户能读源文件）。
+
+### 13.3 读回校验（答辩证据）
+
+```bash
+# 目录与容量
+sudo -u hadoop bash -lc "hdfs dfs -du -h /ev-charging"
+
+# 分区结构（ODS 保持 dt=YYYY-MM-DD）
+sudo -u hadoop bash -lc "hdfs dfs -ls /ev-charging/ods/ods_orders | head -5"
+
+# Spark on YARN 从 HDFS 读回（会留下 YARN 记录）
+sudo -u hadoop bash -lc "spark-submit --master yarn --conf spark.sql.shuffle.partitions=8 /tmp/read_ods.py"
+```
+
+> 实测（集成机 `niyujun01`，2026-09-15）：ODS 104.5 M、DWS 3.9 M、ADS 5.5 M 已入 HDFS；ODS 的 `ods_orders` 等表保持 `dt=YYYY-MM-DD` 分区结构；Spark on YARN 读回 `ods_stations` 行数 = 8，作业 `FINISHED/SUCCEEDED`。
