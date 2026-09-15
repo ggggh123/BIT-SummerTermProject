@@ -1,0 +1,12 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "totalEnergyKwh": 4039695.4,
+    "co2SavedTon": 2347.1,
+    "factorTonPerMwh": 0.581,
+    "factorNote": "按全国电网平均排放因子 0.581 tCO₂/MWh 折算（项目假设，答辩需注明来源）",
+    "equivalentTrees": 130392
+  },
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

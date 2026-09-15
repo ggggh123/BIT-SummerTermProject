@@ -1,0 +1,1452 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "runId": "f-20260914-01",
+    "modelVersion": "gbt-3.4.1",
+    "activatedAt": "2026-09-14T10:00:00+08:00",
+    "points": [
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T00:00:00+08:00",
+        "horizonH": 1,
+        "predictedLoadKw": 788.1,
+        "predictedBusyCount": 12,
+        "predictedIdleCount": 36,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T01:00:00+08:00",
+        "horizonH": 2,
+        "predictedLoadKw": 641.5,
+        "predictedBusyCount": 9,
+        "predictedIdleCount": 39,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T02:00:00+08:00",
+        "horizonH": 3,
+        "predictedLoadKw": 483.8,
+        "predictedBusyCount": 8,
+        "predictedIdleCount": 40,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T03:00:00+08:00",
+        "horizonH": 4,
+        "predictedLoadKw": 444,
+        "predictedBusyCount": 7,
+        "predictedIdleCount": 41,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T04:00:00+08:00",
+        "horizonH": 5,
+        "predictedLoadKw": 577.7,
+        "predictedBusyCount": 8,
+        "predictedIdleCount": 40,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T05:00:00+08:00",
+        "horizonH": 6,
+        "predictedLoadKw": 742.3,
+        "predictedBusyCount": 12,
+        "predictedIdleCount": 36,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T06:00:00+08:00",
+        "horizonH": 7,
+        "predictedLoadKw": 1115.8,
+        "predictedBusyCount": 18,
+        "predictedIdleCount": 30,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T07:00:00+08:00",
+        "horizonH": 8,
+        "predictedLoadKw": 1671.8,
+        "predictedBusyCount": 24,
+        "predictedIdleCount": 24,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T08:00:00+08:00",
+        "horizonH": 9,
+        "predictedLoadKw": 1864.7,
+        "predictedBusyCount": 30,
+        "predictedIdleCount": 18,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T09:00:00+08:00",
+        "horizonH": 10,
+        "predictedLoadKw": 2153.5,
+        "predictedBusyCount": 32,
+        "predictedIdleCount": 16,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T10:00:00+08:00",
+        "horizonH": 11,
+        "predictedLoadKw": 1971.3,
+        "predictedBusyCount": 31,
+        "predictedIdleCount": 17,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T11:00:00+08:00",
+        "horizonH": 12,
+        "predictedLoadKw": 1768.5,
+        "predictedBusyCount": 29,
+        "predictedIdleCount": 19,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T12:00:00+08:00",
+        "horizonH": 13,
+        "predictedLoadKw": 1927.3,
+        "predictedBusyCount": 28,
+        "predictedIdleCount": 20,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T13:00:00+08:00",
+        "horizonH": 14,
+        "predictedLoadKw": 1981,
+        "predictedBusyCount": 28,
+        "predictedIdleCount": 20,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T14:00:00+08:00",
+        "horizonH": 15,
+        "predictedLoadKw": 1896.8,
+        "predictedBusyCount": 30,
+        "predictedIdleCount": 18,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T15:00:00+08:00",
+        "horizonH": 16,
+        "predictedLoadKw": 2005.6,
+        "predictedBusyCount": 32,
+        "predictedIdleCount": 16,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T16:00:00+08:00",
+        "horizonH": 17,
+        "predictedLoadKw": 2153.2,
+        "predictedBusyCount": 35,
+        "predictedIdleCount": 13,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T17:00:00+08:00",
+        "horizonH": 18,
+        "predictedLoadKw": 2470.9,
+        "predictedBusyCount": 37,
+        "predictedIdleCount": 11,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T18:00:00+08:00",
+        "horizonH": 19,
+        "predictedLoadKw": 2615.6,
+        "predictedBusyCount": 38,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T19:00:00+08:00",
+        "horizonH": 20,
+        "predictedLoadKw": 2506.8,
+        "predictedBusyCount": 36,
+        "predictedIdleCount": 12,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T20:00:00+08:00",
+        "horizonH": 21,
+        "predictedLoadKw": 2225.7,
+        "predictedBusyCount": 31,
+        "predictedIdleCount": 17,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T21:00:00+08:00",
+        "horizonH": 22,
+        "predictedLoadKw": 1638.4,
+        "predictedBusyCount": 25,
+        "predictedIdleCount": 23,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T22:00:00+08:00",
+        "horizonH": 23,
+        "predictedLoadKw": 1347.2,
+        "predictedBusyCount": 19,
+        "predictedIdleCount": 29,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 1,
+        "forecastAt": "2026-09-14T23:00:00+08:00",
+        "horizonH": 24,
+        "predictedLoadKw": 1046,
+        "predictedBusyCount": 15,
+        "predictedIdleCount": 33,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T00:00:00+08:00",
+        "horizonH": 1,
+        "predictedLoadKw": 495.6,
+        "predictedBusyCount": 7,
+        "predictedIdleCount": 21,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T01:00:00+08:00",
+        "horizonH": 2,
+        "predictedLoadKw": 329.5,
+        "predictedBusyCount": 5,
+        "predictedIdleCount": 23,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T02:00:00+08:00",
+        "horizonH": 3,
+        "predictedLoadKw": 308.7,
+        "predictedBusyCount": 4,
+        "predictedIdleCount": 24,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T03:00:00+08:00",
+        "horizonH": 4,
+        "predictedLoadKw": 292.8,
+        "predictedBusyCount": 4,
+        "predictedIdleCount": 24,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T04:00:00+08:00",
+        "horizonH": 5,
+        "predictedLoadKw": 330.6,
+        "predictedBusyCount": 5,
+        "predictedIdleCount": 23,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T05:00:00+08:00",
+        "horizonH": 6,
+        "predictedLoadKw": 406.2,
+        "predictedBusyCount": 7,
+        "predictedIdleCount": 21,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T06:00:00+08:00",
+        "horizonH": 7,
+        "predictedLoadKw": 641.2,
+        "predictedBusyCount": 10,
+        "predictedIdleCount": 18,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T07:00:00+08:00",
+        "horizonH": 8,
+        "predictedLoadKw": 882.6,
+        "predictedBusyCount": 14,
+        "predictedIdleCount": 14,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T08:00:00+08:00",
+        "horizonH": 9,
+        "predictedLoadKw": 1234.2,
+        "predictedBusyCount": 17,
+        "predictedIdleCount": 11,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T09:00:00+08:00",
+        "horizonH": 10,
+        "predictedLoadKw": 1217.6,
+        "predictedBusyCount": 19,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T10:00:00+08:00",
+        "horizonH": 11,
+        "predictedLoadKw": 1094.7,
+        "predictedBusyCount": 18,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T11:00:00+08:00",
+        "horizonH": 12,
+        "predictedLoadKw": 1170.6,
+        "predictedBusyCount": 17,
+        "predictedIdleCount": 11,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T12:00:00+08:00",
+        "horizonH": 13,
+        "predictedLoadKw": 1072,
+        "predictedBusyCount": 16,
+        "predictedIdleCount": 12,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T13:00:00+08:00",
+        "horizonH": 14,
+        "predictedLoadKw": 997.7,
+        "predictedBusyCount": 17,
+        "predictedIdleCount": 11,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T14:00:00+08:00",
+        "horizonH": 15,
+        "predictedLoadKw": 1186.6,
+        "predictedBusyCount": 18,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T15:00:00+08:00",
+        "horizonH": 16,
+        "predictedLoadKw": 1118.5,
+        "predictedBusyCount": 19,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T16:00:00+08:00",
+        "horizonH": 17,
+        "predictedLoadKw": 1330.7,
+        "predictedBusyCount": 20,
+        "predictedIdleCount": 8,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T17:00:00+08:00",
+        "horizonH": 18,
+        "predictedLoadKw": 1395,
+        "predictedBusyCount": 22,
+        "predictedIdleCount": 6,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T18:00:00+08:00",
+        "horizonH": 19,
+        "predictedLoadKw": 1472.5,
+        "predictedBusyCount": 22,
+        "predictedIdleCount": 6,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T19:00:00+08:00",
+        "horizonH": 20,
+        "predictedLoadKw": 1361,
+        "predictedBusyCount": 21,
+        "predictedIdleCount": 7,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T20:00:00+08:00",
+        "horizonH": 21,
+        "predictedLoadKw": 1288.6,
+        "predictedBusyCount": 18,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T21:00:00+08:00",
+        "horizonH": 22,
+        "predictedLoadKw": 933.9,
+        "predictedBusyCount": 15,
+        "predictedIdleCount": 13,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T22:00:00+08:00",
+        "horizonH": 23,
+        "predictedLoadKw": 779,
+        "predictedBusyCount": 11,
+        "predictedIdleCount": 17,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 2,
+        "forecastAt": "2026-09-14T23:00:00+08:00",
+        "horizonH": 24,
+        "predictedLoadKw": 619.5,
+        "predictedBusyCount": 9,
+        "predictedIdleCount": 19,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T00:00:00+08:00",
+        "horizonH": 1,
+        "predictedLoadKw": 379.9,
+        "predictedBusyCount": 6,
+        "predictedIdleCount": 18,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T01:00:00+08:00",
+        "horizonH": 2,
+        "predictedLoadKw": 297.8,
+        "predictedBusyCount": 5,
+        "predictedIdleCount": 19,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T02:00:00+08:00",
+        "horizonH": 3,
+        "predictedLoadKw": 243.7,
+        "predictedBusyCount": 4,
+        "predictedIdleCount": 20,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T03:00:00+08:00",
+        "horizonH": 4,
+        "predictedLoadKw": 226.9,
+        "predictedBusyCount": 4,
+        "predictedIdleCount": 20,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T04:00:00+08:00",
+        "horizonH": 5,
+        "predictedLoadKw": 271.7,
+        "predictedBusyCount": 4,
+        "predictedIdleCount": 20,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T05:00:00+08:00",
+        "horizonH": 6,
+        "predictedLoadKw": 391.8,
+        "predictedBusyCount": 6,
+        "predictedIdleCount": 18,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T06:00:00+08:00",
+        "horizonH": 7,
+        "predictedLoadKw": 539.5,
+        "predictedBusyCount": 9,
+        "predictedIdleCount": 15,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T07:00:00+08:00",
+        "horizonH": 8,
+        "predictedLoadKw": 823.8,
+        "predictedBusyCount": 12,
+        "predictedIdleCount": 12,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T08:00:00+08:00",
+        "horizonH": 9,
+        "predictedLoadKw": 971.2,
+        "predictedBusyCount": 15,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T09:00:00+08:00",
+        "horizonH": 10,
+        "predictedLoadKw": 1062.4,
+        "predictedBusyCount": 16,
+        "predictedIdleCount": 8,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T10:00:00+08:00",
+        "horizonH": 11,
+        "predictedLoadKw": 1087.6,
+        "predictedBusyCount": 15,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T11:00:00+08:00",
+        "horizonH": 12,
+        "predictedLoadKw": 925.7,
+        "predictedBusyCount": 15,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T12:00:00+08:00",
+        "horizonH": 13,
+        "predictedLoadKw": 950.4,
+        "predictedBusyCount": 14,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T13:00:00+08:00",
+        "horizonH": 14,
+        "predictedLoadKw": 988.1,
+        "predictedBusyCount": 14,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T14:00:00+08:00",
+        "horizonH": 15,
+        "predictedLoadKw": 1063.1,
+        "predictedBusyCount": 15,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T15:00:00+08:00",
+        "horizonH": 16,
+        "predictedLoadKw": 1031.1,
+        "predictedBusyCount": 16,
+        "predictedIdleCount": 8,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T16:00:00+08:00",
+        "horizonH": 17,
+        "predictedLoadKw": 1032.5,
+        "predictedBusyCount": 17,
+        "predictedIdleCount": 7,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T17:00:00+08:00",
+        "horizonH": 18,
+        "predictedLoadKw": 1194.2,
+        "predictedBusyCount": 19,
+        "predictedIdleCount": 5,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T18:00:00+08:00",
+        "horizonH": 19,
+        "predictedLoadKw": 1178.2,
+        "predictedBusyCount": 19,
+        "predictedIdleCount": 5,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T19:00:00+08:00",
+        "horizonH": 20,
+        "predictedLoadKw": 1137.2,
+        "predictedBusyCount": 18,
+        "predictedIdleCount": 6,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T20:00:00+08:00",
+        "horizonH": 21,
+        "predictedLoadKw": 1113.7,
+        "predictedBusyCount": 16,
+        "predictedIdleCount": 8,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T21:00:00+08:00",
+        "horizonH": 22,
+        "predictedLoadKw": 832.5,
+        "predictedBusyCount": 13,
+        "predictedIdleCount": 11,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T22:00:00+08:00",
+        "horizonH": 23,
+        "predictedLoadKw": 590,
+        "predictedBusyCount": 10,
+        "predictedIdleCount": 14,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 4,
+        "forecastAt": "2026-09-14T23:00:00+08:00",
+        "horizonH": 24,
+        "predictedLoadKw": 521.7,
+        "predictedBusyCount": 8,
+        "predictedIdleCount": 16,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T00:00:00+08:00",
+        "horizonH": 1,
+        "predictedLoadKw": 552.1,
+        "predictedBusyCount": 8,
+        "predictedIdleCount": 24,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T01:00:00+08:00",
+        "horizonH": 2,
+        "predictedLoadKw": 407.4,
+        "predictedBusyCount": 6,
+        "predictedIdleCount": 26,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T02:00:00+08:00",
+        "horizonH": 3,
+        "predictedLoadKw": 343,
+        "predictedBusyCount": 5,
+        "predictedIdleCount": 27,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T03:00:00+08:00",
+        "horizonH": 4,
+        "predictedLoadKw": 336.4,
+        "predictedBusyCount": 5,
+        "predictedIdleCount": 27,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T04:00:00+08:00",
+        "horizonH": 5,
+        "predictedLoadKw": 360,
+        "predictedBusyCount": 6,
+        "predictedIdleCount": 26,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T05:00:00+08:00",
+        "horizonH": 6,
+        "predictedLoadKw": 477.4,
+        "predictedBusyCount": 8,
+        "predictedIdleCount": 24,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T06:00:00+08:00",
+        "horizonH": 7,
+        "predictedLoadKw": 717.8,
+        "predictedBusyCount": 12,
+        "predictedIdleCount": 20,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T07:00:00+08:00",
+        "horizonH": 8,
+        "predictedLoadKw": 1142.6,
+        "predictedBusyCount": 16,
+        "predictedIdleCount": 16,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T08:00:00+08:00",
+        "horizonH": 9,
+        "predictedLoadKw": 1367.3,
+        "predictedBusyCount": 20,
+        "predictedIdleCount": 12,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T09:00:00+08:00",
+        "horizonH": 10,
+        "predictedLoadKw": 1423.7,
+        "predictedBusyCount": 21,
+        "predictedIdleCount": 11,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T10:00:00+08:00",
+        "horizonH": 11,
+        "predictedLoadKw": 1400.9,
+        "predictedBusyCount": 20,
+        "predictedIdleCount": 12,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T11:00:00+08:00",
+        "horizonH": 12,
+        "predictedLoadKw": 1197.2,
+        "predictedBusyCount": 19,
+        "predictedIdleCount": 13,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T12:00:00+08:00",
+        "horizonH": 13,
+        "predictedLoadKw": 1211.3,
+        "predictedBusyCount": 18,
+        "predictedIdleCount": 14,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T13:00:00+08:00",
+        "horizonH": 14,
+        "predictedLoadKw": 1253.5,
+        "predictedBusyCount": 19,
+        "predictedIdleCount": 13,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T14:00:00+08:00",
+        "horizonH": 15,
+        "predictedLoadKw": 1294.9,
+        "predictedBusyCount": 20,
+        "predictedIdleCount": 12,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T15:00:00+08:00",
+        "horizonH": 16,
+        "predictedLoadKw": 1420.4,
+        "predictedBusyCount": 22,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T16:00:00+08:00",
+        "horizonH": 17,
+        "predictedLoadKw": 1558.7,
+        "predictedBusyCount": 23,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T17:00:00+08:00",
+        "horizonH": 18,
+        "predictedLoadKw": 1754,
+        "predictedBusyCount": 25,
+        "predictedIdleCount": 7,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T18:00:00+08:00",
+        "horizonH": 19,
+        "predictedLoadKw": 1563.1,
+        "predictedBusyCount": 26,
+        "predictedIdleCount": 6,
+        "congestionLevel": "high",
+        "isPeak": true
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T19:00:00+08:00",
+        "horizonH": 20,
+        "predictedLoadKw": 1559.4,
+        "predictedBusyCount": 24,
+        "predictedIdleCount": 8,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T20:00:00+08:00",
+        "horizonH": 21,
+        "predictedLoadKw": 1366.8,
+        "predictedBusyCount": 21,
+        "predictedIdleCount": 11,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T21:00:00+08:00",
+        "horizonH": 22,
+        "predictedLoadKw": 1053.4,
+        "predictedBusyCount": 17,
+        "predictedIdleCount": 15,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T22:00:00+08:00",
+        "horizonH": 23,
+        "predictedLoadKw": 780.9,
+        "predictedBusyCount": 13,
+        "predictedIdleCount": 19,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 5,
+        "forecastAt": "2026-09-14T23:00:00+08:00",
+        "horizonH": 24,
+        "predictedLoadKw": 690,
+        "predictedBusyCount": 10,
+        "predictedIdleCount": 22,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T00:00:00+08:00",
+        "horizonH": 1,
+        "predictedLoadKw": 401.6,
+        "predictedBusyCount": 7,
+        "predictedIdleCount": 19,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T01:00:00+08:00",
+        "horizonH": 2,
+        "predictedLoadKw": 299,
+        "predictedBusyCount": 5,
+        "predictedIdleCount": 21,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T02:00:00+08:00",
+        "horizonH": 3,
+        "predictedLoadKw": 275.2,
+        "predictedBusyCount": 4,
+        "predictedIdleCount": 22,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T03:00:00+08:00",
+        "horizonH": 4,
+        "predictedLoadKw": 275.8,
+        "predictedBusyCount": 4,
+        "predictedIdleCount": 22,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T04:00:00+08:00",
+        "horizonH": 5,
+        "predictedLoadKw": 314,
+        "predictedBusyCount": 5,
+        "predictedIdleCount": 21,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T05:00:00+08:00",
+        "horizonH": 6,
+        "predictedLoadKw": 428.5,
+        "predictedBusyCount": 6,
+        "predictedIdleCount": 20,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T06:00:00+08:00",
+        "horizonH": 7,
+        "predictedLoadKw": 642.6,
+        "predictedBusyCount": 10,
+        "predictedIdleCount": 16,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T07:00:00+08:00",
+        "horizonH": 8,
+        "predictedLoadKw": 797.1,
+        "predictedBusyCount": 13,
+        "predictedIdleCount": 13,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T08:00:00+08:00",
+        "horizonH": 9,
+        "predictedLoadKw": 1128.5,
+        "predictedBusyCount": 16,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T09:00:00+08:00",
+        "horizonH": 10,
+        "predictedLoadKw": 1046.8,
+        "predictedBusyCount": 17,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T10:00:00+08:00",
+        "horizonH": 11,
+        "predictedLoadKw": 1022.7,
+        "predictedBusyCount": 17,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T11:00:00+08:00",
+        "horizonH": 12,
+        "predictedLoadKw": 1032.1,
+        "predictedBusyCount": 16,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T12:00:00+08:00",
+        "horizonH": 13,
+        "predictedLoadKw": 944.2,
+        "predictedBusyCount": 15,
+        "predictedIdleCount": 11,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T13:00:00+08:00",
+        "horizonH": 14,
+        "predictedLoadKw": 1014.1,
+        "predictedBusyCount": 15,
+        "predictedIdleCount": 11,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T14:00:00+08:00",
+        "horizonH": 15,
+        "predictedLoadKw": 1026.5,
+        "predictedBusyCount": 16,
+        "predictedIdleCount": 10,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T15:00:00+08:00",
+        "horizonH": 16,
+        "predictedLoadKw": 1237.3,
+        "predictedBusyCount": 17,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T16:00:00+08:00",
+        "horizonH": 17,
+        "predictedLoadKw": 1244.6,
+        "predictedBusyCount": 19,
+        "predictedIdleCount": 7,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T17:00:00+08:00",
+        "horizonH": 18,
+        "predictedLoadKw": 1422.9,
+        "predictedBusyCount": 20,
+        "predictedIdleCount": 6,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T18:00:00+08:00",
+        "horizonH": 19,
+        "predictedLoadKw": 1392.9,
+        "predictedBusyCount": 21,
+        "predictedIdleCount": 5,
+        "congestionLevel": "high",
+        "isPeak": true
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T19:00:00+08:00",
+        "horizonH": 20,
+        "predictedLoadKw": 1208.1,
+        "predictedBusyCount": 20,
+        "predictedIdleCount": 6,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T20:00:00+08:00",
+        "horizonH": 21,
+        "predictedLoadKw": 1199,
+        "predictedBusyCount": 17,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T21:00:00+08:00",
+        "horizonH": 22,
+        "predictedLoadKw": 858.5,
+        "predictedBusyCount": 14,
+        "predictedIdleCount": 12,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T22:00:00+08:00",
+        "horizonH": 23,
+        "predictedLoadKw": 661.4,
+        "predictedBusyCount": 10,
+        "predictedIdleCount": 16,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 6,
+        "forecastAt": "2026-09-14T23:00:00+08:00",
+        "horizonH": 24,
+        "predictedLoadKw": 511.6,
+        "predictedBusyCount": 8,
+        "predictedIdleCount": 18,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T00:00:00+08:00",
+        "horizonH": 1,
+        "predictedLoadKw": 616.5,
+        "predictedBusyCount": 10,
+        "predictedIdleCount": 28,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T01:00:00+08:00",
+        "horizonH": 2,
+        "predictedLoadKw": 471.8,
+        "predictedBusyCount": 7,
+        "predictedIdleCount": 31,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T02:00:00+08:00",
+        "horizonH": 3,
+        "predictedLoadKw": 398.2,
+        "predictedBusyCount": 6,
+        "predictedIdleCount": 32,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T03:00:00+08:00",
+        "horizonH": 4,
+        "predictedLoadKw": 397,
+        "predictedBusyCount": 6,
+        "predictedIdleCount": 32,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T04:00:00+08:00",
+        "horizonH": 5,
+        "predictedLoadKw": 406.4,
+        "predictedBusyCount": 7,
+        "predictedIdleCount": 31,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T05:00:00+08:00",
+        "horizonH": 6,
+        "predictedLoadKw": 560.3,
+        "predictedBusyCount": 9,
+        "predictedIdleCount": 29,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T06:00:00+08:00",
+        "horizonH": 7,
+        "predictedLoadKw": 914.2,
+        "predictedBusyCount": 14,
+        "predictedIdleCount": 24,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T07:00:00+08:00",
+        "horizonH": 8,
+        "predictedLoadKw": 1171.4,
+        "predictedBusyCount": 19,
+        "predictedIdleCount": 19,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T08:00:00+08:00",
+        "horizonH": 9,
+        "predictedLoadKw": 1514.8,
+        "predictedBusyCount": 24,
+        "predictedIdleCount": 14,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T09:00:00+08:00",
+        "horizonH": 10,
+        "predictedLoadKw": 1764.6,
+        "predictedBusyCount": 25,
+        "predictedIdleCount": 13,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T10:00:00+08:00",
+        "horizonH": 11,
+        "predictedLoadKw": 1541.3,
+        "predictedBusyCount": 24,
+        "predictedIdleCount": 14,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T11:00:00+08:00",
+        "horizonH": 12,
+        "predictedLoadKw": 1437.3,
+        "predictedBusyCount": 23,
+        "predictedIdleCount": 15,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T12:00:00+08:00",
+        "horizonH": 13,
+        "predictedLoadKw": 1361.9,
+        "predictedBusyCount": 22,
+        "predictedIdleCount": 16,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T13:00:00+08:00",
+        "horizonH": 14,
+        "predictedLoadKw": 1552.5,
+        "predictedBusyCount": 22,
+        "predictedIdleCount": 16,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T14:00:00+08:00",
+        "horizonH": 15,
+        "predictedLoadKw": 1660,
+        "predictedBusyCount": 24,
+        "predictedIdleCount": 14,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T15:00:00+08:00",
+        "horizonH": 16,
+        "predictedLoadKw": 1713.3,
+        "predictedBusyCount": 26,
+        "predictedIdleCount": 12,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T16:00:00+08:00",
+        "horizonH": 17,
+        "predictedLoadKw": 1767.1,
+        "predictedBusyCount": 27,
+        "predictedIdleCount": 11,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T17:00:00+08:00",
+        "horizonH": 18,
+        "predictedLoadKw": 1992.5,
+        "predictedBusyCount": 29,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T18:00:00+08:00",
+        "horizonH": 19,
+        "predictedLoadKw": 1852.4,
+        "predictedBusyCount": 30,
+        "predictedIdleCount": 8,
+        "congestionLevel": "medium",
+        "isPeak": true
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T19:00:00+08:00",
+        "horizonH": 20,
+        "predictedLoadKw": 1769.7,
+        "predictedBusyCount": 29,
+        "predictedIdleCount": 9,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T20:00:00+08:00",
+        "horizonH": 21,
+        "predictedLoadKw": 1640.2,
+        "predictedBusyCount": 25,
+        "predictedIdleCount": 13,
+        "congestionLevel": "medium",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T21:00:00+08:00",
+        "horizonH": 22,
+        "predictedLoadKw": 1355.2,
+        "predictedBusyCount": 20,
+        "predictedIdleCount": 18,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T22:00:00+08:00",
+        "horizonH": 23,
+        "predictedLoadKw": 965.6,
+        "predictedBusyCount": 15,
+        "predictedIdleCount": 23,
+        "congestionLevel": "low",
+        "isPeak": false
+      },
+      {
+        "stationId": 7,
+        "forecastAt": "2026-09-14T23:00:00+08:00",
+        "horizonH": 24,
+        "predictedLoadKw": 795.7,
+        "predictedBusyCount": 12,
+        "predictedIdleCount": 26,
+        "congestionLevel": "low",
+        "isPeak": false
+      }
+    ]
+  },
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

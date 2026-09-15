@@ -1,0 +1,37 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "district": "朝阳区",
+      "chargerCount": 74,
+      "stationCount": 2,
+      "utilizationRate": 46.2
+    },
+    {
+      "district": "海淀区",
+      "chargerCount": 66,
+      "stationCount": 2,
+      "utilizationRate": 49.6
+    },
+    {
+      "district": "丰台区",
+      "chargerCount": 83,
+      "stationCount": 2,
+      "utilizationRate": 45.7
+    },
+    {
+      "district": "通州区",
+      "chargerCount": 24,
+      "stationCount": 1,
+      "utilizationRate": 71.8
+    },
+    {
+      "district": "大兴区",
+      "chargerCount": 32,
+      "stationCount": 1,
+      "utilizationRate": 35.7
+    }
+  ],
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}
