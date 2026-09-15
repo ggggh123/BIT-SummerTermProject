@@ -120,14 +120,16 @@ def main() -> int:
         preflight["rows_before_align"] = int(raw.count())
         raw = ft.align_hourly_grid(raw)
     raw, preflight["fill_stats"] = ft.fill_missing_features(raw)
-    feature_cols, preflight["dropped_feature_cols"] = ft.resolve_feature_cols(raw)
+
+    feat = ft.add_naive_baseline(ft.build_features(raw, horizons), horizons)
+    # 特征可用性必须在**特征工程之后**判定：FEATURE_COLS 是派生列（lag_*/roll_*/hour…），
+    # 若在 raw 上求交集只会命中 temperature_c 等同名列，模型将静默退化为单特征训练。
+    feature_cols, preflight["dropped_feature_cols"] = ft.resolve_feature_cols(feat)
     if not feature_cols:
         raise ValueError("没有任何可用特征列，无法训练")
     preflight["feature_cols"] = feature_cols
     if preflight["dropped_feature_cols"]:
         print(f"[train] 警告：整列为空，已剔除特征 {preflight['dropped_feature_cols']}")
-
-    feat = ft.add_naive_baseline(ft.build_features(raw, horizons), horizons)
 
     train_df, valid_df, test_df, bounds = ft.split_by_time(feat, horizons)
     # 54 个模型共享同一组窗口特征；不缓存会为每个模型重复构造完整窗口计划。

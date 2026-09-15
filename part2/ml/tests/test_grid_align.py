@@ -154,6 +154,27 @@ class GridAlignTests(unittest.TestCase):
         self.assertNotIn("temperature_c", kept)
         self.assertIn("lag_1h", kept)
 
+    def test_resolve_feature_cols_requires_built_features(self):
+        """防回归：``resolve_feature_cols`` 必须作用于特征工程之后的表。
+
+        本模块的真实缺陷（由端到端回归验证发现）：曾在 ``raw`` 上调用，
+        而 ``FEATURE_COLS`` 全是派生列，交集只命中 ``temperature_c``，
+        模型因此静默退化为单特征训练，MAE 恶化约 5 倍且不报任何错误。
+        """
+        raw = self._gapped()
+        on_raw, _ = ft.resolve_feature_cols(raw)
+        self.assertNotIn("lag_1h", on_raw)
+        self.assertLess(len(on_raw), 3)
+
+        built = ft.build_features(ft.align_hourly_grid(raw), horizons=(1,))
+        on_built, dropped = ft.resolve_feature_cols(built)
+        # 小样本只有 4 行，滞后 24 小时的特征必然整列为空并被正确剔除；
+        # 关键是不能像原始表那样退化为「仅 temperature_c」。
+        self.assertIn("lag_1h", on_built)
+        self.assertIn("roll_6h", on_built)
+        self.assertGreater(len(on_built), len(on_raw) + 5)
+        self.assertTrue(set(dropped).issubset({"lag_24h", "busy_lag_24h"}))
+
     def test_fill_missing_features_backfills_temperature(self):
         frame = self._frame(
             [

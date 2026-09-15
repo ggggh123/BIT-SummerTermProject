@@ -159,14 +159,15 @@ def main() -> int:
         preflight["rows_before_align"] = int(raw.count())
         raw = ft.align_hourly_grid(raw)
     raw, preflight["fill_stats"] = ft.fill_missing_features(raw)
-    feature_cols, preflight["dropped_feature_cols"] = ft.resolve_feature_cols(raw)
+
+    feat = ft.add_naive_baseline(ft.build_features(raw, horizons), horizons)
+    # 必须与 train.py 完全一致：在特征工程之后判定派生特征是否可用。
+    feature_cols, preflight["dropped_feature_cols"] = ft.resolve_feature_cols(feat)
     if not feature_cols:
         raise SystemExit("没有任何可用特征列，无法预测")
     preflight["feature_cols"] = feature_cols
     if preflight["dropped_feature_cols"]:
         print(f"[predict] 警告：整列为空，已剔除特征 {preflight['dropped_feature_cols']}")
-
-    feat = ft.add_naive_baseline(ft.build_features(raw, horizons), horizons)
 
     base = latest_base(feat, feature_cols).select(
         *(c for c in ["station_id", "observed_at", "pile_count", "rated_power_kw"]
