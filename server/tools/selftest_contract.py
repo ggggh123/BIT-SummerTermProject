@@ -31,7 +31,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app import app  # noqa: E402
 
 ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$")
-STATION_IDS = list(range(1, 9))
 
 _results: list[tuple[str, bool, str]] = []
 
@@ -57,7 +56,7 @@ def is_int(value) -> bool:
 # --------------------------------------------------------------------------- #
 # 1. 信封与可访问性
 # --------------------------------------------------------------------------- #
-CONTRACT_ROUTES = [
+BASE_CONTRACT_ROUTES = [
     ("/api/overview/kpis", {}),
     ("/api/overview/stations", {}),
     ("/api/overview/charger-status", {}),
@@ -77,9 +76,6 @@ CONTRACT_ROUTES = [
     ("/api/user/idle-ranking", {}),
     ("/api/user/peak-heatmap", {}),
     ("/api/station/coverage", {}),
-    *[(f"/api/station/{sid}/utilization", {}) for sid in STATION_IDS],
-    *[(f"/api/station/{sid}/mix", {}) for sid in STATION_IDS],
-    *[(f"/api/station/{sid}/health", {}) for sid in STATION_IDS],
     ("/api/gov/coverage", {}),
     ("/api/gov/service-stats", {}),
     ("/api/gov/carbon", {}),
@@ -91,10 +87,35 @@ CONTRACT_ROUTES = [
 ]
 
 
-def check_envelope(client) -> dict[str, dict]:
+def contract_routes(station_ids: list[int]) -> list[tuple[str, dict]]:
+    """按当前 ADS 中真实存活站点构造明细路由，避免把演示夹具的 1–8 写死。"""
+    station_routes = [
+        (f"/api/station/{sid}/{suffix}", {})
+        for sid in station_ids
+        for suffix in ("utilization", "mix", "health")
+    ]
+    forecast_index = next(
+        index for index, (path, _params) in enumerate(BASE_CONTRACT_ROUTES)
+        if path == "/api/gov/coverage"
+    )
+    return (
+        BASE_CONTRACT_ROUTES[:forecast_index]
+        + station_routes
+        + BASE_CONTRACT_ROUTES[forecast_index:]
+    )
+
+
+def discover_station_ids(client) -> list[int]:
+    body, _status = get(client, "/api/overview/stations")
+    if not body or body.get("code") != 0 or not isinstance(body.get("data"), list):
+        return []
+    return sorted(int(item["stationId"]) for item in body["data"])
+
+
+def check_envelope(client, routes: list[tuple[str, dict]]) -> dict[str, dict]:
     payloads: dict[str, dict] = {}
     bad: list[str] = []
-    for path, params in CONTRACT_ROUTES:
+    for path, params in routes:
         body, status = get(client, path, **params)
         key = f"{path}?{params}" if params else path
         if body is None:
@@ -114,18 +135,19 @@ def check_envelope(client) -> dict[str, dict]:
             continue
         payloads[key] = body["data"]
     check(
-        f"信封与可访问性：{len(CONTRACT_ROUTES)} 条契约路由全部 code=0 / data 非空 / +08:00",
+        f"信封与可访问性：{len(routes)} 条契约路由全部 code=0 / data 非空 / +08:00",
         not bad,
         "; ".join(bad[:4]),
     )
     return payloads
 
 
-def check_errors(client) -> None:
+def check_errors(client, station_ids: list[int]) -> None:
+    invalid_station_id = max(station_ids, default=0) + 100000
     cases = [
         ("days 越界 -> 4001", "/api/enterprise/revenue-trend", {"days": 15}, 4001),
         ("limit 非法 -> 4001", "/api/overview/events", {"limit": 0}, 4001),
-        ("站点越界 -> 4004", "/api/station/9/utilization", {}, 4004),
+        ("站点越界 -> 4004", f"/api/station/{invalid_station_id}/utilization", {}, 4004),
         ("站点非数字 -> 4004", "/api/station/abc/utilization", {}, 4004),
         ("未知接口 -> 4004", "/api/not-exist", {}, 4004),
     ]
@@ -138,7 +160,7 @@ def check_errors(client) -> None:
 # --------------------------------------------------------------------------- #
 # 2. 口径自洽
 # --------------------------------------------------------------------------- #
-def check_consistency(payloads: dict[str, dict]) -> None:
+def check_consistency(payloads: dict[str, dict], station_ids: list[int]) -> None:
     kpis = payloads["/api/overview/kpis"]
     trend = payloads["/api/enterprise/revenue-trend?{'days': 90}"]
     points = trend["points"]
@@ -173,7 +195,7 @@ def check_consistency(payloads: dict[str, dict]) -> None:
     check("各站 chargerCount 之和 = 总桩数",
           sum(item["chargerCount"] for item in stations.values()) == kpis["chargerCount"])
 
-    for sid in STATION_IDS:
+    for sid in station_ids:
         mix = payloads[f"/api/station/{sid}/mix"]
         total = stations[sid]["chargerCount"]
         check(f"站 {sid}：快慢桩数之和 = 该站总桩数",
@@ -248,14 +270,15 @@ def check_formats(payloads: dict[str, dict]) -> None:
           [item["idleCount"] for item in idle_ranking]
           == sorted((item["idleCount"] for item in idle_ranking), reverse=True))
 
-    check("peak-heatmap hours=24 / names=8",
-          len(heatmap["hours"]) == 24 and len(heatmap["names"]) == 8)
-    check("peak-heatmap values 维度 = 24 × 8",
-          len(heatmap["values"]) == 24 * 8)
+    station_count = len(stations)
+    check("peak-heatmap hours=24 / names=存活站点数",
+          len(heatmap["hours"]) == 24 and len(heatmap["names"]) == station_count)
+    check("peak-heatmap values 维度 = 24 × 存活站点数",
+          len(heatmap["values"]) == 24 * station_count)
     check("peak-heatmap 索引在范围内",
-          all(0 <= h <= 23 and 0 <= s <= 7 for h, s, _v in heatmap["values"]))
+          all(0 <= h <= 23 and 0 <= s < station_count for h, s, _v in heatmap["values"]))
 
-    check("load-24h = 8 站 × 24 点", len(load24h["points"]) == 8 * 24,
+    check("load-24h = 存活站点数 × 24 点", len(load24h["points"]) == station_count * 24,
           f"实际 {len(load24h['points'])}")
     check("load-24h observedAt 为 +08:00",
           all(ISO_RE.match(point["observedAt"]) for point in load24h["points"]))
@@ -270,9 +293,19 @@ def check_formats(payloads: dict[str, dict]) -> None:
           f"{len(forecast['points'])} 点 / runId={forecast['runId']}")
     check("forecast.points horizonH ∈ [1, 24]",
           all(1 <= point["horizonH"] <= 24 for point in forecast["points"]))
-    check("活跃站点均启用预测受限集",
-          len({point["stationId"] for point in forecast["points"]})
-          == sum(1 for item in stations if item["forecastEnabled"]))
+    forecast_station_ids = {point["stationId"] for point in forecast["points"]}
+    enabled_station_ids = {
+        item["stationId"] for item in stations if item["forecastEnabled"]
+    }
+    check("预测站点集合 = forecastEnabled 站点集合",
+          forecast_station_ids == enabled_station_ids,
+          f"预测={sorted(forecast_station_ids)} 启用={sorted(enabled_station_ids)}")
+    check("每个启用站点恰有 horizon 1–24",
+          all(
+              {point["horizonH"] for point in forecast["points"]
+               if point["stationId"] == station_id} == set(range(1, 25))
+              for station_id in enabled_station_ids
+          ))
     metrics = payloads["/api/forecast/metrics"]
     check("forecast.metrics 24 个 horizon 且 wape >= 0",
           len(metrics["horizons"]) == 24
@@ -281,10 +314,13 @@ def check_formats(payloads: dict[str, dict]) -> None:
 
 def main() -> int:
     with app.test_client() as client:
-        payloads = check_envelope(client)
-        check_errors(client)
-        if len(payloads) == len(CONTRACT_ROUTES):
-            check_consistency(payloads)
+        station_ids = discover_station_ids(client)
+        check("从 ADS 发现至少一个存活站点", bool(station_ids), str(station_ids))
+        routes = contract_routes(station_ids)
+        payloads = check_envelope(client, routes)
+        check_errors(client, station_ids)
+        if len(payloads) == len(routes):
+            check_consistency(payloads, station_ids)
             check_formats(payloads)
         else:
             check("口径自洽检查", False, "信封检查未全部通过，跳过依赖数据的断言")

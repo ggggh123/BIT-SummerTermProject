@@ -20,6 +20,11 @@ import argparse
 import sys
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _lib import split_sql_statements  # noqa: E402
@@ -35,10 +40,13 @@ def main() -> int:
                         help="HDFS 根目录（SQL 里写死 /ev-charging，此处做整体替换）")
     parser.add_argument("--dry-run", action="store_true",
                         help="只打印将要执行的语句条数与首条，不连 Spark（用于语法自查）")
+    parser.add_argument("--register-dwd-contract", action="store_true",
+                        help="先执行 dwd_contract.sql，注册 #3 的 DWD 外部表并修复 dt 分区")
     args = parser.parse_args()
 
     statements: list[str] = []
-    for name in FILES:
+    files = ["dwd_contract.sql", *FILES] if args.register_dwd_contract else FILES
+    for name in files:
         path = args.sql_dir / name
         sql = path.read_text(encoding="utf-8")
         if args.hdfs_root != "/ev-charging":

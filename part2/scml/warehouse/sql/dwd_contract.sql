@@ -156,3 +156,11 @@ CREATE TABLE IF NOT EXISTS dim_date (
 USING PARQUET
 LOCATION '/ev-charging/dwd/dim_date'
 COMMENT 'DWD：日期维度（由 scripts/run_dim_date.sh 生成）';
+
+
+-- #3 若直接把 Parquet 写成 dt=YYYY-MM-DD 目录，Hive metastore 不会自动发现分区。
+-- 跑 DWS/ADS 前修复一次，避免 dwd_* 表已落 HDFS 但 SparkSQL 仍报 TABLE_NOT_FOUND/空表。
+MSCK REPAIR TABLE dwd_order_detail;
+MSCK REPAIR TABLE dwd_telemetry_detail;
+MSCK REPAIR TABLE dwd_station_hourly;
+MSCK REPAIR TABLE dwd_event;

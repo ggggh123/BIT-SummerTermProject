@@ -13,11 +13,11 @@
 |---|---|---|
 | A 内部自洽 | ADS 各表之间的守恒关系（KPI = 逐日汇总、五状态之和 = 桩数、分层用户数之和 = 有订单用户数…） | 只依赖 ADS 自身，**永远能跑** |
 | B DWS↔ADS | 同一指标在两层的值逐行/逐合计相等 | 只依赖 DWS+ADS，**永远能跑** |
-| C ODS↔ADS | **独立重算**：从 ODS 重新跑一遍清洗聚合，比对 `ads_meta` 的总营收/总订单/总电量 | 只依赖 ODS+ADS，**永远能跑** |
+| C 来源追溯 | 有正式 DWD 时校验 ODS→DWD 批次、原始行数与七表读回断言；无 DWD 时才以本地清洗逻辑独立重算 ODS | **正式链路以 DWD 为清洗真源** |
 | D DWD↔DWS | `SUM(dwd_order_detail.amount_fen)` = `SUM(dws_station_day.revenue_fen)`，误差 **0** | 需 #3 的 `handoff/dwd`，缺则 SKIP |
 
-A/B/C 三组不依赖任何人：**只要 ODS 在，这份对账就能跑**，这是刻意的 ——
-不能让「等 DWD」变成「链路没法验收」。
+A/B 永远可跑；C 在 #3 尚未交付时保留 ODS 独立重算能力。#3 正式 DWD 到位后，
+不得再拿 #4 的兼容清洗逻辑覆盖或否定 PRL 口径，而应校验正式交接包的来源与断言。
 
 ### 退出码
 
@@ -129,9 +129,10 @@ def read_ads(db_path: Path) -> sqlite3.Connection:
 
 
 def read_dwd(path: Path, table: str) -> list[dict] | None:
-    """读 DWD 表：优先 CSV，其次 Parquet（需本机有 pyspark）。都没有返回 None。"""
-    table_dir = path / table
-    if not table_dir.is_dir():
+    """读 DWD 表：兼容平铺表目录和正式交接包的 `dwd/<table>/dt=...` 分区。"""
+    candidates = (path / table, path / "dwd" / table)
+    table_dir = next((candidate for candidate in candidates if candidate.is_dir()), None)
+    if table_dir is None:
         return None
     csvs = sorted(p for p in table_dir.rglob("*.csv") if p.is_file())
     if csvs:
@@ -146,9 +147,30 @@ def read_dwd(path: Path, table: str) -> list[dict] | None:
     spark = SparkSession.builder.master("local[1]").appName("ev-scml-reconcile").getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
     try:
-        return [row.asDict(recursive=True) for row in spark.read.parquet(str(table_dir)).collect()]
+        # 集成机的 core-site.xml 可能把默认文件系统设为 HDFS；本地交接包必须固定 file URI。
+        local_uri = table_dir.resolve().as_uri()
+        return [row.asDict(recursive=True) for row in spark.read.parquet(local_uri).collect()]
     finally:
         spark.stop()
+
+
+def load_dwd_evidence(path: Path) -> tuple[dict, dict]:
+    """读取正式 DWD 的批次清单与清洗报告；旧交接包返回空字典。"""
+    manifest_path = path / "manifest.json"
+    cleaning_candidates = (
+        path / "reports" / "cleaning_report.json",
+        path / "cleaning_report.json",
+    )
+    manifest = (
+        json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest_path.is_file() else {}
+    )
+    cleaning_path = next((item for item in cleaning_candidates if item.is_file()), None)
+    cleaning = (
+        json.loads(cleaning_path.read_text(encoding="utf-8"))
+        if cleaning_path else {}
+    )
+    return manifest, cleaning
 
 
 # --------------------------------------------------------------------------- #
@@ -162,6 +184,10 @@ def main() -> int:
     parser.add_argument("--dwd", type=Path, default=Path("handoff/dwd"))
     parser.add_argument("--require-dwd", action="store_true",
                         help="#3 交付 DWD 后打开：DWD 缺失由 SKIP 变为 FAIL")
+    parser.add_argument("--allow-missing-hours", type=int, default=0,
+                        help="官方 DWD 明确缺少小时粒度记录时，允许 ads_station_hourly 少于完整网格的行数")
+    parser.add_argument("--skip-ods-recompute", action="store_true",
+                        help="ADS 来自 #3 官方 DWD 清洗口径时跳过 C 组 ODS->ADS 本地重算")
     args = parser.parse_args()
 
     report = Report()
@@ -249,9 +275,26 @@ def reconcile(
 
     stations_n = scalar("SELECT COUNT(1) FROM ads_station")
     days_n = scalar("SELECT COUNT(1) FROM ads_daily")
-    report.close(group, "小时表行数 == 站点数 × 24 × 天数",
-                 scalar("SELECT COUNT(1) FROM ads_station_hourly"), stations_n * 24 * days_n,
-                 COUNT_TOL)
+    hourly_count = scalar("SELECT COUNT(1) FROM ads_station_hourly")
+    expected_hours = stations_n * 24 * days_n
+    missing_hours = max(0, expected_hours - hourly_count)
+    quality_meta = dict(connection.execute("SELECT key, value FROM ads_quality_meta"))
+    if quality_meta.get("source") == "prl-quality-report":
+        coverage = hourly_count / expected_hours if expected_hours else 0.0
+        report.check(
+            group,
+            "PRL 小时表无超额行且完整率 ≥ 95%",
+            hourly_count <= expected_hours and coverage >= 0.95,
+            f"{hourly_count}/{expected_hours}，完整率={coverage:.2%}",
+        )
+    else:
+        report.close(group, "小时表行数 == 站点数 × 24 × 天数",
+                     hourly_count, expected_hours, max(0, args.allow_missing_hours))
+        if missing_hours and args.allow_missing_hours:
+            info_lines.append(
+                f"小时表缺 {missing_hours} 行，已按参数容忍 {args.allow_missing_hours} 行；"
+                "仅用于官方 DWD 已说明缺口的联调场景"
+            )
 
     enabled = scalar("SELECT COUNT(1) FROM ads_station WHERE forecast_enabled = 1")
     if enabled:
@@ -324,10 +367,62 @@ def reconcile(
                      round(sum(float(row["energy_kwh"]) for row in dws["dws_charger_day"]), 3),
                      round(station_day_energy, 3), KWH_TOL, " kWh")
 
-    # ---------------------------------------------------------------- C ODS ↔ ADS
-    group = "C 独立重算（ODS ↔ ADS）"
-    if not (args.ods / "ods_orders").is_dir():
+    # DWD 只读一次：C 用其交付证据追溯，D 用其订单表对账。
+    dwd_orders = read_dwd(args.dwd, "dwd_order_detail")
+    dwd_manifest, dwd_cleaning = load_dwd_evidence(args.dwd)
+
+    # ---------------------------------------------------------------- C ODS → DWD → ADS
+    group = "C 来源追溯（ODS → DWD → ADS）"
+    if args.skip_ods_recompute:
+        report.skip(group, "ODS 本地重算", "ADS 来自 #3 官方 DWD 口径，跳过 SCML Python 清洗口径重算")
+    elif not (args.ods / "ods_orders").is_dir():
         report.skip(group, "ODS 交接包", f"{args.ods} 不存在")
+    elif dwd_orders is not None and dwd_manifest and dwd_cleaning:
+        ods_manifest_path = args.ods / "manifest.json"
+        ods_manifest = (
+            json.loads(ods_manifest_path.read_text(encoding="utf-8"))
+            if ods_manifest_path.is_file() else {}
+        )
+        ods_run_id = str(ods_manifest.get("runId") or ods_manifest.get("run_id") or "")
+        dwd_source_run_id = str(dwd_manifest.get("source_run_id") or "")
+        ads_source_run_id = str(meta.get("sourceRunId") or "")
+        report.check(
+            group,
+            "ODS、DWD、ADS 来源批次一致",
+            bool(ods_run_id) and ods_run_id == dwd_source_run_id == ads_source_run_id,
+            f"ODS={ods_run_id or '-'} / DWD.source={dwd_source_run_id or '-'} / ADS.source={ads_source_run_id or '-'}",
+        )
+
+        ods_tables = ods_manifest.get("tables") or {}
+        cleaning_tables = dwd_cleaning.get("tables") or {}
+        raw_count_mismatches = []
+        for table, stats in cleaning_tables.items():
+            actual = int(dict(ods_tables.get(f"ods_{table}", {})).get("rows", -1))
+            expected = int(dict(stats).get("before", -2))
+            if actual != expected:
+                raw_count_mismatches.append(f"{table}:{actual}!={expected}")
+        report.check(
+            group,
+            "ODS 原始行数 == DWD 清洗报告 before",
+            len(cleaning_tables) == 7 and not raw_count_mismatches,
+            ", ".join(raw_count_mismatches) if raw_count_mismatches else "清洗报告未覆盖七表",
+        )
+
+        assertions = dwd_cleaning.get("dwd_assertions") or []
+        report.check(
+            group,
+            "DWD 七表写后读回断言全部通过",
+            len(assertions) == 7 and all(item.get("ok") for item in assertions),
+            f"断言数={len(assertions)}，失败={sum(not item.get('ok') for item in assertions)}",
+        )
+        dwd_chargers = int(dict(dwd_manifest.get("table_rows") or {}).get("dim_chargers", -1))
+        report.close(
+            group,
+            "DWD 清洗后桩数 == ADS ads_charger 行数",
+            dwd_chargers,
+            scalar("SELECT COUNT(1) FROM ads_charger"),
+            COUNT_TOL,
+        )
     else:
         # 用与 build_local.py 相同的清洗规则从 ODS 重新算一遍，比对 ADS 的总量。
         # 这不是「自己跟自己对」，而是「同一规则在两个入口的结果是否一致」：
@@ -350,7 +445,6 @@ def reconcile(
 
     # ---------------------------------------------------------------- D DWD ↔ DWS
     group = "D 上游一致（DWD ↔ DWS）"
-    dwd_orders = read_dwd(args.dwd, "dwd_order_detail")
     if dwd_orders is None:
         detail = f"{args.dwd} 下没有 dwd_order_detail（CSV 或 Parquet）"
         if args.require_dwd:

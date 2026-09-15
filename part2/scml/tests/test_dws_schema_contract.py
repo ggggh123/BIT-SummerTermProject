@@ -109,6 +109,19 @@ class DwsSchemaContractTest(unittest.TestCase):
         """峰值时段并列时必须取更早的整点，否则与本地实现逐行对不上。"""
         self.assertIn("ORDER BY busy_count DESC, hour ASC", " ".join(self.etl.split()))
 
+    def test_dwd_contract_repairs_partitioned_fact_tables(self):
+        dwd = (SQL_DIR / "dwd_contract.sql").read_text(encoding="utf-8")
+        for table in (
+            "dwd_order_detail",
+            "dwd_telemetry_detail",
+            "dwd_station_hourly",
+            "dwd_event",
+        ):
+            self.assertIn(
+                f"MSCK REPAIR TABLE {table}", dwd,
+                f"dwd_contract.sql 没有修复 {table} 的 dt 分区",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

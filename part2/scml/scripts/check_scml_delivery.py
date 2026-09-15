@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -99,6 +100,14 @@ def check_ads(ads: Path) -> dict[str, object]:
                 return fail("ADS database is missing contract tables", missing=missing)
             meta = dict(db.execute("SELECT key, value FROM ads_meta"))
             forecast_point_count = db.execute("SELECT COUNT(1) FROM ads_forecast_24h").fetchone()[0]
+            forecast_station_count = db.execute(
+                "SELECT COUNT(1) FROM ads_station WHERE forecast_enabled = 1"
+            ).fetchone()[0]
+            forecast_orphan_count = db.execute(
+                """SELECT COUNT(1) FROM ads_forecast_24h f
+                     LEFT JOIN ads_station s ON s.station_id = f.station_id
+                     WHERE s.station_id IS NULL OR s.forecast_enabled <> 1"""
+            ).fetchone()[0]
     except sqlite3.Error as exc:
         return fail(f"cannot read ads.db: {exc}")
 
@@ -110,6 +119,8 @@ def check_ads(ads: Path) -> dict[str, object]:
         chargerCount=int(meta.get("chargerCount", 0)),
         orderCount=int(meta.get("orderCount", 0)),
         forecastPointCount=int(forecast_point_count),
+        forecastStationCount=int(forecast_station_count),
+        forecastOrphanCount=int(forecast_orphan_count),
     )
 
 
@@ -127,15 +138,35 @@ def check_scale(ods_check: dict[str, object], ads_check: dict[str, object]) -> d
             "formal delivery requires ODS manifest kind=ods-handoff; run scripts/run_scml_full.sh first",
             actualKind=ods_check.get("kind"),
         )
-    if int(ads_check.get("forecastPointCount", 0)) != 144:
+    forecast_stations = int(ads_check.get("forecastStationCount", 0))
+    forecast_points = int(ads_check.get("forecastPointCount", 0))
+    forecast_orphans = int(ads_check.get("forecastOrphanCount", 0))
+    expected_points = forecast_stations * 24
+    if forecast_stations <= 0 or forecast_points != expected_points or forecast_orphans:
         return fail(
-            "formal delivery requires 144 forecast points (6 forecast stations x 24h)",
-            actualForecastPointCount=ads_check.get("forecastPointCount", 0),
+            "formal delivery requires every surviving forecast-enabled station to have 24 non-orphan points",
+            forecastStationCount=forecast_stations,
+            expectedForecastPointCount=expected_points,
+            actualForecastPointCount=forecast_points,
+            orphanForecastPointCount=forecast_orphans,
         )
-    return ok("formal delivery scale is confirmed", kind=ods_check.get("kind"), forecastPointCount=144)
+    return ok(
+        "formal delivery scale is confirmed",
+        kind=ods_check.get("kind"),
+        forecastStationCount=forecast_stations,
+        forecastPointCount=forecast_points,
+    )
 
 
-def check_reconcile(ods: Path, dws: Path, ads: Path, dwd: Path, require_dwd: bool) -> dict[str, object]:
+def check_reconcile(
+    ods: Path,
+    dws: Path,
+    ads: Path,
+    dwd: Path,
+    require_dwd: bool,
+    allow_missing_hours: int,
+    skip_ods_recompute: bool,
+) -> dict[str, object]:
     args = [
         sys.executable, str(JOBS / "reconcile.py"),
         "--ods", str(ods),
@@ -145,6 +176,10 @@ def check_reconcile(ods: Path, dws: Path, ads: Path, dwd: Path, require_dwd: boo
     ]
     if require_dwd:
         args.append("--require-dwd")
+    if allow_missing_hours:
+        args.extend(["--allow-missing-hours", str(allow_missing_hours)])
+    if skip_ods_recompute:
+        args.append("--skip-ods-recompute")
     result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8")
     stdout = result.stdout
     if result.returncode != 0:
@@ -167,7 +202,15 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
     if args.require_full:
         checks["scale"] = check_scale(checks["ods"], checks["ads"])
     if all(item["status"] in {"ok", "skip"} for item in checks.values()):
-        checks["reconcile"] = check_reconcile(args.ods, args.dws, args.ads, args.dwd, args.require_dwd)
+        checks["reconcile"] = check_reconcile(
+            args.ods,
+            args.dws,
+            args.ads,
+            args.dwd,
+            args.require_dwd,
+            args.allow_missing_hours,
+            args.skip_ods_recompute,
+        )
 
     status = "fail" if any(item["status"] == "fail" for item in checks.values()) else "ready"
     return {"status": status, "checks": checks}
@@ -188,6 +231,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dwd", type=Path, default=Path("handoff/dwd"))
     parser.add_argument("--require-dwd", action="store_true")
     parser.add_argument("--require-full", action="store_true", help="fail unless the package is formal scale")
+    parser.add_argument(
+        "--allow-missing-hours",
+        type=int,
+        default=int(os.environ.get("ALLOW_MISSING_HOURS", "0") or "0"),
+        help="pass through to reconcile.py for official DWD hourly gaps",
+    )
+    parser.add_argument(
+        "--skip-ods-recompute",
+        action="store_true",
+        default=bool(os.environ.get("SKIP_ODS_RECOMPUTE")),
+        help="pass through to reconcile.py when ADS follows #3 official DWD cleaning",
+    )
     parser.add_argument("--json", action="store_true", help="print machine-readable report")
     args = parser.parse_args(argv)
 

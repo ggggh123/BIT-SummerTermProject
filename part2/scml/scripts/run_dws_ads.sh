@@ -16,6 +16,9 @@
 #
 # 可选环境变量：
 #   FORECAST_HANDOFF=handoff/forecast               # 接入 #5 真实预测包，替换 ADS 预测三表
+#   ALLOW_MISSING_HOURS=47                          # 官方 DWD 已说明小时表缺口时放行
+#   SKIP_ODS_RECOMPUTE=1                            # ADS 来自 #3 DWD 官方口径时跳过 ODS 本地重算
+#   REGISTER_DWD_CONTRACT=0                         # 不自动注册/修复 DWD 外部表
 #
 # 产出：
 #   HDFS  <root>/dws/*、<root>/ads/*              （Parquet，验收用）
@@ -31,6 +34,9 @@ ODS_DIR="${ODS_DIR:-handoff/ods}"
 HANDOFF_DWS="${HANDOFF_DWS:-handoff/dws}"
 HANDOFF_ADS="${HANDOFF_ADS:-handoff/ads}"
 FORECAST_HANDOFF="${FORECAST_HANDOFF:-}"
+ALLOW_MISSING_HOURS="${ALLOW_MISSING_HOURS:-0}"
+SKIP_ODS_RECOMPUTE="${SKIP_ODS_RECOMPUTE:-}"
+REGISTER_DWD_CONTRACT="${REGISTER_DWD_CONTRACT:-1}"
 PYTHON="${PYTHON:-python3}"
 SPARK_SUBMIT="${SPARK_SUBMIT:-spark-submit}"
 
@@ -58,8 +64,13 @@ if [ -z "$DRY_RUN" ]; then
 fi
 
 step "1/5 DWS 四表（dws_schema.sql + dws_etl.sql）"
+BUILD_DWS_ARGS=()
+if [ "$REGISTER_DWD_CONTRACT" != "0" ]; then
+  BUILD_DWS_ARGS+=(--register-dwd-contract)
+fi
 $SPARK_SUBMIT warehouse/jobs/build_dws.py \
-  --sql-dir warehouse/sql --hdfs-root "$HDFS_ROOT" $DRY_RUN
+  --sql-dir warehouse/sql --hdfs-root "$HDFS_ROOT" $DRY_RUN \
+  "${BUILD_DWS_ARGS[@]}"
 
 step "2/5 ADS 业务指标表（ads_etl.sql）"
 $SPARK_SUBMIT warehouse/jobs/build_ads.py \
@@ -87,10 +98,18 @@ if [ -n "$SKIP_RECONCILE" ]; then
   step "5/5 对账（已跳过）"
 else
   step "5/5 三层对账（ODS -> DWS -> ADS，误差 0）"
+  RECONCILE_ARGS=()
+  if [ "$ALLOW_MISSING_HOURS" != "0" ]; then
+    RECONCILE_ARGS+=(--allow-missing-hours "$ALLOW_MISSING_HOURS")
+  fi
+  if [ -n "$SKIP_ODS_RECOMPUTE" ]; then
+    RECONCILE_ARGS+=(--skip-ods-recompute)
+  fi
   "$PYTHON" warehouse/jobs/reconcile.py \
     --ods "$ODS_DIR" --dws "$HANDOFF_DWS" \
     --ads "${HANDOFF_ADS}/ads.db" \
-    --dwd "${HDFS_ROOT}/dwd" --require-dwd
+    --dwd "${HDFS_ROOT}/dwd" --require-dwd \
+    "${RECONCILE_ARGS[@]}"
 fi
 
 step "完成"

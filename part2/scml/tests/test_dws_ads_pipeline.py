@@ -220,6 +220,84 @@ class PipelineEndToEndTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_reconcile_allows_known_missing_hourly_rows(self):
+        copied_ads = Path(self._temp.name) / "ads_missing_hour"
+        shutil.copytree(self.ads, copied_ads)
+        db_path = copied_ads / "ads.db"
+        with closing(sqlite3.connect(db_path)) as db:
+            db.execute(
+                "DELETE FROM ads_station_hourly WHERE rowid = "
+                "(SELECT rowid FROM ads_station_hourly ORDER BY dt, station_id, hour LIMIT 1)"
+            )
+            db.commit()
+
+        result = subprocess.run(
+            [
+                sys.executable, str(JOBS / "reconcile.py"),
+                "--ods", str(self.ods), "--dws", str(self.dws),
+                "--ads", str(db_path),
+                "--allow-missing-hours", "1",
+            ],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("容忍 1", result.stdout)
+
+    def test_reconcile_allows_sparse_hourly_grid_for_prl_quality_report(self):
+        copied_ads = Path(self._temp.name) / "ads_prl_sparse_hour"
+        shutil.copytree(self.ads, copied_ads)
+        db_path = copied_ads / "ads.db"
+        with closing(sqlite3.connect(db_path)) as db:
+            db.execute(
+                "DELETE FROM ads_station_hourly WHERE rowid = "
+                "(SELECT rowid FROM ads_station_hourly ORDER BY dt, station_id, hour LIMIT 1)"
+            )
+            db.execute(
+                "INSERT OR REPLACE INTO ads_quality_meta(key, value) VALUES(?, ?)",
+                ("source", "prl-quality-report"),
+            )
+            db.commit()
+
+        result = subprocess.run(
+            [
+                sys.executable, str(JOBS / "reconcile.py"),
+                "--ods", str(self.ods), "--dws", str(self.dws),
+                "--ads", str(db_path),
+            ],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("PRL 小时表", result.stdout)
+
+    def test_reconcile_can_skip_ods_recompute_for_official_dwd_path(self):
+        result = subprocess.run(
+            [
+                sys.executable, str(JOBS / "reconcile.py"),
+                "--ods", str(self.ods), "--dws", str(self.dws),
+                "--ads", str(self.ads / "ads.db"),
+                "--skip-ods-recompute",
+            ],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("官方 DWD 口径", result.stdout)
+
+    def test_reconcile_reads_nested_dt_partitioned_dwd_csv(self):
+        from reconcile import read_dwd
+
+        dwd = Path(self._temp.name) / "dwd_nested"
+        partition = dwd / "dwd" / "dwd_order_detail" / "dt=2026-09-01"
+        partition.mkdir(parents=True)
+        (partition / "part-00000.csv").write_text(
+            "status,amount_fen\ncompleted,123\n",
+            encoding="utf-8",
+        )
+
+        rows = read_dwd(dwd, "dwd_order_detail")
+
+        self.assertEqual(rows, [{"status": "completed", "amount_fen": "123"}])
+
     def test_build_local_can_replace_baseline_with_forecast_handoff(self):
         from build_local import build
 
