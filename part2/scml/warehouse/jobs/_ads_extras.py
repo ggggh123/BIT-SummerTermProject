@@ -28,6 +28,7 @@ from _lib import (
     NULL_TEXT,
     RFM_SEGMENTS,
     RULE_TYPES,
+    is_nonstandard_time,
     iter_rows,
     normalize_text,
     parse_timestamp,
@@ -528,8 +529,10 @@ def build_events(
     events: list[dict] = []
     for row in iter_rows(ods_dir / "ods_events"):
         created_at = parse_timestamp(row.get("created_at"))
-        if created_at is None:
+        # Q4 契约口径：可解析的非标准格式与不可解析都计数；解析失败的剔除行为不变。
+        if is_nonstandard_time(row.get("created_at"), created_at):
             detected["R04"] += 1
+        if created_at is None:
             continue
         raw_type = normalize_text(row.get("event_type")) or "unknown"
         message_raw = normalize_text(row.get("message"))

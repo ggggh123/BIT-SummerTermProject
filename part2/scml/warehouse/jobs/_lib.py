@@ -204,6 +204,30 @@ def parse_timestamp(value: object) -> datetime | None:
     return parsed.replace(tzinfo=CN_TZ) if parsed.tzinfo is None else parsed.astimezone(CN_TZ)
 
 
+_UNSET = object()
+
+
+def is_nonstandard_time(value: object, parsed: object = _UNSET) -> bool:
+    """Q4 契约口径的计数判定：字段非空且原文不是标准 ISO 8601 形式。
+
+    契约 `ods-dwd-v0.1.json` 的 Q4 policy 要求「统一时区；**区分可解析的
+    非标准格式与不可解析时间**」——两类都算命中：
+
+    * 不可解析（`parse_timestamp` 返回 None）；
+    * 可解析但原文 ≠ 归一化后的 ISO 8601（如 `2026/07/21 12:00:00`、Unix 秒）。
+
+    清洗解析行为保持不变（仍按 `parse_timestamp` 宽容解析），本函数只用于
+    **计数**，不参与剔除判定，避免因口径收紧而丢数据。
+
+    传入 `parsed`（调用方已解析的结果）可复用本次解析，避免整表重复解析。
+    """
+    text = "" if value is None else str(value).strip()
+    if not text or text == NULL_TEXT:
+        return False
+    moment = parse_timestamp(text) if parsed is _UNSET else parsed
+    return moment is None or moment.isoformat() != text
+
+
 def normalize_text(value: object) -> str:
     """R10：去首尾空白 + 全角转半角。"""
     if value is None:

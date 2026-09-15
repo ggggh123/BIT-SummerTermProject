@@ -56,6 +56,7 @@ from _lib import (  # noqa: E402
     NULL_TEXT,
     MAX_SESSION_KWH,
     impute_coordinate,
+    is_nonstandard_time,
     is_valid_coordinate,
     is_valid_mobile,
     iter_rows,
@@ -194,13 +195,15 @@ def load_orders(
         started_at = parse_timestamp(row.get("started_at"))
         ended_at = parse_timestamp(row.get("ended_at"))
 
-        for field, parsed in (
+        # Q4 契约口径：三个时间字段里任一「非标准」（可解析但格式不同 / 不可解析）
+        # 即计一条；按行计数，避免同一条记录多字段重复计数（与 PRL 侧对账口径一致）。
+        times = (
             ("reserved_at", reserved_at),
             ("started_at", started_at),
             ("ended_at", ended_at),
-        ):
-            if normalize_text(row.get(field)) and parsed is None:
-                detected["R04"] += 1
+        )
+        if any(is_nonstandard_time(row.get(field), parsed) for field, parsed in times):
+            detected["R04"] += 1
 
         # 业务口径：只有 completed 订单计入营收、电量、订单量
         if normalize_text(row.get("status")).lower() != "completed":
@@ -269,8 +272,10 @@ def load_station_hourly(
     rows: list[dict] = []
     for row in iter_rows(ods_dir / "ods_station_hourly"):
         observed_at = parse_timestamp(row.get("observed_at"))
-        if observed_at is None:
+        # Q4 契约口径：可解析的非标准格式与不可解析都计数；解析失败的剔除行为不变。
+        if is_nonstandard_time(row.get("observed_at"), observed_at):
             detected["R04"] += 1
+        if observed_at is None:
             continue
         station_id = to_int(row.get("station_id"))
         if station_id not in stations:
@@ -324,8 +329,12 @@ def scan_telemetry(ods_dir: Path, rated_power: dict[int, int], detected: Counter
             if power < 0 or power > rated * 1.05:
                 detected["R03"] += 1
                 bad = True
-        if parse_timestamp(row.get("recorded_at")) is None:
+        recorded_at = parse_timestamp(row.get("recorded_at"))
+        # Q4 契约口径：可解析的非标准格式与不可解析都计数；
+        # 但只有「不可解析」才把该行标为 bad 剔除，解析宽容度不变。
+        if is_nonstandard_time(row.get("recorded_at"), recorded_at):
             detected["R04"] += 1
+        if recorded_at is None:
             bad = True
         if bad:
             removed += 1
