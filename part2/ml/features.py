@@ -44,8 +44,12 @@ FEATURE_COLS: tuple[str, ...] = (
     "busy_roll_24h",
 )
 
-#: 预测步长（小时）
-HORIZONS: tuple[int, ...] = (1, 6, 24)
+#: 预测步长（小时）。ADS 契约表 `ads_forecast_24h` 要求 horizon 覆盖 1–24
+#: （每站 24 个点，大屏 24h 曲线），故默认训练全部 24 个 horizon。
+HORIZONS: tuple[int, ...] = tuple(range(1, 25))
+
+#: 《05》验收与模型报告重点报告的口径
+REPORT_HORIZONS: tuple[int, ...] = (1, 6, 24)
 
 #: 标签列名模板
 LOAD_LABEL = "y_load_h{h}"
