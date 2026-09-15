@@ -72,9 +72,16 @@
 
 ## 7. 最小冻结清单
 
-1. #2／#4：将 DWS 时长解析修正为显式 TIMESTAMP cast，重跑对账。
+1. ~~#2／#4：将 DWS 时长解析修正为显式 TIMESTAMP cast，重跑对账。~~
+   → **已解决（2026-09-15，#2 执行）**：核查发现该 bug 有**两处**——
+   ① `part2/scml/warehouse/sql/dws_etl.sql:112-113`（充电时长）：#4 已用 `CAST(... AS TIMESTAMP)` 修好；
+   ② `part2/scml/warehouse/sql/ads_etl.sql:413,417`（**平均等待时长**）：**此前被遗漏**，仍是裸 `UNIX_TIMESTAMP(字符串)`，在 Spark 3.5.7 上会静默变 0，导致大屏该指标恒为 0。已由 #2 补修为显式 `CAST`。
+   另注：`part2/scml/scripts/check_scml_downstream.py:32` 有一个正则适配器会动态补 `CAST`，但其自述"不改写上游 SQL 文件"，故不能替代源文件修复。
 2. ~~#4：明确 Q2 的“重复”是主键重复还是业务内容重复，并使注入器与文档一致。~~
    → **已解决（2026-09-15）**：#2 TL 拍板采纳「按业务主键判重」；注入器（`scml/data_generator/generator.py` 的 `_duplicate_payload`）、策略文件（`quality-policy` 的 `duplicate_policy`，版本升至 `0.2.0-draft`）与《03》§2.3/§3.2 已同步；检测端 `quality/rules.py` 本已按契约 `primary_key` 分组，无需改动。决策说明见 [Q2-duplicate-policy-decision.md](Q2-duplicate-policy-decision.md)。
 3. #4／#3：修正 Q3 中“乘 10 仍不超额定值”的标签，并明确 Q6 已丢失小数分位的处理。
 4. #2／#4／#5：决定 Q5 超占用小时是隔离还是裁剪、Q9 越界坐标是隔离还是回填，并确认 ML 如何处理小时缺口。
+   → **小时缺口部分（2026-09-15）：#2 已认可 #5 的方案**——特征工程前做整点网格对齐（`part2/ml/features.py` 的 `align_hourly_grid`），并以 `part2/ml/verify_coverage.py` 作为训练门禁，`row_offset_safe=false` 时直接拒绝进入特征工程，**不允许静默按行偏移处理**。
+   **但按「Q2 口径已定、整体策略文件仍为 `DRAFT_PENDING_TEAM_REVIEW`」的现状，本项暂不标记冻结**（#2 决定），待与 Q2 等条目一并走完评审流程。已在本机用带 47 个缺口的真实 DWD 验证通过。
+   → **Q5 超占用小时**（隔离 / 裁剪）与 **Q9 越界坐标**（隔离 / 仅置空坐标 / 回填）：**待 #2 确认**。
 5. #2／#1：确认 `ads_quality_*` 字段及页面对 FP/FN、级联影响和“未冻结”标志的展示口径。

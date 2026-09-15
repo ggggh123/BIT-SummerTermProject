@@ -406,12 +406,15 @@ util AS (
      GROUP BY s.district
 ),
 wait AS (
+    -- DWD 的时间列是 STRING（形如 2026-06-17T12:34:56+08:00）。
+    -- 必须显式 CAST 再取 UNIX_TIMESTAMP：Spark 3.5.7 上直接 UNIX_TIMESTAMP(字符串) 返回 null，
+    -- 相减与 AVG 会静默变成 0，导致「平均等待时长」恒为 0（契约 §3 已写明该要求）。
     SELECT s.district,
-           ROUND(AVG(UNIX_TIMESTAMP(d.started_at) - UNIX_TIMESTAMP(d.reserved_at)) / 60.0, 1) AS avg_wait_min
+           ROUND(AVG(UNIX_TIMESTAMP(CAST(d.started_at AS TIMESTAMP)) - UNIX_TIMESTAMP(CAST(d.reserved_at AS TIMESTAMP))) / 60.0, 1) AS avg_wait_min
       FROM ev_charging.dwd_order_detail d
       JOIN ev_charging.dim_stations s ON s.station_id = d.station_id
      WHERE d.status = 'completed'
-       AND UNIX_TIMESTAMP(d.started_at) > UNIX_TIMESTAMP(d.reserved_at)
+       AND UNIX_TIMESTAMP(CAST(d.started_at AS TIMESTAMP)) > UNIX_TIMESTAMP(CAST(d.reserved_at AS TIMESTAMP))
      GROUP BY s.district
 ),
 pop AS (
