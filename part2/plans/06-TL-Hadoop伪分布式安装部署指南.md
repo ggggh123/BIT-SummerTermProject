@@ -633,7 +633,54 @@ echo "通过 $pass 项，失败 $fail 项"
 
 - §5.5 / §5.6 / §6 的环境变量按本记录采用**全局 `/etc/profile.d/hadoop-env.sh`** 方案（原因见 §5.5 说明），其他机器请照此执行，以保证 `check_env.sh` 与跨机脚本行为一致；
 - 本机内存仅 7.7 GiB，已按 §5.7(7) 设置 YARN 内存上限 4096 MB，并按 §10.2 限制 Spark executor/driver 为 2g；内存更充裕的机器可忽略；
-- 本机 `/etc/hosts` 为 `192.168.59.128 niyujun01`。若虚拟机 DHCP 更换 IP，需同步更新该行（或绑定静态 IP），否则 `hdfs://niyujun01:8020` 会失联。
+- **`/etc/hosts` 采用回环写法 `127.0.0.1 localhost niyujun01`（2026-09-15 由 `192.168.59.128 niyujun01` 改）**：
+  - 收益 1：`hdfs://niyujun01:8020` 与 `hdfs://localhost:8020` **完全等价**——#3 的作业脚本内部写的是 `localhost:8020`，而本指南要求用主机名，统一后两家脚本可在同一台机器上混跑；
+  - 收益 2：虚拟机 DHCP 更换 IP 后无需再同步该行，`hdfs://<主机名>:8020` 不会失联；
+  - **注意**：改后必须重启 **HDFS 与 YARN 的全部守护进程**（只重启 HDFS 不够——ResourceManager 会仍绑在旧网卡地址上，导致 `8032 连接被拒绝`，表现为 Spark 提交时反复 `Retrying connect to server: ...:8032`）。
+    判断方法：`sudo ss -ltnp | grep :8032`，正常应显示 `127.0.0.1:8032`；若显示 `<网卡IP>:8032` 则 RM 仍是旧进程，需 `stop-yarn.sh` 后强制 `kill` 残留 PID 再 `start-yarn.sh`。
+  - Web UI（9870 / 8088）仍绑 `0.0.0.0`，宿主机用 `http://<VM-IP>:9870` 访问不受影响。
+
+### 11.4 集成机运行时入口（`ev-part2`）适配说明
+
+主线 `part2/scripts/` 的作业脚本（`run_pipeline.sh` 等）在第 4 行统一 `source /usr/local/ev-part2/env.sh`，并由 `ev-part2` 命令包装工具链。**该运行时在集成机上采用适配版**：
+
+| 项 | 仓库 `install_global_runtime.sh`（#3 机器用） | 集成机适配版（`niyujun01`，2026-09-15） |
+|---|---|---|
+| JDK | **JDK 8**（`/usr/local/ev-part2/jdk8`） | **JDK 17**（`/usr/local/jdk-17`，本组冻结基线） |
+| Hadoop | **3.2.1**（脚本自带 tarball） | **3.4.1**（既有系统级安装，不覆盖） |
+| Python | 自建 CPython 3.10.21 | 系统 **3.10.12**（`/usr/bin/python3`） |
+| Spark | 3.5.7 | 3.5.7（同） |
+| HDFS/YARN 客户端身份 | 当前用户 | `HADOOP_USER_NAME=hadoop`（本机 Hadoop 由独立 `hadoop` 用户启动） |
+| 启停实现 | 按自建配置启动 | 适配版 `cluster.sh` 调既有 `start-dfs.sh`/`start-yarn.sh`，**以守护进程真实数量判活** |
+
+**为什么不直接跑 `install_global_runtime.sh`**：
+
+1. 它会安装 Hadoop 3.2.1 + JDK 8，与本组已冻结的基线（3.4.1 + JDK 17）冲突；
+2. 它**显式拒绝覆盖**已存在的 `/usr/local/hadoop`、`/usr/local/spark`（脚本第 20–25 行的保护逻辑），在已装好基线的机器上本就跑不起来；
+3. #3 的《local-runtime.md》亦明确要求：「**最终集成前由 #2 选定唯一基线**」「**不用任一安装脚本覆盖另一套已有环境**」。
+
+**集成机的实际安装内容**（仅 3 个文件，不动工具链）：
+
+```text
+/usr/local/ev-part2/env.sh          # 适配版：JAVA_HOME=/usr/local/jdk-17；HADOOP_HOME=/usr/local/hadoop(3.4.1)
+/usr/local/ev-part2/bin/cluster.sh  # 适配版：以 hadoop 用户启停，按进程数判活
+/usr/local/bin/ev-part2             # 包装器（与仓库版一致：start|stop|status|python|hdfs|hadoop|yarn|spark-submit|pyspark|java|jps）
+/etc/profile.d/ev-part2.sh          # 指向 env.sh 的软链
+```
+
+**验证命令与期望输出**：
+
+```bash
+ev-part2 python --version        # → Python 3.10.12
+ev-part2 java -version           # → openjdk 17.0.20.1
+ev-part2 hadoop version          # → Hadoop 3.4.1
+ev-part2 spark-submit --version  # → version 3.5.7
+ev-part2 status                  # → 守护进程：5/5
+```
+
+> **给其他成员机**：不装 `ev-part2` 时，`run_pipeline.sh` 等脚本会失败在第 4 行。
+> 两种做法：① 按上表在本机建同样 3 个文件（把 `JAVA_HOME` 指向本机 JDK 17）；② 在本机 `~/ev-part2/` 下自建 `env.sh` 并 `export EV_PART2_HOME`。
+> **不要**把 `install_global_runtime.sh` 直接跑在已装好 3.4.1 基线的机器上——它会因目标已存在而拒绝执行（这是它自身的安全设计，不是故障）。
 
 ---
 
