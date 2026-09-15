@@ -73,10 +73,19 @@ body {
 .chart.tall { height: 320px; }
 
 /* 主页 1920×1080 等比缩放容器 */
-.scale-host { position: relative; width: 100%; overflow: hidden; }
+.scale-host { position: relative; width: 100%; overflow: visible; }
 .scale-inner { transform-origin: top left; }
 .scale-inner .chart { height: 300px; }
 .scale-inner .chart.tall { height: 360px; }
+
+/* ---- DataV 大屏件（#1 接入，满足老师要求第 5 条）---- */
+/* 面板本体让位给 dv-border-box：保留 .panel 类（布局与测试选择器），去掉自带边框与底色 */
+.panel--dv { border: 0; background: transparent; padding: 0; }
+.home-deco { display: block; width: 100%; height: 12px; margin: 2px 0 10px; }
+.panel-heading { display: flex; align-items: center; gap: 12px; }
+.panel-heading-extra { margin-left: auto; font-weight: 400; font-size: 13px; }
+/* ScrollBoard 需要有确定高度的父容器，否则高度为 0 不显示 */
+.event-board { height: 240px; }
 
 .kpi-card { text-align: left; }
 .kpi-label { font-size: 13px; color: var(--text-dim); margin: 0 0 6px; }
