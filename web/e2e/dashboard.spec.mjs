@@ -118,3 +118,31 @@ test('DataV 大屏件已渲染（老师要求第 5 条）', async ({ page }) => 
   const boardBox = await board.boundingBox()
   expect(boardBox.height).toBeGreaterThan(100)
 })
+
+test('主页版面：1920×1080 一屏放下，地图占据主视区', async ({ page }) => {
+  await page.goto('/')
+  await waitCharts(page, 5)
+
+  const layout = await page.evaluate(() => {
+    const inner = document.querySelector('.scale-inner')
+    const charts = [...document.querySelectorAll('.chart')]
+    const map = charts.find((c) => c.__echarts?.getOption()?.geo)
+    const kpi = document.querySelector('.kpi-card')
+    return {
+      // scrollHeight 是元素自身 CSS 像素 = 设计像素（transform 缩放不影响布局尺寸）
+      contentHeight: inner.scrollHeight,
+      designHeight: 1080,
+      mapHeight: map?.clientHeight ?? 0,
+      kpiWidth: kpi?.clientWidth ?? 0,
+      pageScrollHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+    }
+  })
+
+  // 内容不高于设计框：1920×1080 下无需滚动即可看全（含数据质量面板与事件流）
+  expect(layout.contentHeight).toBeLessThanOrEqual(layout.designHeight)
+  // 地图是主视区：图高 ≥380 设计 px（修复前只有 300，且底图仅约 260px 宽）
+  expect(layout.mapHeight).toBeGreaterThanOrEqual(380)
+  // 整页在 1080 高度内放下（留 32px 容差给顶栏/页脚）
+  expect(layout.pageScrollHeight).toBeLessThanOrEqual(layout.viewportHeight + 32)
+})

@@ -85,7 +85,21 @@ body {
 .panel-heading { display: flex; align-items: center; gap: 12px; }
 .panel-heading-extra { margin-left: auto; font-weight: 400; font-size: 13px; }
 /* ScrollBoard 需要有确定高度的父容器，否则高度为 0 不显示 */
-.event-board { height: 240px; }
+.event-board { height: 220px; }
+
+/* ---- 主页大屏三列栅格（内容总高控制在 1080 设计高度内，1920×1080 一屏放下）---- */
+/* 左：营收趋势 + 桩状态 ｜ 中：北京地图（主视区中心，列最宽、图最高）｜ 右：利用率排行 + 数据质量 */
+.grid.home-main { grid-template-columns: 1.05fr 1.6fr 1.15fr; margin-top: 14px; }
+/* 底行：24h 负荷与预测（宽） + 实时事件流 */
+.grid.home-bottom { grid-template-columns: 1.7fr 1fr; margin-top: 14px; }
+.dv-col { display: grid; gap: 14px; align-content: start; }
+/* 数据质量 10 条在面板内滚动，避免把主视区撑高 */
+.quality-list { height: 132px; }
+
+/* 图表高度用设计像素固定；ScaleFrame 再整体等比缩放 */
+.scale-inner .chart.h150 { height: 150px; }
+.scale-inner .chart.h220 { height: 220px; }
+.scale-inner .chart.h380 { height: 380px; }
 
 .kpi-card { text-align: left; }
 .kpi-label { font-size: 13px; color: var(--text-dim); margin: 0 0 6px; }
@@ -106,5 +120,6 @@ body {
 
 @media (max-width: 1100px) {
   .grid.two, .grid.two-even { grid-template-columns: 1fr; }
+  .grid.home-main, .grid.home-bottom { grid-template-columns: 1fr; }
   .chart { height: 220px; }
 }

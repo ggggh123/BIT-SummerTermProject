@@ -1,7 +1,7 @@
 # #1 变更声明（写给其他 AI / Agent 阅读）
 
 > 作者：#1 王浩恩（前端大屏 / PM）｜日期：2026-09-15
-> 分支：`feat/part2-web-closeout`（PR #15，待批）；此前 `feat/part2-integration`（PR #14，已合入 `dev`，`befbdf9`）
+> 分支：`feat/part2-web-layout`（主页版面重构）；此前 `feat/part2-web-closeout`（PR #15，已合入 `dev`，`fdb5228`）、`feat/part2-integration`（PR #14，已合入 `dev`，`befbdf9`）
 > 读者：在本仓库继续改代码或文档的其他 AI。**动手前先读第 4 节「硬契约」**，那里列了改坏就会挂测试/挂演示的东西。
 > 这份声明只描述 **#1 写入范围内**的改动；队友目录的变化不在本文，除注明外我没有修改过他们的文件。
 
@@ -24,16 +24,16 @@
 
 | 文件 | 状态 | 改了什么 | 谁依赖它 |
 |---|---|---|---|
-| `web/src/components/ScaleFrame.vue` | 改 | 宿主高度由 `baseHeight × scale` 改为 **`contentHeight × scale`**（`contentHeight = max(1080, 内容 scrollHeight)`），加 `ResizeObserver` 跟随内容 | 主页/子页布局；E2E 的面板可见性 |
-| `web/src/styles/theme.css` | 改 | `.scale-host` 的 `overflow` **hidden → visible**；新增 `.panel--dv`、`.home-deco`、`.panel-heading`、`.panel-heading-extra`、`.event-board` | DataV 边框、滚动榜单、面板标题 |
+| `web/src/components/ScaleFrame.vue` | 改 | ① 宿主高度由 `baseHeight × scale` 改为 **`contentHeight × scale`**（`contentHeight = max(1080, 内容 scrollHeight)`）+ `ResizeObserver`；② 预留高度由固定 120px 改为**按真实占位**（宿主顶部 + `.footnote` 高度 + 12），否则整页会比视口高 ~55px | 主页/子页布局；E2E 的面板可见性与"一屏放下"断言 |
+| `web/src/styles/theme.css` | 改 | `.scale-host` 的 `overflow` **hidden → visible**；新增 `.panel--dv`、`.home-deco`、`.panel-heading`、`.panel-heading-extra`、`.event-board`（220px）；新增主页三列栅格 `.grid.home-main`、`.grid.home-bottom`、`.dv-col`、`.quality-list` 与固定图表高度 `.chart.h150/.h220/.h380` | DataV 边框、滚动榜单、面板标题、主页版面 |
 | `web/src/components/EChart.vue` | 改 | onMounted 增加 **`el.value.__echarts = chart`**（页面里没有全局 echarts），onBeforeUnmount `delete el.value?.__echarts` | **E2E 取实例用**（`convertToPixel` / `trigger('click')`） |
 | `web/src/lib/charts/beijingStation.js` | 改 | `geo` 增加 `layoutCenter:['50%','52%']`、`layoutSize:'94%'`、`scaleLimit`；`symbolSize` 由 `clamp(π/1.2, 12, 34)` 改为 **`clamp(chargerCount/2.2, 10, 16)`** | 主页地图；`web/tests/mapScale.test.mjs` |
-| `web/src/views/HomeView.vue` | 改 | 6 个面板内容包进 `<DvFrame>`；新增 `<Decoration10 class="home-deco">`；事件流 `<ul>` → **`<ScrollBoard :config="eventBoard">`**；面板标题改类名 `.panel-heading` | 主页 E2E、截图、抽验 |
+| `web/src/views/HomeView.vue` | 改 | ① 面板内容包进 `<DvFrame>`、加 `<Decoration10 class="home-deco">`、事件流换 **`ScrollBoard`**、标题改 `.panel-heading`；② **版面重排为三列大屏栅格**（左：营收趋势+桩状态｜中：北京地图 `h380`｜右：利用率排行+数据质量；底行：24h 负荷 `h220` + 事件流），使内容 ≤1080 设计 px | 主页 E2E、截图、抽验 |
 | `web/src/components/DvFrame.vue` | **新增** | DataV 边框封装：`BorderBox8` + 可选 `title` + `Decoration10`；props `{ title?: string }`，内容走默认 slot | `HomeView.vue` |
 | `web/src/main.js` | 改 | `import '@kjgl77/datav-vue3/dist/style.css'` | 全部页面（DataV 样式） |
 | `web/package.json` | 改 | deps 增 `@kjgl77/datav-vue3@^1.7.4`；devDeps 增 `@playwright/test@^1.63.0`；增 `engines.node >= 23`；增 script `test:e2e` | 构建与测试 |
 | `web/playwright.config.mjs` | **新增** | `testDir: ./e2e`；`baseURL = PART2_BASE_URL ?? http://192.168.88.131:5000`；`channel = PART2_CHANNEL ?? 'chrome'`（用系统 Chrome，不下载浏览器）；viewport 1920×1080；`workers: 1` | E2E |
-| `web/e2e/dashboard.spec.mjs` | **新增** | 5 条页面级用例（见 §3） | CI/本地验收 |
+| `web/e2e/dashboard.spec.mjs` | **新增** | **6 条**页面级用例（见 §3） | CI/本地验收 |
 | `web/README.md` | 改 | 重写测试段（36 项单测命令）、新增 Playwright E2E 段、新增 DataV 段、待办更新 | 人/AI 读文档 |
 
 **不属于本次改动、但同属 `web/`（早前一轮已完成，改动前请先读）**：`src/App.vue`（顶栏与 `.pill-error` 状态）、`src/api/{client,state,polling,endpoints}.js`（`USE_MOCK`/`VITE_API_BASE` 开关、轮询、四态）、`src/views/{UserView,StationView,EnterpriseView,GovView}.vue`、`src/lib/charts/*`、`src/mock/*`、`public/geo/beijing.json`、`scripts/gen-mock.mjs`、`scripts/use-ads-json.mjs`。
@@ -45,14 +45,14 @@
 node --test web/tests/*.test.mjs
 # 第一阶段回归（36 项）：不应被前端改动影响
 node --test dashboard/tests/*.test.mjs
-# 页面级 E2E（5 项）：默认打 VM 演示栈，也可本地
+# 页面级 E2E（6 项）：默认打 VM 演示栈，也可本地
 npm --prefix web run test:e2e
 PART2_BASE_URL=http://localhost:5000 npm --prefix web run test:e2e
 # 后端三条自检（联调用）
 python server/tools/selftest_contract.py && python server/tools/selftest_frontend_shape.py && python server/tools/selftest_static_dist.py
 ```
 
-E2E 5 条与它们证明的事：
+E2E 6 条与它们证明的事：
 
 | 用例 | 断言 | 依赖的契约 |
 |---|---|---|
@@ -61,8 +61,9 @@ E2E 5 条与它们证明的事：
 | 5s 轮询重绘 | 拦截 `/api/overview/kpis` 第二次返回 999999 → 页面数字随之变化 | 5s 轮询 + 响应式视图模型 |
 | 接口失败保留旧数据 | 拦截 `/api/**` 全部失败 → `.pill-error` 可见、页内提示出现、KPI 文本不变、图表数量不变 | `state.js` 语义 |
 | DataV 渲染 | `.dv-border-box-8` ≥5 且尺寸 >200×100；`.dv-scroll-board` 存在且高度 >100px | `DvFrame`/`ScrollBoard`/`.event-board` 高度 |
+| 主页版面 | `.scale-inner` 内容高 **≤1080 设计 px**；地图图表高 **≥380**；整页 `scrollHeight ≤ 视口+32` | 三列栅格、`.chart.h150/.h220/.h380`、`ScaleFrame` 预留高度 |
 
-当前结果：单测 36/36、回归 36/36、E2E **5/5**、后端 55/55 + 46 项 0 不兼容 + 静态托管 OK。
+当前结果：单测 36/36、回归 36/36、E2E **6/6**、后端 55/55 + 46 项 0 不兼容 + 静态托管 OK。
 
 ## 4. 硬契约（改代码前必须知道；破坏会导致测试/抽验/演示失败）
 
@@ -93,14 +94,14 @@ E2E 5 条与它们证明的事：
 
 ## 6. 已知限制（不要误当 bug 修）
 
-1. **主页版面未重构**：内容实际约 1632 设计 px > 1080，现为"不裁切、可滚动"；若要"一屏放下"，需按《01-PM》§3.1 重排三列栅格（未做，属观感决策）。
-2. **主页地图偏小**：地图面板仅 300px 高 → 底图受宽高比限制约 260px 宽，8 个站点像素偏挤（已缓解，根治靠上一条）。
-3. **DataV 只在主页**：4 个视角子页仍是普通面板。
-4. **预测仍是基线**：`ads_forecast_batch.is_baseline=1`（seasonal-naive），等 #5 的 `handoff/forecast` 批次数据用 `--forecast-handoff` 接入。
-5. **HDFS 上 `/dwd`、`/ads` 仍是旧数据**（`/ods` 104.7MB、360 分区 与 `/dws` 3.9MB 已是正式规模）：等 #3 的 `handoff/dwd`，再跑 `run_dws_ads.sh` 出官方 SparkSQL on YARN 链路与 YARN 记录。
-6. **KPI 在线率 99.3%** 偏理想：故障桩只有 2 个（状态分布已按利用率生成，非缺陷）。
-7. **电量 0.4 kWh 差异**：`ads_daily` 逐日四舍五入后汇总所致，金额为整数分无差异。
-8. **ADS 质量表 R02/R04 检出 0**：注入各 11,200 条、检出 0，属 #3 的检测口径问题。
+1. **主页版面已重构**（`feat/part2-web-layout`）：内容压到 1080 设计高度以内、1920×1080 一屏放下，地图升为 380px 主视区（E2E 第 6 条守护）。**往主页加内容前先看这条断言**。
+2. **DataV 只在主页**：4 个视角子页仍是普通面板（可后续用 `DvFrame` 统一）。
+3. **预测仍是基线**：`ads_forecast_batch.is_baseline=1`（seasonal-naive），等 #5 的 `handoff/forecast` 批次数据用 `--forecast-handoff` 接入。
+4. **HDFS 上 `/dwd`、`/ads` 仍是旧数据**（`/ods` 104.7MB、360 分区 与 `/dws` 3.9MB 已是正式规模）：等 #3 的 `handoff/dwd`，再跑 `run_dws_ads.sh` 出官方 SparkSQL on YARN 链路与 YARN 记录。
+5. **KPI 在线率 99.3%** 偏理想：故障桩只有 2 个（状态分布已按利用率生成，非缺陷）。
+6. **电量 0.4 kWh 差异**：`ads_daily` 逐日四舍五入后汇总所致，金额为整数分无差异。
+7. **ADS 质量表 R02/R04 检出 0**：注入各 11,200 条、检出 0，属 #3 的检测口径问题。
+8. **老师"Qt 端加大屏入口"这条要求不存在**：2026-09-15 澄清为口误，主机浏览器直接开大屏即可；`docs/management/part2-design-review.md` 的 R3 已作废，**不要再往 Qt 端加入口**。
 
 ## 7. 环境与依赖影响（会影响其他人的构建）
 
