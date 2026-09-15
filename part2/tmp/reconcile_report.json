@@ -1,0 +1,18 @@
+{
+  "input_base": "hdfs://pangxiangzhen01:8020/ev-charging/tmp/synth_dwd",
+  "dws_out": "hdfs://pangxiangzhen01:8020/ev-charging/tmp/dws_region_day",
+  "ads_out": "hdfs://pangxiangzhen01:8020/ev-charging/tmp/ads_gov_service",
+  "rows": {
+    "dws_region_day": 450,
+    "ads_gov_service": 5
+  },
+  "reconcile": {
+    "dwd_revenue_fen": 50136672,
+    "dws_revenue_fen": 50136672,
+    "diff_revenue_fen": 0,
+    "dwd_energy_kwh": 413541.38,
+    "dws_energy_kwh": 413541.38,
+    "diff_energy_kwh": -0.0,
+    "passed": true
+  }
+}
