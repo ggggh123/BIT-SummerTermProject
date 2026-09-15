@@ -103,6 +103,8 @@ def validate_against_ads(
             load, busy, idle = float(row[4]), int(row[5]), int(row[6])
             if load < 0 or busy < 0 or idle < 0 or busy + idle != capacity:
                 raise ValueError(f"站点 {station_id} 的负荷/桩数物理约束失败")
+            if (busy == 0 and load > 0.001) or (busy > 0 and load <= 0.001):
+                raise ValueError(f"站点 {station_id} 的负荷与占用状态不一致")
             if row[7] not in {"low", "medium", "high"} or int(row[8]) not in {0, 1}:
                 raise ValueError(f"站点 {station_id} 的拥堵/峰值枚举非法")
             if int(row[8]) == 1:
@@ -114,6 +116,8 @@ def validate_against_ads(
         raise ValueError("预测指标必须连续覆盖 horizon 1..24")
     if any(value is None for row in metrics for value in row):
         raise ValueError("预测指标不允许空值")
+    if any(float(value) < 0 for row in metrics for value in row[1:]):
+        raise ValueError("预测指标不允许负值")
 
 
 def prepare_ads_manifest(path: Path, database: Path, source_run_id: str) -> dict:

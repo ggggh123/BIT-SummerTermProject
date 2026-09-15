@@ -101,6 +101,25 @@ CREATE TABLE ads_forecast_metric(horizon_h INTEGER,mae REAL,rmse REAL,wape REAL,
                 model_version="test-model",
             )
 
+    def test_busy_and_load_state_must_be_consistent(self):
+        for busy, load in ((0, 1.0), (1, 0.0)):
+            with self.subTest(busy=busy, load=load):
+                with sqlite3.connect(self.forecast) as connection:
+                    connection.execute(
+                        "UPDATE ads_forecast_24h SET predicted_busy_count=?, "
+                        "predicted_idle_count=?, predicted_load_kw=? WHERE horizon_h=1",
+                        (busy, 4 - busy, load),
+                    )
+                with self.assertRaisesRegex(ValueError, "负荷与占用状态不一致"):
+                    merge(
+                        forecast_db=self.forecast,
+                        ads_db=self.ads,
+                        ads_manifest=self.manifest,
+                        backup=self.backup,
+                        model_version="test-model",
+                    )
+                self.assertFalse(self.backup.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
