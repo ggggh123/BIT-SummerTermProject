@@ -21,34 +21,33 @@
 | `11-fix-profile-and-start.sh` | 只补做"清 `/etc/profile` 旧块 + 格式化 + 启动 + 建目录" | 是 |
 | `env-check.sh` | 只读体检：版本、配置、五进程、HDFS、Python 依赖、SSH 免密、共享文件夹 | 否 |
 | `40-verify.sh` | 验收：版本、五进程、HDFS 读写、**Spark on YARN 读 HDFS**、SparkSQL、YARN 记录、Web UI | 否 |
-| **`30-start-demo.sh`** | **一键起全栈（跨机适配版）**：挑 Python → HDFS/YARN → ADS 库 → `web/dist` → Flask 同进程托管大屏与 `/api/*` | 否 |
-| **`31-stop-demo.sh`** | 一键停（默认只停 Flask；`--all` 再按反向顺序停 YARN → HDFS） | 否 |
 
-## 一键启停：跨机适配版（2026-09-15 合并）
+## 一键启停：统一入口（2026-09-15）
 
-`30-start-demo.sh` / `31-stop-demo.sh` 已合并原 `part2/scripts/start_part2.sh`（#2 集成机专用版）的跨机兼容能力，同一套脚本可适配组内两种部署形态：
+**唯一入口是 `part2/scripts/start_part2.sh` 与 `part2/scripts/stop_part2.sh`。**
 
-| 差异点 | 形态 A：Hadoop 以当前登录用户运行 | 形态 B：Hadoop 以独立 `hadoop` 用户运行（集成机 `niyujun01`） |
-|---|---|---|
-| `jps` 枚举进程 | 直接可用 | 需 `sudo -u hadoop bash -lc "jps"`——**非 login shell 的 PATH 不含 JDK，`jps` 会报"找不到命令"** |
-| Hadoop 启停 | 直接调 `sbin/start-*.sh` | 需 `sudo -u hadoop bash -lc <script>` |
-| **成功判据** | **以"守护进程是否真的出现/消失"为准，不信任脚本退出码**——实测：以无权限用户运行 `start-dfs.sh` 会**返回 0 却不启动任何进程**，只看退出码会误报成功 | 同 |
-| 路径与解释器 | 均可环境变量覆盖：`PART2_ROOT` `PART2_PORT` `PART2_PYTHON` `PART2_LOG_DIR` `ADS_DB` `HADOOP_HOME` `PART2_HADOOP_USER` | 同 |
-| 健康检查 | `curl` → `wget` → Python `urllib` 三级回退 | 同 |
+本目录原有的 `30-start-demo.sh` / `31-stop-demo.sh`（#1 可移植版 + #2 加的跨机兼容层）**已在本次统一中删除**：其全部能力均已由 `start_part2.sh`（#3 重写版）覆盖，保留两套会继续扩散重复。
 
-脚本自动探测当前属于哪种形态，无需手工切换。
-统一路由入口的最终归属见仓库 `part2/scripts/start_part2.sh`（#3 于 2026-09-15 重写，支持 `PART2_SKIP_HADOOP` 纯演示模式）。
+| 原 30/31 的能力 | 现 `start_part2.sh` 的实现 |
+|---|---|
+| 自动挑「能 `import flask`」的解释器 | `pick_python()`：多候选探测 + `PART2_PYTHON` 显式覆盖（不临时安装依赖） |
+| 跨用户管理 Hadoop | `start_hadoop()`：`ev-part2` → 当前用户 `start-dfs.sh` → `sudo -n -u <HADOOP_USER>` 三级回退 |
+| 不信任启停脚本退出码 | 改以 **TCP 端口监听判定（8020 / 8032）** 取代 `jps` 枚举，跨用户更可靠 |
+| 健康检查多级回退 | 以 Python `urllib` 轮询 `/api/health` 并比对 `dbPath`，防止误连旧服务 |
+| 路径与解释器可覆盖 | `PART2_ROOT` `PART2_PORT` `PART2_HOST` `PART2_LOG_DIR` `ADS_DB` `PART2_PYTHON` `PART2_HADOOP_USER` `PART2_SKIP_HADOOP` |
 
-### 30-start-demo.sh 与 part2/scripts/start_part2.sh 的分工
+```bash
+# 纯演示（不启 Hadoop，只读已物化 ADS）
+PART2_SKIP_HADOOP=1 bash part2/scripts/start_part2.sh
+# 完整链路（含 HDFS/YARN）
+bash part2/scripts/start_part2.sh
+bash part2/scripts/stop_part2.sh
+```
 
-两者做同一件事，但适用范围不同：
+两个仍然有效的跨机坑（务必转告组内）：
 
-| | `part2/scripts/start_part2.sh`（#3 重写版，主线推荐） | 本目录 `30-start-demo.sh` |
-|---|---|---|
-| 仓库根 | 按脚本位置自动推导（`PART2_ROOT` 可覆盖） | 按脚本位置自动推导 |
-| Hadoop | `sudo -u hadoop ...`，支持 `PART2_SKIP_HADOOP=1` 跳过 | 自动探测形态，直接调 `start-dfs.sh`，已在运行则跳过 |
-| Python | 系统 `python3` + 依赖探测 | 自动挑「能 `import flask`」的解释器（本机是 `~/venvs/part2/bin/python`） |
-| 健康检查 | `curl` | `curl` → `wget` → Python `urllib` 三级回退 |
+- **非 login shell 的 PATH 不含 JDK**：脚本里调 `jps` 会报"找不到命令"，需 `sudo -u hadoop bash -lc "jps"`；
+- **以无权限用户执行 `start-dfs.sh` 会返回 0 却不启动任何进程**：只看退出码会误报成功，必须以端口/进程实际状态为准。
 
 跨机适配的完整缺陷记录与给 #2 的补丁建议见
 `docs/test/evidence/part2-2026-09-15/vm-integration-run.md` §2/§4。
@@ -81,7 +80,7 @@ bash scripts/part2/40-verify.sh                  # 验收
 | `start-dfs.sh` 报 `can only be executed by root` | `hadoop-env.sh` 里 `HDFS_*_USER`/`YARN_*_USER` 被设成了 root | 改为当前用户（脚本已设） |
 | Web UI 在宿主机打不开 | 默认只绑 `127.0.1.1`（hosts 把主机名解析到回环） | `bind-host=0.0.0.0`（脚本已配） |
 | PySpark 报 Python 版本错误 | 25.04 系统 Python 是 3.13，PySpark 3.5 只支持 3.8–3.11 | `PYSPARK_PYTHON` 指向自建 3.11 环境 |
-| **一键脚本报"已启动"但进程没起来** | 以无权限用户执行 `start-dfs.sh` 返回 0 却不启动 | 已改为按进程存在性判定（2026-09-15） |
+| **一键脚本报"已启动"但进程没起来** | 以无权限用户执行 `start-dfs.sh` 返回 0 却不启动 | 已改为按端口/进程存在性判定（2026-09-15） |
 | **`jps` 在脚本里枚举不到守护进程** | 非 login shell 的 PATH 不含 JDK | 用 `sudo -u hadoop bash -lc "jps"` |
 
 ## 验收基线（2026-09-14 实测）
@@ -93,6 +92,10 @@ bash scripts/part2/40-verify.sh                  # 验收
 ## 集成机补充实测（2026-09-15，`niyujun01`）
 
 - `30-start-demo.sh` / `31-stop-demo.sh` 完整启停验证：全停干净 → 一键启动 `守护进程 5/5（jps 模式: sudo）`
+  （该脚本已随统一入口删除，能力并入 `part2/scripts/start_part2.sh`）
 - 数据已落 HDFS：`/ev-charging/{ods 104.5M, dws 3.9M, ads 5.5M}`，ODS 保持 `dt=YYYY-MM-DD` 分区
 - Spark on YARN 从 HDFS 读回验证通过（`ods_stations` 行数 = 8）
 - Node 升级至 **23.11.1** 后前端 `npm ci`（65 包）+ `npm run build` 正常，无回归
+- 集成机运行时入口 `/usr/local/ev-part2/{env.sh,bin/cluster.sh}` 为**适配版**：指向本组统一基线
+  JDK 17 / Hadoop 3.4.1 / Spark 3.5.7 / 系统 Python 3.10，并以 `HADOOP_USER_NAME=hadoop` 访问 HDFS。
+  未采用 `install_global_runtime.sh` 自带的 JDK 8 + Hadoop 3.2.1 + 自建 CPython 组合，避免与本机既有环境互相覆盖。
