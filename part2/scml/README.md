@@ -63,7 +63,7 @@ python3 warehouse/jobs/reconcile.py   --ods handoff/ods --dws handoff/dws --ads 
 python3 scripts/check_scml_delivery.py --ods handoff/ods --dws handoff/dws --ads handoff/ads
 # → SCML delivery: ready
 python3 scripts/check_scml_delivery.py --ods handoff/ods --dws handoff/dws --ads handoff/ads --require-full
-# → 正式联调/答辩前使用；会拒绝 `prl-test-fixture` 小样例，要求 `ods-handoff` + 144 条预测点
+# → 正式联调/答辩前使用；会拒绝 `prl-test-fixture`，并要求每个存活且启用预测的站点恰有 24 个非孤儿预测点
 ```
 
 **虚拟机（伪分布式 Hadoop + Spark，出 YARN 记录）**

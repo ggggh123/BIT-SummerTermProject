@@ -163,7 +163,7 @@ if [[ -f "$ROOT/web/dist/index.html" ]]; then
   echo "  前端：$ROOT/web/dist"
 else
   echo "  警告：未找到 web/dist/index.html；API 可用，但大屏只会显示构建提示。" >&2
-  echo "  构建命令：cd '$ROOT/web' && npm ci && npm run build" >&2
+  echo "  构建命令：cd '$ROOT/web' && npm ci && npm run build:live" >&2
 fi
 
 echo "[3/4] 启动 Flask 服务..."

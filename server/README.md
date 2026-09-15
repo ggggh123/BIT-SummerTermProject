@@ -48,8 +48,10 @@ echo "VITE_USE_MOCK=false" >> web/.env.local
 echo "VITE_API_BASE=http://localhost:5000/api" >> web/.env.local
 ```
 
-生产形态（契约 §8）：`npm run build` 产出 `web/dist`，Flask 直接托管，
-单进程同时给 `dist` 和 `/api/*`，集成机上不需要 Node 运行时。已开放
+生产形态（契约 §8）：`npm run build:live`（等价于 production 模式的 `npm run build`）
+通过 `web/.env.production` 固定 `VITE_USE_MOCK=false`、`VITE_API_BASE=/api`，产出
+读取真实 ADS 接口的 `web/dist`。Flask 直接托管，单进程同时给 `dist` 和 `/api/*`，
+集成机上不需要 Node 运行时。已开放
 `/api/*` 的 CORS，前端 dev server 与 Flask 分端口也不会有跨域问题。
 
 ## 4. 端点清单
@@ -60,7 +62,7 @@ echo "VITE_API_BASE=http://localhost:5000/api" >> web/.env.local
 | `/api/quality` | 1 | `summary` |
 | `/api/enterprise` | 5 | `revenue-trend`、`station-ranking`、`user-growth`、`user-rfm`、`monthly` |
 | `/api/user` | 4 | `price-compare`、`price-distance`、`idle-ranking`、`peak-heatmap` |
-| `/api/station` | 4 | `coverage`、`{id}/utilization`、`{id}/mix`、`{id}/health`（`{id}` = 1–8） |
+| `/api/station` | 4 | `coverage`、`{id}/utilization`、`{id}/mix`、`{id}/health`（`{id}` 取当前 ADS 中实际存活的站点编号） |
 | `/api/gov` | 5 | `coverage`、`service-stats`、`carbon`、`peak-load`、`utilization` |
 | `/api/forecast` | 3 | `24h`、`metrics`、`recommend`（选做） |
 | — | 1 | `/api/health`（非契约，联调排障用） |
@@ -80,21 +82,22 @@ echo "VITE_API_BASE=http://localhost:5000/api" >> web/.env.local
 
 ### 5.1 数据从哪来
 
-```
-SCML 生成器 ──► handoff/ods/（ODS 交接包）
-                    │  part2/scml/warehouse/jobs/build_local.py  ← 纯标准库，约 15s
-                    ▼
-              handoff/ads/ads.db（SQLite 单文件，15 张表，5.5 MB）
-                    │  server/services/ads_reader.py  ← sqlite3 只读
-                    ▼
-              Flask /api/*  ──►  web/dist
+```text
+SCML 生成器 ──► ODS 交接包 ──► PRL Spark/YARN 检测清洗 ──► 七张 DWD
+                                                         │
+                          DWS/ADS 聚合 ◄─────────────────┘
+                              │           #5 Spark MLlib 预测
+                              ├───────────────┐
+                              ▼               ▼
+                      ads.db（15 张表，质量与预测事务发布）
+                              │  server/services/ads_reader.py（sqlite3 只读）
+                              ▼
+                        Flask /api/* ──► web/dist
 ```
 
-> **重要事实**：任务下达时提到的 `handoff/ads/ads.db` 与 `handoff/ads/json/*.json`
-> 在仓库和本机**都不存在**。当前 `ads.db` 是本次用 SCML 生成器自产 ODS 后，
-> 由 #4 的 `build_local.py` 自行物化出来的**过渡产物**（`ads_meta.sourceKind = ods-handoff`）。
-> 正式链路上 DWS/ADS 应由 SparkSQL 产出 Parquet，再导出同一张表结构的 SQLite；
-> 届时**只换数据、不改 Flask**。
+正式全量链路已在 2026-09-15 使用同一 `sourceRunId=scml-20260914` 跑通；精确批次、
+行数和哈希见 `part2/docs/quality-verification.md`。SQLite 是演示服务的只读发布格式，
+HDFS Parquet 与交接 manifest 保留为数据真源；Flask 不承担清洗、聚合或训练。
 
 按仓库 `.gitignore`，`handoff/` 与 `*.db` **不入库**（数据走共享文件夹/网盘），
 所以 clone 之后需要自己把数据放回来：
@@ -126,7 +129,7 @@ python server/app.py
 
 | key | 说明 |
 |---|---|
-| `forecastIsBaseline` | `1`。Spark MLlib 批次未交接，按《05-PE》§8 降级预案用 **seasonal-naive** 顶替，批次与响应里都带 `isBaseline` / `note`，**不伪造**。 |
+| `forecastIsBaseline` | 由当前激活批次决定：正式 MLlib 发布为 `0`；仅在模型未交接、整批退回 seasonal-naive 时为 `1`。接口同时返回 `isBaseline`、`modelVersion` 与 `note`，不伪造来源。 |
 | `newUserNote` | `new_user_cnt` 用**首单新客**口径（当天首次完成订单的用户数）。生成器把 5000 个用户的注册时间全放在窗口之前（2026-03~06），窗口内没有任何注册事件，按 `registered_at` 聚合会得到一条零线。 |
 | `populationSource` | 北京市第七次全国人口普查常住人口，**外部参考数据**，非生成器产出。 |
 | `serviceRadiusNote` | 服务半径是运营规划参数（按站点订单需求折算），**非实测**。 |
@@ -140,14 +143,15 @@ python server/tools/selftest_contract.py        # 契约口径：信封 / 自洽
 python server/tools/selftest_frontend_shape.py  # 前端字段结构对齐（「组件不用动」的证据）
 ```
 
-当前结果（2026-09-14）：
+正式 ADS 预期结果（2026-09-15；以 `part2/docs/quality-verification.md` 的最终回归为准）：
 
-* `selftest_contract.py` — **55 项全通过**：27 条契约路由 `code=0` / `data` 非空 /
-  `+08:00`；KPI = 90 天趋势汇总；`co2SavedTon = 电量/1000 × 0.581`；五状态之和 = 287；
-  8 个站快慢桩之和 = 各站总桩数；金额整数分；距离 2 位小数且升序；矩阵维度正确。
-* `selftest_frontend_shape.py` — **46 项结构性比对、0 处不兼容**：
-  mock 出现的每个字段接口都有且类型兼容；接口额外多出 65 个字段（`dt`、`stationId`、
-  `isBaseline`、`note` 等），前端不使用、无害。
+* `selftest_contract.py` 会从 ADS 动态发现存活站点并逐站检查，不把被 PRL 隔离的编号
+  硬编码成失败；同时要求预测站点集合与 `forecast_enabled=1` 精确相等、每站恰有
+  horizon 1–24。
+* `selftest_frontend_shape.py` 使用夹具作为字段结构模板，但对当前 ADS 的实际站点逐一
+  请求；mock 出现的每个字段接口都必须存在且类型兼容，接口新增字段只记录不判失败。
+* `selftest_static_dist.py` 验证 Flask 能托管生产 `web/dist`，且未知 `/api/*` 仍返回统一
+  业务信封，不会被 SPA fallback 吞掉。
 
 ## 7. 目录结构
 
@@ -170,11 +174,12 @@ server/
 
 ## 8. 已知限制
 
-1. **数据是过渡产物**：`ads.db` 由本仓库的离线物化作业生成，不是 Spark/Hive 正式链路
-   产出；换成正式 Parquet 导出的 SQLite 后 Flask 侧零改动（表结构即契约）。
+1. **大体量产物不进 Git**：ODS、DWD/DWS Parquet、模型和 `ads.db` 由 manifest、哈希与
+   本机证据目录管理；clone 后须取得最终 `handoff/ads/ads.db` 或重跑流水线。
 2. **遥测表未进 ADS**：100 万行遥测只做质量计数（流式扫描），ADS 不直接消费桩级明细；
    桩级指标来自 `ods_chargers` 的快照列与 `ods_station_hourly` 的小时聚合。
-3. **预测是基线**：`seasonal-naive`（昨日同时刻值），`/api/forecast/metrics` 给出
-   MAE/RMSE/WAPE 与「常量均值基线」的 `baselineWape` 对照，可自证增益。
+3. **逐时距允许诚实降级**：正式批次由 Spark MLlib 训练，但每个 horizon 都按验证集
+   MAE 在 GBT/RF/seasonal-naive 中选择；个别 horizon 若基线更优会在指标中如实保留，
+   这不等于整批 `isBaseline=1`。
 4. **未做鉴权**：契约 §1 明确全部只读、大屏内网演示，故不加认证；
    若上公网须另加反向代理与鉴权。

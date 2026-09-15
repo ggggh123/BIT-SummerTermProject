@@ -40,6 +40,10 @@ npm run build     # 产物在 web/dist，可由 Flask 直接托管
 VITE_USE_MOCK=false VITE_API_BASE=http://<flask-host>:5000/api npm run build
 ```
 
+由 Flask 同源托管时，直接运行 `npm run build:live` 即可。`web/.env.production` 已把
+发行构建锁定为 `VITE_USE_MOCK=false` 和相对地址 `/api`；开发模式仍默认使用 mock，
+不会影响离线页面开发。
+
 组件代码不需要任何改动。接口契约见 `src/api/endpoints.js`，与《02-TL-Hadoop平台与Flask后端设计》§3.3 一致；统一信封 `{code,message,data,generatedAt}`。
 
 ## 页面结构
