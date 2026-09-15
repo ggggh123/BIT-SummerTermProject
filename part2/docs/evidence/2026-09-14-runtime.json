@@ -1,0 +1,64 @@
+{
+  "ok": true,
+  "scope": "local-ubuntu25-development-only",
+  "ubuntu22_verified": false,
+  "os": "Ubuntu 25.04",
+  "python": "/usr/local/ev-part2/python/bin/python3.10",
+  "checks": [
+    {
+      "name": "架构",
+      "ok": true,
+      "detail": "x86_64"
+    },
+    {
+      "name": "Python 3.10",
+      "ok": true,
+      "detail": "Python 3.10.21"
+    },
+    {
+      "name": "Java 8",
+      "ok": true,
+      "detail": "1.8.0_504"
+    },
+    {
+      "name": "Hadoop",
+      "ok": true,
+      "detail": "Hadoop 3.2.1"
+    },
+    {
+      "name": "Spark",
+      "ok": true,
+      "detail": "version 3.5.7"
+    },
+    {
+      "name": "Python 可直接导入 PySpark",
+      "ok": true,
+      "detail": "3.5.7"
+    },
+    {
+      "name": "五个守护进程",
+      "ok": true,
+      "detail": [
+        "org.apache.hadoop.hdfs.server.datanode.DataNode",
+        "org.apache.hadoop.hdfs.server.namenode.NameNode",
+        "org.apache.hadoop.hdfs.server.namenode.SecondaryNameNode",
+        "org.apache.hadoop.yarn.server.nodemanager.NodeManager",
+        "org.apache.hadoop.yarn.server.resourcemanager.ResourceManager"
+      ]
+    },
+    {
+      "name": "HDFS 可读",
+      "ok": true,
+      "detail": "Found 6 items\ndrwxr-xr-x   - hushengyuan supergroup          0 2026-09-14 12:01 /ev-charging/ads\ndrwxr-xr-x   - hushengyuan supergroup          0 2026-09-14 12:01 /ev-charging/dwd\ndrwxr-xr-x   - hushengyuan supergroup          0 2026-09-14 12:01 /ev-charging/dws\ndrwxr-xr-x   - hushengyuan supergroup          0 2026-09-14 12:01 /ev-charging/forecast\ndrwxr-xr-x   - hushengyuan supergroup          0 2026-09-14 12:02 /ev-charging/ods\ndrwxr-xr-x   - hushengyuan supergroup          0 2026-09-14 12:03 /ev-charging/quality"
+    },
+    {
+      "name": "YARN API",
+      "ok": true,
+      "detail": {
+        "state": "STARTED",
+        "hadoopVersion": "3.2.1",
+        "resourceManagerVersion": "3.2.1"
+      }
+    }
+  ]
+}

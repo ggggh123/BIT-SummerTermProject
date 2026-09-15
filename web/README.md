@@ -40,6 +40,10 @@ npm run build     # 产物在 web/dist，可由 Flask 直接托管
 VITE_USE_MOCK=false VITE_API_BASE=http://<flask-host>:5000/api npm run build
 ```
 
+由 Flask 同源托管时，直接运行 `npm run build:live` 即可。`web/.env.production` 已把
+发行构建锁定为 `VITE_USE_MOCK=false` 和相对地址 `/api`；开发模式仍默认使用 mock，
+不会影响离线页面开发。
+
 组件代码不需要任何改动。接口契约见 `src/api/endpoints.js`，与《02-TL-Hadoop平台与Flask后端设计》§3.3 一致；统一信封 `{code,message,data,generatedAt}`。
 
 ## 页面结构
@@ -101,6 +105,6 @@ E2E 有两条断言它们真的渲染：`DataV 大屏件已渲染`（主页边�
 
 ## 待办
 
-1. 用户页「低拥堵推荐榜」等 #5 的 `handoff/forecast` 批次接进 `ads.db` 后即为真实预测（当前为 seasonal-naive 基线）。
+1. 当前正式 ADS 已合并 Spark MLlib 批次 `ml-20260915-111604`（`isBaseline=false`）；若后续重新构建 ADS 而未传入 forecast handoff，数仓脚本仍会按设计回退到 seasonal-naive，并在接口中如实标注，不能把回退批次当作当前正式演示结果。**这条已经踩过一次**：2026-09-15 15:00 在 TimeMachine 上重建 `ads.db` 时没带 `FORECAST_HANDOFF`，预测又退回基线，需要重跑 ML 阶段再接回去。
 2. DataV 已铺到 4 个视角子页（本分支完成）；后续新增页面照 `DvFrame` 的用法包一层即可。
 3. 主页在 1920×1080 下已"一屏放下"（三列栅格 + 地图 380px 主视区）；若后续往主页加面板，先看 E2E 第 6 条的 `.scale-inner` 内容高 ≤1080 断言，避免又回到需要滚动。

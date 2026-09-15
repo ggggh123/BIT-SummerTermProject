@@ -135,10 +135,22 @@ def main() -> int:
                   + (f"  ({len(problems)} 处不兼容)" if problems else ""))
 
         detail = load_mock("station_detail.json")
-        for sid in range(1, 9):
-            node = detail.get(str(sid))
+        detail_template = next(iter(detail.values()), None)
+        station_body = client.get("/api/overview/stations").get_json()
+        station_ids = sorted(
+            int(item["stationId"])
+            for item in ((station_body or {}).get("data") or [])
+            if "stationId" in item
+        )
+        if detail_template is None:
+            all_problems.append("station_detail.json 没有可用的结构模板")
+        if not station_ids:
+            all_problems.append("/api/overview/stations 没有返回存活站点")
+        for sid in station_ids:
+            # 夹具中的站点编号只代表一阶段固定样例；二阶段清洗可能剔除站点，
+            # 因此用同一结构模板校验当前 ADS 实际返回的每个存活站点。
+            node = detail_template
             if node is None:
-                all_problems.append(f"station_detail.json 缺少站点 {sid}")
                 continue
             for key, template, params in STATION_DETAIL_CASES:
                 total += 1

@@ -15,7 +15,18 @@
   * ``is_peak`` = 未来 24h 内负荷最大的**连续 2h**，该 2 小时**两个点都标 1**
     （与 #1 的 ``web/src/mock/forecast_24h.json`` 契约一致）；
   * ``congestion_level``：预测占用率 ≥80% 为 high，≥50% 为 medium，其余 low；
-  * 物理约束：负荷非负、占用数 ∈ [0, pile_count]、``busy + idle = pile_count``。
+  * 物理约束见下节。
+
+负荷与占用的一致性（依据 ``tmp/diag_low.py`` 的实测诊断）
+--------------------------------------------------------
+自测数据中 ``load_kw`` 与 ``busy_count`` 同号：``busy = 0`` 时 ``load`` 必为 0，
+且 ``hour = 0`` 的负荷有约 10% 的样本真的是 0（P05 = 0）。因此：
+
+  1. **不对占用做「下界抬升」** —— 凌晨 ``busy = 0`` 是数据的真实形态，
+     用历史分位把 0 抬成 1 反而会制造与负荷不一致的占用；
+  2. 先整数化占用，再用「占用锚定」修正负荷：
+     ``busy = 0`` → ``load = 0``；``busy > 0`` → ``load ≥ busy × 该站该整点历史单桩功率 P05``；
+  3. 这样既避免 GBT 在低谷外推出 0 附近的病态值，又保证 ``busy + idle = pile_count``。
 
     spark-submit --master yarn predict.py \
         --dwd       hdfs://pangxiangzhen01:8020/ev-charging/dwd/dwd_station_hourly \
@@ -32,6 +43,7 @@ import datetime as dt
 import json
 import os
 import sys
+from typing import Sequence
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -45,6 +57,9 @@ from train import parse_horizons
 #: 拥堵阈值（《05》§2.3）
 CONGESTION_HIGH = 0.80
 CONGESTION_MEDIUM = 0.50
+
+#: 单桩功率缺省下限（kW）：最小额定功率 7 kW × 50% 负载率，仅作兜底
+DEFAULT_KW_PER_BUSY = 3.5
 
 TARGETS = (("load", "predicted_load_kw"), ("busy", "predicted_busy_count"))
 
@@ -67,10 +82,48 @@ def load_selection(metrics_path: str, default_algo: str) -> dict:
     return sel
 
 
-def latest_base(feat):
-    """每个站点取最后一行作为预测起点，该行已带全部滞后 / 滚动特征。"""
+def latest_base(feat, required: Sequence[str] | None = None):
+    """每个站点取**最后一个特征完整**的观测行作为预测起点。
+
+    网格对齐后序列尾部可能出现缺口行（事实列为 NULL）。若不加约束，起点会落在
+    缺口行上：``VectorAssembler(handleInvalid="skip")`` 会跳过该行，预测列为 NULL，
+    再被物理约束兜底成 0 —— 静默产出错误结果且不报错。因此这里要求
+    ``required`` 中的滞后特征全部非空。
+    """
+    valid = feat if not required else feat.dropna(subset=list(required))
     w = Window.partitionBy("station_id").orderBy(F.col("observed_at").desc())
-    return feat.withColumn("_rn", F.row_number().over(w)).filter(F.col("_rn") == 1).drop("_rn")
+    return valid.withColumn("_rn", F.row_number().over(w)).filter(F.col("_rn") == 1).drop("_rn")
+
+
+def mark_peak_hours(frame, max_horizon: int):
+    """每站选唯一的最佳完整两小时窗口，并把窗口内两个点标为峰值。"""
+    ordered = Window.partitionBy("station_id").orderBy("horizon_h")
+    pair_average = F.avg("predicted_load_kw").over(ordered.rowsBetween(0, 1))
+    ranked = Window.partitionBy("station_id").orderBy(
+        F.col("_pair").desc_nulls_last(), F.col("horizon_h").asc()
+    )
+    return (
+        frame.withColumn(
+            "_pair",
+            F.when(F.col("horizon_h") < F.lit(max_horizon), pair_average),
+        )
+        .withColumn("_pair_rank", F.row_number().over(ranked))
+        .withColumn(
+            "_pair_start",
+            (F.col("_pair_rank") == 1) & F.col("_pair").isNotNull(),
+        )
+        .withColumn(
+            "_follows_pair_start",
+            F.coalesce(F.lag("_pair_start", 1).over(ordered), F.lit(False)),
+        )
+        .withColumn(
+            "is_peak",
+            F.when(F.col("_pair_start") | F.col("_follows_pair_start"), 1)
+            .otherwise(0)
+            .cast("int"),
+        )
+        .drop("_pair", "_pair_rank", "_pair_start", "_follows_pair_start")
+    )
 
 
 def main() -> int:
@@ -83,22 +136,42 @@ def main() -> int:
     ap.add_argument("--horizons", default="1-24")
     ap.add_argument("--default-algo", default="gbt")
     ap.add_argument("--run-id", default="")
+    ap.add_argument("--no-grid-align", action="store_true",
+                    help="跳过整点网格对齐（仅用于对照实验；缺口数据下会产生错位特征）")
     args = ap.parse_args()
 
     horizons = parse_horizons(args.horizons)
+    if not horizons or horizons != list(range(1, max(horizons) + 1)) or max(horizons) > 24:
+        raise SystemExit("预测输出要求 --horizons 从 1 连续覆盖到不超过 24")
     run_id = args.run_id or f"f-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
     spark = SparkSession.builder.appName("part2-forecast-predict").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
     spark.conf.set("spark.sql.shuffle.partitions", "8")
+    spark.conf.set("spark.sql.session.timeZone", "Asia/Shanghai")
     print(f"[predict] master={spark.sparkContext.master} app={spark.sparkContext.applicationId}")
     print(f"[predict] run_id={run_id} horizons={horizons[0]}..{horizons[-1]} ({len(horizons)} 个)")
 
     raw = ft.read_hourly(spark, args.dwd)
-    feat = ft.add_naive_baseline(ft.build_features(raw, horizons), horizons)
+    # ---- 缺口防护：与 train.py 完全一致的前置处理，保证训练与预测同源 ----
+    preflight: dict = {"grid_align": not args.no_grid_align}
+    if not args.no_grid_align:
+        preflight["rows_before_align"] = int(raw.count())
+        raw = ft.align_hourly_grid(raw)
+    raw, preflight["fill_stats"] = ft.fill_missing_features(raw)
 
-    base = latest_base(feat).select(
+    feat = ft.add_naive_baseline(ft.build_features(raw, horizons), horizons)
+    # 必须与 train.py 完全一致：在特征工程之后判定派生特征是否可用。
+    feature_cols, preflight["dropped_feature_cols"] = ft.resolve_feature_cols(feat)
+    if not feature_cols:
+        raise SystemExit("没有任何可用特征列，无法预测")
+    preflight["feature_cols"] = feature_cols
+    if preflight["dropped_feature_cols"]:
+        print(f"[predict] 警告：整列为空，已剔除特征 {preflight['dropped_feature_cols']}")
+
+    base = latest_base(feat, feature_cols).select(
         *(c for c in ["station_id", "observed_at", "pile_count", "rated_power_kw"]
-          + list(ft.FEATURE_COLS)
+          + list(feature_cols)
           + [f"naive_load_h{h}" for h in horizons]
           + [f"naive_busy_h{h}" for h in horizons]
           if c in feat.columns)
@@ -121,7 +194,12 @@ def main() -> int:
     if not selection:
         print("[predict] 未提供 metrics.json，全部 horizon 使用 --default-algo")
 
-    frames, versions = [], {}
+    # 每个 horizon 的输出只有“启用站点数”行（正式数据为 5 行）。不能把 24 个
+    # PipelineModel 的 transform 直接 union 成一张超长 lineage：Spark 会把全部树模型
+    # 一次序列化给同一个 executor，低内存演示机在最终 write 时容易 OOM。这里在每个
+    # horizon 完成后只 collect 这个有明确上限的小结果，再构造 24h 轻量 DataFrame。
+    # collect 的不是 DWD 原始数据，最大规模为 station_count × 24（本项目 ≤ 192 行）。
+    prediction_rows, versions = [], {}
     for h in horizons:
         acc = base.select("station_id", "observed_at", "pile_count", "rated_power_kw")
         for name, out_col in TARGETS:
@@ -148,7 +226,7 @@ def main() -> int:
         acc = ft.clip_to_physical(acc, "predicted_load_kw", None, 0.0)
         acc = ft.clip_to_physical(acc, "predicted_busy_count", "pile_count", 0.0)
 
-        frames.append(
+        frame = (
             acc.withColumn("horizon_h", F.lit(h))
             .withColumn("forecast_at_col", F.col("observed_at") + F.expr(f"INTERVAL {h} HOURS"))
             .select(
@@ -156,23 +234,53 @@ def main() -> int:
                 "predicted_load_kw", "predicted_busy_count", "pile_count",
             )
         )
+        prediction_rows.extend(row.asDict(recursive=True) for row in frame.collect())
 
-    allp = frames[0]
-    for fr in frames[1:]:
-        allp = allp.unionByName(fr)
+    expected_prediction_rows = n_station * len(horizons)
+    if len(prediction_rows) != expected_prediction_rows:
+        raise ValueError(
+            f"预测行数异常：{len(prediction_rows)}，期望 {n_station} × {len(horizons)}"
+        )
+    allp = spark.createDataFrame(prediction_rows)
 
-    # 整数化占用，并保证 busy + idle = pile_count
+    # ---- 1) 占用整数化：仅做上下界裁剪，不做下界抬升 ----
+    allp = allp.withColumn(
+        "predicted_busy_count",
+        F.round(
+            F.greatest(
+                F.least(F.col("predicted_busy_count"), F.col("pile_count").cast("double")),
+                F.lit(0.0),
+            )
+        ).cast("int"),
+    )
+
+    # ---- 2) 负荷按占用锚定：busy=0 → load=0；busy>0 → load ≥ busy × 历史单桩功率 P05 ----
+    kw_per_busy = (
+        feat.filter(F.col("busy_count") > 0)
+        .groupBy("station_id", "hour")
+        .agg(
+            F.expr("percentile_approx(load_kw / busy_count, 0.05)")
+            .cast("double")
+            .alias("_kw_per_busy_p05")
+        )
+    )
+    allp = allp.withColumn("hour", F.hour("forecast_at_col")).join(
+        kw_per_busy, on=["station_id", "hour"], how="left"
+    )
+    allp = allp.withColumn(
+        "predicted_load_kw",
+        F.when(F.col("predicted_busy_count") <= 0, F.lit(0.0)).otherwise(
+            F.greatest(
+                F.col("predicted_load_kw"),
+                F.col("predicted_busy_count").cast("double")
+                * F.coalesce(F.col("_kw_per_busy_p05"), F.lit(DEFAULT_KW_PER_BUSY)),
+            )
+        ),
+    )
+
+    # ---- 3) 空闲桩守恒 + 拥堵分级 ----
     allp = (
         allp.withColumn(
-            "predicted_busy_count",
-            F.round(
-                F.greatest(
-                    F.least(F.col("predicted_busy_count"), F.col("pile_count").cast("double")),
-                    F.lit(0.0),
-                )
-            ).cast("int"),
-        )
-        .withColumn(
             "predicted_idle_count",
             F.greatest(F.col("pile_count") - F.col("predicted_busy_count"), F.lit(0)).cast("int"),
         )
@@ -189,20 +297,10 @@ def main() -> int:
         )
     )
 
-    # is_peak：未来 24h 内负荷最大的「连续 2h」，该 2h 两个点都标 1
-    w_st = Window.partitionBy("station_id").orderBy("horizon_h")
-    allp = allp.withColumn("_pair", F.avg("predicted_load_kw").over(w_st.rowsBetween(0, 1)))
-    best = allp.groupBy("station_id").agg(F.max("_pair").alias("_best"))
-    allp = allp.join(best, on="station_id", how="left")
-    allp = allp.withColumn("_pair_is_best", F.col("_pair") >= F.col("_best"))
-    allp = allp.withColumn(
-        "_second_of_best_pair",
-        F.coalesce(F.lead("_pair_is_best", 1).over(w_st), F.lit(False)),
-    )
-    allp = allp.withColumn(
-        "is_peak",
-        F.when(F.col("_pair_is_best") | F.col("_second_of_best_pair"), 1).otherwise(0).cast("int"),
-    )
+    # ---- 4) is_peak：最佳完整两小时窗口；并列时取最早窗口 ----
+    # mark_peak_hours 同时保证每个站点只产生两个连续峰值点，且不会把第 24
+    # 小时这个不完整的单点窗口误选为峰值。
+    allp = mark_peak_hours(allp, max(horizons))
 
     result = allp.select(
         F.lit(run_id).cast("string").alias("run_id"),
@@ -219,7 +317,13 @@ def main() -> int:
     result.write.mode("overwrite").parquet(args.out)
     n_out = result.count()
     peak_cnt = result.filter(F.col("is_peak") == 1).count()
-    print(f"[predict] ads_forecast_24h rows={n_out} (is_peak 标记 {peak_cnt} 行) -> {args.out}")
+    zero_load = result.filter(F.col("predicted_load_kw") <= 0.001).count()
+    inconsistent = result.filter(
+        ((F.col("predicted_busy_count") > 0) & (F.col("predicted_load_kw") <= 0.001))
+        | ((F.col("predicted_busy_count") <= 0) & (F.col("predicted_load_kw") > 0.001))
+    ).count()
+    print(f"[predict] ads_forecast_24h rows={n_out} is_peak={peak_cnt} "
+          f"zero_load={zero_load} busy/load 不一致行={inconsistent} -> {args.out}")
     result.filter(F.col("horizon_h").isin(1, 6, 24)).orderBy("station_id", "horizon_h").show(30, truncate=False)
 
     meta_path = os.path.join(os.path.dirname(os.path.abspath(args.metrics or "./_.json")), "predict_meta.json")
@@ -228,8 +332,9 @@ def main() -> int:
             json.dump(
                 {"run_id": run_id, "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
                  "horizons": horizons, "t0": str(t0), "stations": n_station,
-                 "rows": n_out, "peak_rows": peak_cnt, "model_versions": versions,
-                 "output": args.out},
+                 "rows": n_out, "peak_rows": peak_cnt, "zero_load_rows": zero_load,
+                 "busy_load_inconsistent_rows": inconsistent, "model_versions": versions,
+                 "preflight": preflight, "output": args.out},
                 fh, ensure_ascii=False, indent=2,
             )
     except OSError as exc:

@@ -6,7 +6,7 @@
 
   * ``ads_forecast_batch``  —— 批次元数据；``is_baseline = 0`` 表示真实 Spark MLlib 批次，
     用于替换 #4 当前的 seasonal-naive 降级基线（Flask ``/api/forecast/*`` 靠它定位激活批次）
-  * ``ads_forecast_24h``    —— 未来 24h 逐步长预测明细（8 站 × 24 步长）
+  * ``ads_forecast_24h``    —— 未来 24h 逐步长预测明细（启用站点 × 24 步长）
   * ``ads_forecast_metric`` —— 1–24 步长回测指标（``wape`` 按契约 ×100）
 
 导出物：``forecast_result.json`` / ``.csv``、``forecast_metric.json``、
@@ -69,7 +69,9 @@ def main() -> int:
     args = ap.parse_args()
 
     spark = SparkSession.builder.appName("part2-forecast-publish").getOrCreate()
+    spark.sparkContext.setLogLevel("WARN")
     spark.conf.set("spark.sql.shuffle.partitions", "8")
+    spark.conf.set("spark.sql.session.timeZone", "Asia/Shanghai")
 
     df = spark.read.parquet(args.src)
     missing = [c for c in FORECAST_COLUMNS if c not in df.columns]
