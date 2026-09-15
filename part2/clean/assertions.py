@@ -46,6 +46,9 @@ def assert_dwd(dwd, contract, policy):
         if table == "users":
             invalid.append(~F.col("mobile").rlike(r"^1[0-9]{10}$"))
         if table == "stations":
+            # Q9 的处置是「仅置空越界坐标」（repair），故坐标列在 policy 中列为 optional、
+            # 不参与上面第 34 行的必填检查；此处对 NULL 亦安全——`NULL between a and b`
+            # 求值为 NULL，经第 72 行的 coalesce(..., False) 后按未违规处理。
             invalid += [~F.col(name).between(*bounds) for name, bounds in policy["beijing_bbox"].items()]
         if table == "orders":
             invalid += [F.col("amount_fen") < 0, F.col("status").isin("charging", "completed") & F.col("started_at").isNull(), (F.col("status") == "completed") & F.col("ended_at").isNull(), F.col("started_at") < F.col("reserved_at"), F.col("ended_at") < F.coalesce("started_at", "reserved_at"), (F.col("status") == "reserved") & (F.col("started_at").isNotNull() | F.col("ended_at").isNotNull()), (F.col("status") == "charging") & F.col("ended_at").isNotNull()]
