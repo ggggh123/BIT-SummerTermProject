@@ -1,0 +1,60 @@
+{
+ "charts": [
+  {
+   "className": "chart tall",
+   "series": [
+    {
+     "name": "充电桩数",
+     "type": "bar",
+     "data": "[72,72,36,36,35]",
+     "markLine": null,
+     "markPoint": null
+    },
+    {
+     "name": "每万人桩数",
+     "type": "line",
+     "data": "[0.2,0.2,0.2,0.2,0.2]",
+     "markLine": null,
+     "markPoint": null
+    }
+   ],
+   "xAxisData": "[\"朝阳区\",\"海淀区\",\"通州区\",\"大兴区\",\"丰台区\"]",
+   "legend": null
+  },
+  {
+   "className": "chart tall",
+   "series": [
+    {
+     "name": "利用率",
+     "type": "bar",
+     "data": "[{\"value\":30.4,\"chargerCount\":35,\"stationCount\":1},{\"value\":42.5,\"chargerCount\":36,\"stationCount\":1},{\"value\":43.5,\"chargerCount\":72,\"stationCount\":2},{\"value\":45.9,\"chargerCount\":36,\"stationCount\":1},{\"value\":47,\"chargerCount\":72,\"stationCount\":2}]",
+     "markLine": "{\"symbol\":\"none\",\"data\":[{\"xAxis\":41.9,\"label\":{\"formatter\":\"全市均值\"},\"emphasis\":{\"label\":{}}}],\"label\":{},\"emphasis\":{\"label\":{}}}",
+     "markPoint": null
+    }
+   ],
+   "xAxisData": "null",
+   "legend": null
+  },
+  {
+   "className": "chart tall",
+   "series": [
+    {
+     "name": "全城负荷",
+     "type": "line",
+     "data": "[2051.1,1398,1095.4,896.8,1018.4,1508.9,3267.1,5460.8,7153.3,6661.1,5255,4765.9,4846.2,4146,4205.6,4388.4,5505.6,6484.4,6837.7,7102.3,5031.3,4356.3,3092.8,2506.4]",
+     "markLine": null,
+     "markPoint": "{\"data\":[{\"coord\":[8,7153.3],\"name\":\"峰值\",\"value\":7153.3,\"label\":{},\"emphasis\":{\"label\":{}}}],\"label\":{},\"emphasis\":{\"label\":{}}}"
+    }
+   ],
+   "xAxisData": "[\"00:00\",\"01:00\",\"02:00\",\"03:00\",\"04:00\",\"05:00\",\"06:00\",\"07:00\",\"08:00\",\"09:00\",\"10:00\",\"11:00\",\"12:00\",\"13:00\",\"14:00\",\"15:00\",\"16:00\",\"17:00\",\"18:00\",\"19:00\",\"20:00\",\"21:00\",\"22:00\",\"23:00\"]",
+   "legend": null
+  }
+ ],
+ "texts": [
+  "累计充电量 3430028.40 kWh 全区县累计，用于减排折算",
+  "等效碳减排 1992.8 tCO₂ 折算因子 0.581 tCO₂/MWh",
+  "等效植树 110,714 棵 按单棵树年固碳 18kg 估算",
+  "全城峰值负荷（当日） 7,153 kW 出现在 2026-09-14 08:00（接口按日返回，非窗口峰值）",
+  "金额单位：元（后端为整数分，前端统一除 100）｜时间口径 +08:00 ISO 8601｜预测模块无结果时显示「暂无预测」"
+ ]
+}

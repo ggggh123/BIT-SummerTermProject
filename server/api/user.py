@@ -35,8 +35,15 @@ def price_compare():
 @bp.get("/user/price-distance")
 def price_distance():
     rows = ads.stations()
-    items = [
-        {
+    items = []
+    for row in rows:
+        # Q9（坐标缺失）口径：清洗规则对不合法坐标做「置空」而非整行隔离，
+        # 因此 ads_station.latitude/longitude 可能为 NULL。无坐标的站点无法
+        # 计算到参考点的距离，**跳过该站点**即可；其余站点仍按距离升序返回
+        # （契约 §4 要求升序），不能让整个接口 500 导致用户页空白。
+        if row["latitude"] is None or row["longitude"] is None:
+            continue
+        items.append({
             "stationId": row["station_id"],
             "name": row["name"],
             "distanceKm": ads.haversine_km(
@@ -45,9 +52,7 @@ def price_distance():
             ),
             "priceFenPerKwh": int(row["price_fen_per_kwh"]),
             "idleCount": int(row["idle_cnt"]),
-        }
-        for row in rows
-    ]
+        })
     items.sort(key=lambda item: item["distanceKm"])
     return ok(items)
 

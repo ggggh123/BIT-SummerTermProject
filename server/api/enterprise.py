@@ -26,7 +26,9 @@ def revenue_trend():
                 "date": row["dt"],
                 "revenueFen": int(row["revenue_fen"]),
                 "orderCount": int(row["order_cnt"]),
-                "energyKwh": round(float(row["energy_kwh"]), 1),
+                # 与同文件 station-ranking 一致：对可空数值做 0 兜底，
+                # 避免单点为 NULL 时整条趋势接口 500。
+                "energyKwh": round(float(row["energy_kwh"] or 0.0), 1),
             }
             for row in rows
         ],
