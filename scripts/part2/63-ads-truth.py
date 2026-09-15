@@ -7,14 +7,28 @@
     python scripts/part2/63-ads-truth.py                     # 打印到 stdout
     python scripts/part2/63-ads-truth.py --out runtime/ads-truth.json
     python scripts/part2/63-ads-truth.py --db /path/to/ads.db --only kpis,monthly
+    python scripts/part2/63-ads-truth.py --fingerprint       # 逐表指纹（两台机器对比用）
 
 段落：kpis / monthly / chargers / stations / districts / rfm / price /
       peak / quality / forecast（--only 按逗号选择，默认全部）
+
+关于 `--fingerprint`
+-------------------
+「两台机器是不是同一套数据」不要靠比大小或比几个 KPI —— 那只能说明"看起来像"。
+本模式把每张表的所有行按稳定顺序规范化（浮点保留 6 位）后算 sha256，逐表列出，
+最后给一个总指纹。**同时给出 `--ignore-forecast` 的两种结果**：
+
+* 含预测表的指纹：只有 ML 批次合并之后才该一致；
+* 排除 `ads_forecast_*` 的指纹：业务数据一致就该一致，与 ML 有没有跑无关。
+
+`ads_meta` 不进指纹（它含 `runId`/`generatedAt`，两台机器必然不同），
+但它的关键值会原样打印出来供人核对。
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sqlite3
 import sys
@@ -25,6 +39,46 @@ DEFAULT_DB = REPO_ROOT / "handoff" / "ads" / "ads.db"
 
 SECTIONS = ("kpis", "monthly", "chargers", "stations", "districts",
             "rfm", "price", "peak", "quality", "forecast")
+
+#: 指纹排除的表：ads_meta 带 runId/generatedAt，两台机器天然不同
+FINGERPRINT_SKIP = ("ads_meta", "ads_quality_meta")
+
+
+def _norm(value):
+    """规范化一个单元格：浮点保留 6 位（避免 3430028.399 与 3430028.3990000001 这类假差异）。"""
+    if isinstance(value, float):
+        return round(value, 6)
+    if isinstance(value, bytes):
+        return value.hex()
+    return value
+
+
+def fingerprint(con: sqlite3.Connection, include_forecast: bool) -> dict:
+    tables = [
+        r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+    ]
+    per_table: dict[str, dict] = {}
+    overall = hashlib.sha256()
+    for name in tables:
+        if name in FINGERPRINT_SKIP:
+            continue
+        if not include_forecast and name.startswith("ads_forecast"):
+            continue
+        cols = [r[1] for r in con.execute(f"PRAGMA table_info('{name}')")]
+        rows = [
+            [_norm(v) for v in row]
+            for row in con.execute(f"SELECT * FROM '{name}'")
+        ]
+        # 排序让「行顺序不同」不算差异（内容相同即同指纹）
+        rows.sort(key=lambda r: json.dumps(r, ensure_ascii=False, sort_keys=True, default=str))
+        digest = hashlib.sha256()
+        for row in rows:
+            digest.update(json.dumps(row, ensure_ascii=False, default=str).encode("utf-8"))
+            digest.update(b"\n")
+        per_table[name] = {"rows": len(rows), "columns": cols, "sha256": digest.hexdigest()}
+        overall.update(f"{name}:{digest.hexdigest()}\n".encode("utf-8"))
+    return {"tables": per_table, "overall_sha256": overall.hexdigest()}
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -261,7 +315,31 @@ def main() -> int:
     ap.add_argument("--db", type=Path, default=DEFAULT_DB, help="ADS 交接库路径")
     ap.add_argument("--out", type=Path, help="输出 JSON 路径（默认打印到 stdout）")
     ap.add_argument("--only", default="", help="只导出指定段落，逗号分隔")
+    ap.add_argument("--fingerprint", action="store_true",
+                    help="逐表指纹模式（两台机器对比同一套数据用）")
     args = ap.parse_args()
+
+    if args.fingerprint:
+        con = connect(args.db)
+        try:
+            payload = {
+                "db": str(args.db),
+                "note": "业务表一致就该一致；含预测表的指纹只有 ML 批次合并后才该一致",
+                "business_only": fingerprint(con, include_forecast=False),
+                "with_forecast": fingerprint(con, include_forecast=True),
+                "meta": dict(con.execute("SELECT key, value FROM ads_meta")),
+            }
+        finally:
+            con.close()
+        text = json.dumps(payload, ensure_ascii=False, indent=1, sort_keys=False)
+        if args.out:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(text + "\n", encoding="utf-8")
+            print(f"[ads-truth] 指纹已写出 {args.out}")
+        else:
+            sys.stdout.reconfigure(encoding="utf-8")
+            print(text)
+        return 0
 
     wanted = [s.strip() for s in args.only.split(",") if s.strip()] or list(SECTIONS)
     unknown = [s for s in wanted if s not in BUILDERS]
