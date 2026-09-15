@@ -12,7 +12,7 @@ class RecordRulesTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.contract = load_contract()
-        cls.policy = json.loads((Path(__file__).parents[1] / "contracts/quality-policy-v0.1.json").read_text())
+        cls.policy = json.loads((Path(__file__).parents[1] / "contracts/quality-policy-v0.1.json").read_text(encoding="utf-8"))
         cls.tables, _ = fixture_records()
 
     def inspect(self, table, row=None, **changes):
@@ -98,7 +98,13 @@ class RecordRulesTests(unittest.TestCase):
         self.assertNotIn("Q8", self.rules(self.inspect("users", status="frozen")))
 
     def test_coordinate_bounds(self):
-        self.assertIn("Q9", self.rules(self.inspect("stations", latitude="31.2"), "reject"))
+        # 口径（2026-09-15 由 #2 决定）：越界坐标**仅置空该字段并保留站点记录**（repair），
+        # 不整行隔离——stations 是维度表，整行剔除会让该站的订单/桩/遥测变成孤儿引用。
+        row = self.inspect("stations", latitude="31.2")
+        self.assertIn("Q9", self.rules(row, "repair"))
+        self.assertNotIn("Q9", self.rules(row, "reject"))
+        self.assertIsNone(row["latitude"], "越界坐标应被置空")
+        # NaN 属非法数值，仍走 Q9 的 reject 路径（无法置空为有意义的值）
         self.assertIn("Q9", self.rules(self.inspect("stations", latitude="NaN"), "reject"))
 
     def test_hourly_logic_and_physical_limits(self):

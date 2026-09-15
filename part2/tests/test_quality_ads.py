@@ -62,7 +62,7 @@ INSERT INTO ads_meta VALUES('runId','ads-1'); INSERT INTO ads_meta VALUES('sourc
         old = sqlite3.connect(self.backup)
         self.assertEqual(old.execute("SELECT value FROM ads_quality_meta WHERE key='old'").fetchone()[0], "old")
         old.close()
-        manifest = json.loads(self.manifest.read_text())
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
         self.assertEqual(manifest["tables"]["ads_quality_table"], 7)
         self.assertEqual(manifest["tables"]["ads_quality_issue"], 10)
         self.assertEqual(manifest["quality"]["source"], "prl-quality-report")
@@ -70,7 +70,7 @@ INSERT INTO ads_meta VALUES('runId','ads-1'); INSERT INTO ads_meta VALUES('sourc
         self.assertEqual(manifest["databaseSha256"], result["database_sha256"])
 
     def test_manifest_batch_mismatch_rejected_before_backup(self):
-        manifest = json.loads(self.manifest.read_text())
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
         manifest["sourceRunId"] = "other"
         self.manifest.write_text(json.dumps(manifest))
         with self.assertRaisesRegex(ValueError, "清单.*来源批次"):
@@ -89,12 +89,12 @@ INSERT INTO ads_meta VALUES('runId','ads-1'); INSERT INTO ads_meta VALUES('sourc
             publish(self.q, self.c, self.db, self.backup, True)
 
     def test_report_pair_mismatch_rejected(self):
-        data = json.loads(self.c.read_text()); data["run_id"] = "other"; self.c.write_text(json.dumps(data))
+        data = json.loads(self.c.read_text(encoding="utf-8")); data["run_id"] = "other"; self.c.write_text(json.dumps(data))
         with self.assertRaisesRegex(ValueError, "同一成功批次"):
             publish(self.q, self.c, self.db, self.backup, True)
 
     def test_duplicate_assertion_cannot_masquerade_as_seven_tables(self):
-        data = json.loads(self.c.read_text())
+        data = json.loads(self.c.read_text(encoding="utf-8"))
         data["dwd_assertions"] = [{"table": "dim_users", "ok": True} for _ in range(7)]
         self.c.write_text(json.dumps(data))
         with self.assertRaisesRegex(ValueError, "七表"):
@@ -104,4 +104,4 @@ INSERT INTO ads_meta VALUES('runId','ads-1'); INSERT INTO ads_meta VALUES('sourc
         self.backup.write_text("keep")
         with self.assertRaisesRegex(ValueError, "备份已存在"):
             publish(self.q, self.c, self.db, self.backup, True)
-        self.assertEqual(self.backup.read_text(), "keep")
+        self.assertEqual(self.backup.read_text(encoding="utf-8"), "keep")

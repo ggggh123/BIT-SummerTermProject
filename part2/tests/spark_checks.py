@@ -34,7 +34,7 @@ class SparkPipelineTests(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         cls.root = Path(cls.temp.name)
         cls.contract = load_contract()
-        cls.policy = json.loads((Path(__file__).parents[1] / "contracts/quality-policy-v0.1.json").read_text())
+        cls.policy = json.loads((Path(__file__).parents[1] / "contracts/quality-policy-v0.1.json").read_text(encoding="utf-8"))
         cls.tables, cls.truth = fixture_records()
         cls.spark = SparkSession.builder.master("local[2]").appName("PRL-local-regression-not-yarn").config("spark.sql.shuffle.partitions", "2").config("spark.ui.enabled", "false").config("spark.sql.ansi.enabled", "true").config("spark.sql.session.timeZone", "Asia/Shanghai").config("spark.sql.warehouse.dir", (cls.root / "warehouse").as_uri()).getOrCreate()
         cls.addClassCleanup(cls.spark.stop)

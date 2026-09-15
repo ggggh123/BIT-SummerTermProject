@@ -143,7 +143,13 @@ def inspect_record(table, raw, spec, policy):
     if table == "stations":
         for field, (lower, upper) in policy["beijing_bbox"].items():
             if result[field] is not None and not lower <= result[field] <= upper:
-                problems.append(issue("Q9", "reject", f"{field}: 超出项目北京包围框"))
+                # 口径（2026-09-15 由 #2 决定，见 contracts/README.md §7 第 4 条）：
+                # **仅置空越界坐标，保留站点记录**，而不是整行隔离。
+                # 原因：stations 是维度表，被订单/充电桩/遥测引用；整行剔除会让该站的
+                # 关联事实全部变成孤儿引用并触发 Q7 级联，实测使站点从 8 个降到 7 个、
+                # 订单由 12 万降至 102,332。置空字段既不臆造坐标，也不牵连其他数据。
+                result[field] = None
+                problems.append(issue("Q9", "repair", f"{field}: 超出项目北京包围框，已置空该字段并保留站点记录"))
     if table == "station_hourly":
         if result["busy_count"] is not None and result["pile_count"] is not None and result["busy_count"] > result["pile_count"]:
             problems.append(issue("Q5", "reject", "busy_count 大于 pile_count"))

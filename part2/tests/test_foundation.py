@@ -84,7 +84,7 @@ class HandoffTests(unittest.TestCase):
 
     def test_changed_count_fails(self):
         path = self.root / "manifest.json"
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         data["files"][0]["rows"] += 1
         path.write_text(json.dumps(data))
         with self.assertRaisesRegex(ValueError, "行数"):
@@ -92,7 +92,7 @@ class HandoffTests(unittest.TestCase):
 
     def test_wrong_version_fails(self):
         path = self.root / "manifest.json"
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         data["contract_version"] = "other"
         path.write_text(json.dumps(data))
         with self.assertRaisesRegex(ValueError, "版本"):
@@ -100,7 +100,7 @@ class HandoffTests(unittest.TestCase):
 
     def test_missing_table_fails(self):
         path = self.root / "manifest.json"
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         data["files"] = [item for item in data["files"] if item.get("table") != "events"]
         path.write_text(json.dumps(data))
         with self.assertRaisesRegex(ValueError, "缺少"):
@@ -108,7 +108,7 @@ class HandoffTests(unittest.TestCase):
 
     def test_traversal_rejected(self):
         path = self.root / "manifest.json"
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         data["files"][0]["path"] = "../outside.csv"
         path.write_text(json.dumps(data))
         with self.assertRaisesRegex(ValueError, "越界"):
@@ -120,7 +120,7 @@ class HandoffTests(unittest.TestCase):
         lines[1] = lines[1].rsplit(",", 1)[0]
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         manifest_path = self.root / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         next(item for item in manifest["files"] if item["path"] == path.name)["sha256"] = sha256_file(path)
         manifest_path.write_text(json.dumps(manifest))
         with self.assertRaisesRegex(ValueError, "行列数"):
@@ -205,7 +205,7 @@ class ConfigurationTests(unittest.TestCase):
             path = Path(directory) / "test.xml"
             write_new_or_same(path, "content")
             write_new_or_same(path, "content")
-            self.assertEqual(path.read_text(), "content")
+            self.assertEqual(path.read_text(encoding="utf-8"), "content")
 
     def test_different_config_not_overwritten(self):
         with tempfile.TemporaryDirectory(prefix="ev-part2-config-") as directory:
@@ -213,7 +213,7 @@ class ConfigurationTests(unittest.TestCase):
             write_new_or_same(path, "original")
             with self.assertRaises(RuntimeError):
                 write_new_or_same(path, "new")
-            self.assertEqual(path.read_text(), "original")
+            self.assertEqual(path.read_text(encoding="utf-8"), "original")
 
 
 if __name__ == "__main__":

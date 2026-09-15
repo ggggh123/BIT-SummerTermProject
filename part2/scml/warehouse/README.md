@@ -207,7 +207,10 @@ ads_manifest.json   表行数、数据窗口、质量统计、预测来源
 4. **行政区人口**是外部参考数据（七普常住人口），来源写在 `ads_meta.populationSource`。
 5. **服务半径**是运营规划参数（按站点订单需求规模折算），**非实测**，
    见 `ads_meta.serviceRadiusNote`。
-6. **平均等待恒为 0**：ODS 未建模「预约 → 开工」的排队时长，见 `ads_meta.avgWaitNote`。
+6. **平均等待曾恒为 0 —— 这是 bug，不是「ODS 未建模」**：DWD 的时间列是 STRING（`2026-06-17T12:34:56+08:00`），
+   Spark 3.5.7 上直接 `UNIX_TIMESTAMP(字符串)` 返回 `null`，相减与 `AVG` 静默变成 0。
+   已于 2026-09-15 在 `sql/ads_etl.sql` 修为显式 `UNIX_TIMESTAMP(CAST(... AS TIMESTAMP))`（详见 `ads_meta.avgWaitNote`）。
+   **重跑批次后该指标才会出现正常值**；当前演示批次是修复前物化的，仍显示 0。
 7. **`fault_cnt` 有两个口径**：`dws_station_day.fault_cnt` 是「当日发生故障上报的去重桩数」
    （取自事件流 `charger_fault`）；`ads_station.fault_cnt` 是「当期处于 fault 的桩数」快照。
    两者不同，见 `ads_meta.faultNote`。
