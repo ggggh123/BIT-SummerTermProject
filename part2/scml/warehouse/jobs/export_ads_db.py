@@ -74,6 +74,10 @@ def main() -> int:
     parser.add_argument("--ods", type=Path, default=Path("handoff/ods"))
     parser.add_argument("--out", type=Path, default=Path("handoff/ads"))
     parser.add_argument("--generated-at", type=str, default=None)
+    parser.add_argument(
+        "--forecast-handoff", type=Path, default=None,
+        help="可选：读取 #5 的 handoff/forecast，整体替换 ADS 三张预测表",
+    )
     args = parser.parse_args()
 
     generated_at = (
@@ -139,8 +143,13 @@ def main() -> int:
         telemetry_removed,
         generated_at,
     )
-    batch, forecast_points = extras.build_baseline_forecast(hourly, stations, generated_at)
-    metrics = extras.build_baseline_metrics(hourly, stations) if batch else []
+    if args.forecast_handoff:
+        batch, forecast_points, metrics = extras.load_forecast_handoff(
+            args.forecast_handoff, generated_at
+        )
+    else:
+        batch, forecast_points = extras.build_baseline_forecast(hourly, stations, generated_at)
+        metrics = extras.build_baseline_metrics(hourly, stations) if batch else []
 
     # ---- 窗口与总量：取自 Spark 侧产出的 ads_daily，保证 meta 与业务表自洽 ----
     daily = sorted(tables["ads_daily"], key=lambda row: row["dt"])

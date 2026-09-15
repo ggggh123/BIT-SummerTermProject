@@ -47,7 +47,7 @@ class DeliveryCheckTest(unittest.TestCase):
                 "--ods", str(self.ods), "--dws", str(self.dws), "--ads", str(self.ads),
                 "--generated-at", "2026-09-14T14:30:00+08:00",
             ],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(build.returncode, 0, build.stderr + build.stdout)
 
@@ -67,6 +67,7 @@ class DeliveryCheckTest(unittest.TestCase):
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
         )
 
     def test_complete_local_delivery_passes_with_dwd_skipped(self):
