@@ -77,3 +77,13 @@ R05 逻辑矛盾     412 /  412 / 1.000     R10 文本脏数据      26 /   26 /
 已做的缓解：给 `geo` 补 `layoutCenter/layoutSize`，`symbolSize` 上限由 30 压到 16。**根治同样依赖 5.1 的版面重构**（把地图放进主视区、拿到更大高度）。
 
 E2E 落地：`web/e2e/dashboard.spec.mjs` 共 4 条，`npm run test:e2e` 全绿（主页渲染、地图点击跳转并选中同一站、5s 轮询重绘、接口失败保留旧数据）。
+
+## 6. 补老师"开发环境/要求"的差距（2026-09-15 11:00）
+
+老师 6 条要求逐条核对后，本轮补了三处：
+
+**6.1 正式规模数据入 HDFS（第 2 条）**：用 #4 的 `hdfs_put_ods.sh` 把正式规模 ODS 推到 `/ev-charging/ods` —— **104.7 MB / 360 个 `dt=` 分区**，含 `manifest.json`、`injection_log.json`、`_SUCCESS`（脚本会先清空目标，昨天那批 1/10 规模扁平 CSV 已被清掉）；并把 `handoff/dws` 四个汇总表推到 `/ev-charging/dws`（3.9 MB + manifest + `_SUCCESS`）。`/ev-charging/dwd`、`/ads` 仍是 9-14 的旧数据，等官方 SparkSQL on YARN 路线（阻塞在 #3 的 `handoff/dwd`）。
+
+**6.2 维度与对比分析对照表（第 3 条）**：新增 `docs/management/part2-analysis-dimensions.md` —— **15 个分析维度**（要求 ≥8）与 **5 组维度对比分析**（要求 ≥2：快充↔慢充、区↔区、站↔站、时段↔时段、用户分层↔分层），每行都给「来源表 → Flask 接口 → 大屏位置」，答辩可直接照念。同文档附版本基线表（Python 3.11.16 / Spark 3.5.7 / Hadoop 3.4.1 / Flask 3.1.3 / Node 24.15.0 / Vue 3.5.13）。
+
+**6.3 DataV 大屏件（第 5 条）**：接入 `@kjgl77/datav-vue3@1.7.4`（DataV 的 Vue3 版，`web/package.json` 已声明 `engines.node >= 23`）。主页大屏：5 个图表面板换 `dv-border-box-8` 边框（封装 `DvFrame.vue`）、标题与 KPI 行加 `dv-decoration-10`、实时事件流换 **`dv-scroll-board`** 滚动榜单。E2E 从 4 条扩到 **5 条**（新增「DataV 大屏件已渲染」：断言边框盒 ≥5 且尺寸非零、滚动榜单存在且高度 >100px），`npm run test:e2e` **5/5 通过**；五页截图已按新样式刷新。
