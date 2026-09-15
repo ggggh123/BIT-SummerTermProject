@@ -100,3 +100,21 @@ test('接口失败：保留上次成功数据并提示，不白屏', async ({ pa
   await expect(page.locator('.kpi-card')).toHaveCount(4)
   await waitCharts(page, 5)
 })
+
+test('DataV 大屏件已渲染（老师要求第 5 条）', async ({ page }) => {
+  await page.goto('/')
+  await waitCharts(page, 5)
+
+  // dv-border-box-8 包住 5 个图表面板 + 数据质量 / 事件流两个面板
+  const frames = page.locator('.dv-border-box-8')
+  expect(await frames.count()).toBeGreaterThanOrEqual(5)
+  const first = await frames.first().boundingBox()
+  expect(first.width).toBeGreaterThan(200)
+  expect(first.height).toBeGreaterThan(100)
+
+  // 事件流已换成 DataV 滚动榜单，且父容器给了确定高度（否则高度为 0）
+  const board = page.locator('.dv-scroll-board')
+  await expect(board).toHaveCount(1)
+  const boardBox = await board.boundingBox()
+  expect(boardBox.height).toBeGreaterThan(100)
+})
