@@ -135,7 +135,7 @@ python server/app.py
 | `newUserNote` | `new_user_cnt` 用**首单新客**口径（当天首次完成订单的用户数）。生成器把 5000 个用户的注册时间全放在窗口之前（2026-03~06），窗口内没有任何注册事件，按 `registered_at` 聚合会得到一条零线。 |
 | `populationSource` | 北京市第七次全国人口普查常住人口，**外部参考数据**，非生成器产出。 |
 | `serviceRadiusNote` | 服务半径是运营规划参数（按站点订单需求折算），**非实测**。 |
-| `avgWaitNote` | 平均等待 = `started_at − reserved_at`。**曾恒为 0 是 bug 而非「ODS 未建模」**：DWD 时间列是 STRING，Spark 3.5.7 上直接 `UNIX_TIMESTAMP(字符串)` 返回 `null`，相减与 `AVG` 静默变 0；已于 2026-09-15 修为显式 `CAST(... AS TIMESTAMP)`。**修复前物化的批次（含当前演示批次）该值仍为 0**，重跑后恢复。 |
+| `avgWaitNote` | 平均等待 = `started_at − reserved_at`。**恒为 0 有两条原因**：① **曾有技术缺陷**——DWD 时间列是 STRING，Spark 3.5.7 上直接 `UNIX_TIMESTAMP(字符串)` 返回 `null`，相减与 `AVG` 静默变 0，已于 2026-09-15 修为显式 `CAST(... AS TIMESTAMP)`；② **修完 SQL 后仍为 0，因为数据里本来就没有等待时段**——生成器对 `reserved_at` 与 `started_at` 写入**同一时间戳**（`part2/scml/data_generator/generator.py:486-487`），重跑批次实测 **110,696 / 110,696 条已完成订单两者相等**。要让该值非 0 需改生成器并重跑（后续批次议题）。**答辩不要再表述为 SQL bug。** |
 | `carbonFactorNote` | 0.581 tCO₂/MWh（全国电网平均排放因子，项目假设）。 |
 
 ## 6. 自测

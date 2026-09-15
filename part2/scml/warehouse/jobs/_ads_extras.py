@@ -92,10 +92,13 @@ def build_meta(
         "populationSource": "北京市第七次全国人口普查常住人口（外部参考数据，非生成器产出）",
         "serviceRadiusNote": "服务半径为运营规划参数，按站点订单需求规模折算，非实测",
         "avgWaitNote": (
-            "平均等待 = started_at − reserved_at。该值曾恒为 0，属 bug 而非「ODS 未建模」："
-            "DWD 的时间列是 STRING，Spark 3.5.7 上直接 UNIX_TIMESTAMP(字符串) 返回 null，"
+            "平均等待 = started_at − reserved_at。该值恒为 0 有两条原因："
+            "① 曾有技术缺陷——DWD 的时间列是 STRING，Spark 3.5.7 上直接 UNIX_TIMESTAMP(字符串) 返回 null，"
             "相减与 AVG 静默变成 0；已于 2026-09-15 在 ads_etl.sql 修为显式 CAST(... AS TIMESTAMP)。"
-            "修复前物化的批次（含当前演示批次）该值仍为 0，重跑后恢复。"
+            "② 修完 SQL 后仍为 0，因为数据里本来就没有等待时段——生成器对 reserved_at 与 started_at "
+            "写入同一时间戳（generator.py:486-487）；重跑批次实测 110,696/110,696 条已完成订单两者相等，"
+            "且 ads_etl.sql 的 WHERE started > reserved 会把等值行全部过滤。"
+            "要让该指标非 0，需改生成器（让 reserved_at 早于 started_at）并重跑，属后续批次议题。"
         ),
         "faultNote": (
             "fault_cnt 为「该日发生故障上报的去重桩数」，取自事件流 charger_fault；"

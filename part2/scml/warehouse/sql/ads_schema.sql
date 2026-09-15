@@ -42,8 +42,8 @@ CREATE TABLE ads_station (
     district            TEXT    NOT NULL,   -- 中文行政区（朝阳区/海淀区/…）
     district_raw        TEXT    NOT NULL,   -- ODS 原始值
     address             TEXT,
-    longitude           REAL    NOT NULL,   -- 越界坐标已按行政区质心回填
-    latitude            REAL    NOT NULL,
+    longitude           REAL,               -- Q9：越界坐标「仅置空、不臆造」（#2 TL 2026-09-15 拍板），故允许为空
+    latitude            REAL,
     price_fen_per_kwh   INTEGER NOT NULL,
     forecast_enabled    INTEGER NOT NULL,   -- 1=该站参与预测（刻意留 2 站为 0）
     charger_cnt         INTEGER NOT NULL,   -- 该站清洗后桩数

@@ -207,10 +207,16 @@ ads_manifest.json   表行数、数据窗口、质量统计、预测来源
 4. **行政区人口**是外部参考数据（七普常住人口），来源写在 `ads_meta.populationSource`。
 5. **服务半径**是运营规划参数（按站点订单需求规模折算），**非实测**，
    见 `ads_meta.serviceRadiusNote`。
-6. **平均等待曾恒为 0 —— 这是 bug，不是「ODS 未建模」**：DWD 的时间列是 STRING（`2026-06-17T12:34:56+08:00`），
-   Spark 3.5.7 上直接 `UNIX_TIMESTAMP(字符串)` 返回 `null`，相减与 `AVG` 静默变成 0。
-   已于 2026-09-15 在 `sql/ads_etl.sql` 修为显式 `UNIX_TIMESTAMP(CAST(... AS TIMESTAMP))`（详见 `ads_meta.avgWaitNote`）。
-   **重跑批次后该指标才会出现正常值**；当前演示批次是修复前物化的，仍显示 0。
+6. **平均等待恒为 0 —— 是数据特征，不是 SQL 缺陷（2026-09-15 重跑后的最终结论）**：
+   ① **曾有一处技术缺陷**：DWD 的时间列是 STRING（`2026-06-17T12:34:56+08:00`），Spark 3.5.7 上直接
+   `UNIX_TIMESTAMP(字符串)` 返回 `null`，相减与 `AVG` 静默变成 0；已于 2026-09-15 在
+   `sql/ads_etl.sql` 修为显式 `UNIX_TIMESTAMP(CAST(... AS TIMESTAMP))`（详见 `ads_meta.avgWaitNote`）。
+   ② **修完 SQL 后该指标仍是 0，因为数据里本来就没有等待时段**：生成器对 `reserved_at` 与 `started_at`
+   写入的是**同一个时间戳**（`data_generator/generator.py:486-487` 同用 `started` 变量）。重跑批次实测
+   **110,696 / 110,696 条已完成订单的 `started_at == reserved_at`**，故 `AVG` 恒为 0；
+   另外 `ads_etl.sql` 的 `WHERE UNIX_TIMESTAMP(started) > UNIX_TIMESTAMP(reserved)` 会把等值行全部过滤。
+   ③ 要让该指标非 0，需**改生成器**（让 `reserved_at` 早于 `started_at`）并重跑——属后续批次议题，本轮不做。
+   **答辩口径**：以「生成器未建模『预约→开工』等待时段」解释，不要再表述为 SQL bug。
 7. **`fault_cnt` 有两个口径**：`dws_station_day.fault_cnt` 是「当日发生故障上报的去重桩数」
    （取自事件流 `charger_fault`）；`ads_station.fault_cnt` 是「当期处于 fault 的桩数」快照。
    两者不同，见 `ads_meta.faultNote`。
