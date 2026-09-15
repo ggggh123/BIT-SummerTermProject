@@ -14,6 +14,9 @@
 #   bash scripts/run_dws_ads.sh --dry-run           # 只打印要执行的 SQL，不连 Spark
 #   bash scripts/run_dws_ads.sh --skip-reconcile    # 跳过对账（不推荐）
 #
+# 可选环境变量：
+#   FORECAST_HANDOFF=handoff/forecast               # 接入 #5 真实预测包，替换 ADS 预测三表
+#
 # 产出：
 #   HDFS  <root>/dws/*、<root>/ads/*              （Parquet，验收用）
 #   本地  handoff/dws/、handoff/ads/ads.db        （交接给 #2/#1/#5）
@@ -27,6 +30,7 @@ HDFS_ROOT="${HDFS_ROOT:-/ev-charging}"
 ODS_DIR="${ODS_DIR:-handoff/ods}"
 HANDOFF_DWS="${HANDOFF_DWS:-handoff/dws}"
 HANDOFF_ADS="${HANDOFF_ADS:-handoff/ads}"
+FORECAST_HANDOFF="${FORECAST_HANDOFF:-}"
 PYTHON="${PYTHON:-python3}"
 SPARK_SUBMIT="${SPARK_SUBMIT:-spark-submit}"
 
@@ -71,8 +75,13 @@ $SPARK_SUBMIT warehouse/jobs/export_dws_csv.py \
   --warehouse-root "$HDFS_ROOT" --out "$HANDOFF_DWS"
 
 step "4/5 导出 handoff/ads/ads.db"
+FORECAST_ARGS=()
+if [ -n "$FORECAST_HANDOFF" ]; then
+  FORECAST_ARGS=(--forecast-handoff "$FORECAST_HANDOFF")
+fi
 $SPARK_SUBMIT warehouse/jobs/export_ads_db.py \
-  --warehouse-root "$HDFS_ROOT" --ods "$ODS_DIR" --out "$HANDOFF_ADS"
+  --warehouse-root "$HDFS_ROOT" --ods "$ODS_DIR" --out "$HANDOFF_ADS" \
+  "${FORECAST_ARGS[@]}"
 
 if [ -n "$SKIP_RECONCILE" ]; then
   step "5/5 对账（已跳过）"

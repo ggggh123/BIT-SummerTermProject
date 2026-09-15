@@ -171,6 +171,18 @@ def main() -> int:
         return 1
 
     connection = read_ads(args.ads)
+    try:
+        return reconcile(args, connection, report, info_lines)
+    finally:
+        connection.close()
+
+
+def reconcile(
+    args: argparse.Namespace,
+    connection: sqlite3.Connection,
+    report: Report,
+    info_lines: list[str],
+) -> int:
     meta = {row["key"]: row["value"] for row in connection.execute("SELECT key, value FROM ads_meta")}
     scalar = lambda sql, params=(): connection.execute(sql, params).fetchone()[0]  # noqa: E731
 
@@ -248,12 +260,25 @@ def main() -> int:
     metrics_summary = connection.execute(
         "SELECT COUNT(1), AVG(wape), AVG(baseline_wape) FROM ads_forecast_metric"
     ).fetchone()
-    report.check(group, "预测批次如实标注 is_baseline=1",
-                 scalar("SELECT COALESCE(MAX(is_baseline),0) FROM ads_forecast_batch") == 1)
-    info_lines.append(
-        f"基线预测 WAPE 均值 {metrics_summary[1]:.2f}% vs 常量基线 "
-        f"{metrics_summary[2]:.2f}%（seasonal-naive 相对朴素基线应有增益）"
+    batch_summary = connection.execute(
+        "SELECT COUNT(1), MIN(is_baseline), MAX(is_baseline), MAX(model_version) FROM ads_forecast_batch"
+    ).fetchone()
+    has_valid_batch = (
+        int(batch_summary[0] or 0) > 0
+        and int(batch_summary[1] or 0) in (0, 1)
+        and int(batch_summary[2] or 0) in (0, 1)
     )
+    report.check(group, "预测批次如实标注 is_baseline∈{0,1}", has_valid_batch)
+    if int(batch_summary[2] or 0) == 1:
+        info_lines.append(
+            f"基线预测 WAPE 均值 {metrics_summary[1]:.2f}% vs 常量基线 "
+            f"{metrics_summary[2]:.2f}%（seasonal-naive 相对朴素基线应有增益）"
+        )
+    else:
+        info_lines.append(
+            f"真实预测批次 {batch_summary[3]} 已接入；WAPE 均值 {metrics_summary[1]:.2f}% "
+            f"vs 基线 {metrics_summary[2]:.2f}%"
+        )
 
     # ---------------------------------------------------------------- B DWS ↔ ADS
     group = "B 层间一致（DWS ↔ ADS）"

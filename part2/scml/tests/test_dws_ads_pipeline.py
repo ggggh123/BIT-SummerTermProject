@@ -13,11 +13,13 @@
 """
 
 import json
+import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -197,6 +199,85 @@ class PipelineEndToEndTest(unittest.TestCase):
         self.assertEqual(row["is_baseline"], 1)
         self.assertEqual(row["model_version"], "seasonal-naive-baseline")
         self.assertIn("降级", row["note"])
+
+    def test_reconcile_accepts_real_forecast_batch(self):
+        copied_ads = Path(self._temp.name) / "ads_real_forecast"
+        shutil.copytree(self.ads, copied_ads)
+        db_path = copied_ads / "ads.db"
+        with closing(sqlite3.connect(db_path)) as db:
+            db.execute(
+                "UPDATE ads_forecast_batch SET is_baseline = 0, model_version = ?",
+                ("mllib-gbt-v1",),
+            )
+            db.commit()
+        result = subprocess.run(
+            [
+                sys.executable, str(JOBS / "reconcile.py"),
+                "--ods", str(self.ods), "--dws", str(self.dws),
+                "--ads", str(db_path),
+            ],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_build_local_can_replace_baseline_with_forecast_handoff(self):
+        from build_local import build
+
+        forecast_dir = Path(self._temp.name) / "forecast_handoff"
+        forecast_dir.mkdir()
+        (forecast_dir / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "package": "forecast",
+                    "run_id": "ml-run-local",
+                    "generated_at": "2026-09-14T11:00:00",
+                    "source": "hdfs:///ev-charging/ads/ads_forecast_result",
+                    "rows": 48,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (forecast_dir / "forecast_result.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "run_id": "ml-run-local",
+                        "station_id": station_id,
+                        "forecast_at": f"2026-09-03T{hour:02d}:00:00+08:00",
+                        "horizon_h": hour + 1,
+                        "predicted_load_kw": 50 + station_id + hour,
+                        "predicted_busy_count": 2,
+                        "predicted_idle_count": 2,
+                        "congestion_level": "medium",
+                        "is_peak": hour in (17, 18),
+                    }
+                    for station_id in (1, 2)
+                    for hour in range(24)
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (forecast_dir / "metrics.json").write_text(
+            json.dumps({"model_version": "mllib-gbt-v1", "h1": {"wape": 0.176}}),
+            encoding="utf-8",
+        )
+
+        copied_ads = Path(self._temp.name) / "ads_with_ml_forecast"
+        build(self.ods, Path(self._temp.name) / "dws_with_ml_forecast", copied_ads,
+              forecast_handoff=forecast_dir)
+
+        with closing(sqlite3.connect(copied_ads / "ads.db")) as db:
+            db.row_factory = sqlite3.Row
+            batch = db.execute(
+                "SELECT run_id, model_version, is_baseline FROM ads_forecast_batch"
+            ).fetchone()
+            forecast_count = db.execute("SELECT COUNT(1) FROM ads_forecast_24h").fetchone()[0]
+        self.assertEqual(batch["run_id"], "ml-run-local")
+        self.assertEqual(batch["model_version"], "mllib-gbt-v1")
+        self.assertEqual(batch["is_baseline"], 0)
+        self.assertEqual(forecast_count, 48)
 
     def test_meta_carries_the_assumption_notes(self):
         meta = dict(self.db.execute("SELECT key, value FROM ads_meta"))

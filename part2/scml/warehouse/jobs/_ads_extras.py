@@ -15,8 +15,10 @@
 from __future__ import annotations
 
 import math
+import json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from _lib import (
     CARBON_FACTOR_NOTE,
@@ -77,7 +79,7 @@ def build_meta(
         "totalRevenueFen": total_revenue_fen,
         "totalEnergyKwh": total_energy_kwh,
         "forecastSource": batch["source"] if batch else "none",
-        "forecastIsBaseline": "1" if batch else "0",
+        "forecastIsBaseline": str(int(batch.get("is_baseline", 0))) if batch else "0",
         "carbonFactorTonPerMwh": CARBON_FACTOR_TON_PER_MWH,
         "carbonFactorNote": CARBON_FACTOR_NOTE,
         "equivalentTrees": int(
@@ -231,6 +233,153 @@ def build_rfm(orders: list[dict], window_end_date: str) -> list[dict]:
 # --------------------------------------------------------------------------- #
 # 预测：seasonal-naive 降级基线
 # --------------------------------------------------------------------------- #
+def _load_json(path: Path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _as_list(payload) -> list[dict]:
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, dict):
+        rows = payload.get("rows") or payload.get("data") or payload.get("items")
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+        return [payload]
+    return []
+
+
+def _as_percent(value) -> float:
+    number = float(value or 0)
+    return round(number * 100.0, 2) if 0 < number <= 1 else round(number, 2)
+
+
+def _normalize_forecast_point(row: dict, fallback_run_id: str) -> dict:
+    station_id = to_int(row.get("station_id") or row.get("stationId"))
+    horizon_h = to_int(row.get("horizon_h") or row.get("horizonH") or row.get("horizon"))
+    load_kw = float(row.get("predicted_load_kw") or row.get("predictedLoadKw") or row.get("load_kw") or 0)
+    busy = to_int(row.get("predicted_busy_count") or row.get("predictedBusyCount") or row.get("busy_count"))
+    idle = to_int(row.get("predicted_idle_count") or row.get("predictedIdleCount") or row.get("idle_count"))
+    congestion = normalize_text(
+        row.get("congestion_level") or row.get("congestionLevel") or "low"
+    ).lower()
+    if congestion not in {"low", "medium", "high"}:
+        congestion = "low"
+    return {
+        "run_id": normalize_text(row.get("run_id") or row.get("runId") or fallback_run_id),
+        "station_id": station_id,
+        "forecast_at": normalize_text(row.get("forecast_at") or row.get("forecastAt")),
+        "horizon_h": horizon_h,
+        "predicted_load_kw": round(load_kw, 2),
+        "predicted_busy_count": busy,
+        "predicted_idle_count": idle,
+        "congestion_level": congestion,
+        "is_peak": 1 if row.get("is_peak") in (1, True, "1", "true", "True") else 0,
+    }
+
+
+def _normalize_metrics(payload) -> list[dict]:
+    if isinstance(payload, list):
+        rows = payload
+    elif isinstance(payload, dict):
+        if isinstance(payload.get("rows"), list):
+            rows = payload["rows"]
+        else:
+            rows = [
+                {"horizon_h": key[1:] if key.startswith("h") else key, **value}
+                for key, value in payload.items()
+                if isinstance(value, dict) and (key.startswith("h") or key.isdigit())
+            ]
+    else:
+        rows = []
+    metrics = []
+    for row in rows:
+        horizon_h = to_int(row.get("horizon_h") or row.get("horizonH") or row.get("horizon"))
+        if horizon_h <= 0:
+            continue
+        metrics.append(
+            {
+                "horizon_h": horizon_h,
+                "mae": round(float(row.get("mae") or 0), 2),
+                "rmse": round(float(row.get("rmse") or 0), 2),
+                "wape": _as_percent(row.get("wape")),
+                "baseline_wape": _as_percent(row.get("baseline_wape") or row.get("baselineWape")),
+            }
+        )
+    return sorted(metrics, key=lambda row: row["horizon_h"])
+
+
+def load_forecast_handoff(
+    handoff_dir: Path, generated_at: datetime
+) -> tuple[dict, list[dict], list[dict]]:
+    """读取 #5 预测交接包，归一成 ADS 三张预测表。
+
+    支持两种输入：
+    * 显式三文件：forecast_batch.json / forecast_result.json / forecast_metric.json；
+    * #5 当前 publish.py：manifest.json / forecast_result.json / metrics.json。
+    """
+    result_path = handoff_dir / "forecast_result.json"
+    if not result_path.is_file():
+        raise FileNotFoundError(f"missing forecast_result.json under {handoff_dir}")
+
+    manifest = _load_json(handoff_dir / "manifest.json") if (handoff_dir / "manifest.json").is_file() else {}
+    batch_path = handoff_dir / "forecast_batch.json"
+    explicit_batches = _as_list(_load_json(batch_path)) if batch_path.is_file() else []
+    explicit_batch = explicit_batches[0] if explicit_batches else {}
+    fallback_run_id = normalize_text(
+        explicit_batch.get("run_id")
+        or explicit_batch.get("runId")
+        or manifest.get("run_id")
+        or manifest.get("runId")
+        or f"forecast-{generated_at.strftime('%Y%m%d%H%M%S')}"
+    )
+
+    points = [
+        _normalize_forecast_point(row, fallback_run_id)
+        for row in _as_list(_load_json(result_path))
+    ]
+    points = [
+        row for row in points
+        if row["station_id"] > 0 and row["horizon_h"] > 0 and row["forecast_at"]
+    ]
+    if not points:
+        raise ValueError(f"forecast_result.json under {handoff_dir} has no valid rows")
+
+    metric_path = handoff_dir / "forecast_metric.json"
+    if not metric_path.is_file():
+        metric_path = handoff_dir / "metrics.json"
+    metrics = _normalize_metrics(_load_json(metric_path)) if metric_path.is_file() else []
+
+    model_version = normalize_text(
+        explicit_batch.get("model_version")
+        or explicit_batch.get("modelVersion")
+        or manifest.get("model_version")
+        or manifest.get("modelVersion")
+        or (_load_json(metric_path).get("model_version") if metric_path.is_file() and isinstance(_load_json(metric_path), dict) else "")
+        or "mllib-forecast"
+    )
+    horizon_h_max = to_int(explicit_batch.get("horizon_h_max") or explicit_batch.get("horizonHMax"))
+    if horizon_h_max <= 0:
+        horizon_h_max = max(row["horizon_h"] for row in points)
+    batch = {
+        "run_id": fallback_run_id,
+        "model_version": model_version,
+        "activated_at": normalize_text(
+            explicit_batch.get("activated_at")
+            or explicit_batch.get("activatedAt")
+            or manifest.get("generated_at")
+            or manifest.get("generatedAt")
+            or generated_at.isoformat(timespec="seconds")
+        ),
+        "source": normalize_text(
+            explicit_batch.get("source") or manifest.get("source") or str(handoff_dir)
+        ),
+        "horizon_h_max": horizon_h_max,
+        "is_baseline": 0,
+        "note": normalize_text(explicit_batch.get("note") or "真实 MLlib 预测批次，由 #5 handoff/forecast 接入"),
+    }
+    return batch, points, metrics
+
+
 def build_baseline_forecast(
     hourly: list[dict], stations: dict[int, dict], generated_at: datetime
 ) -> tuple[dict, list[dict]]:

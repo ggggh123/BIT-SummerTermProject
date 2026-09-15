@@ -797,7 +797,8 @@ def build_ads_business(
 # 主流程
 # --------------------------------------------------------------------------- #
 def build(ods_dir: Path, dws_dir: Path, ads_dir: Path,
-          generated_at: datetime | None = None) -> dict:
+          generated_at: datetime | None = None,
+          forecast_handoff: Path | None = None) -> dict:
     generated_at = generated_at or datetime.now(CN_TZ).replace(microsecond=0)
 
     ods_manifest_path = ods_dir / "manifest.json"
@@ -889,8 +890,11 @@ def build(ods_dir: Path, dws_dir: Path, ads_dir: Path,
         telemetry_removed,
         generated_at,
     )
-    batch, forecast_points = extras.build_baseline_forecast(hourly, stations, generated_at)
-    metrics = extras.build_baseline_metrics(hourly, stations) if batch else []
+    if forecast_handoff:
+        batch, forecast_points, metrics = extras.load_forecast_handoff(forecast_handoff, generated_at)
+    else:
+        batch, forecast_points = extras.build_baseline_forecast(hourly, stations, generated_at)
+        metrics = extras.build_baseline_metrics(hourly, stations) if batch else []
 
     total_revenue = sum(row["revenue_fen"] for row in ads_business["ads_daily"])
     total_energy = round(sum(row["energy_kwh"] for row in ads_business["ads_daily"]), 3)
@@ -973,7 +977,7 @@ def build(ods_dir: Path, dws_dir: Path, ads_dir: Path,
         "quality": {"injected": injected_total, "detected": detected_total},
         "forecast": {
             "source": batch["model_version"] if batch else "none",
-            "isBaseline": bool(batch),
+            "isBaseline": bool(batch and int(batch.get("is_baseline", 0))),
         },
     }
     (ads_dir / "ads_manifest.json").write_text(
@@ -993,13 +997,17 @@ def main() -> int:
         "--generated-at", type=str, default=None,
         help="固定 generatedAt（ISO 8601），用于可复现构建",
     )
+    parser.add_argument(
+        "--forecast-handoff", type=Path, default=None,
+        help="可选：读取 #5 的 handoff/forecast，整体替换 ADS 三张预测表",
+    )
     args = parser.parse_args()
     fixed = (
         datetime.fromisoformat(args.generated_at).replace(tzinfo=CN_TZ)
         if args.generated_at
         else None
     )
-    manifest = build(args.ods, args.dws, args.ads, fixed)
+    manifest = build(args.ods, args.dws, args.ads, fixed, args.forecast_handoff)
     print(json.dumps({"ok": True, "manifest": manifest}, ensure_ascii=False, indent=2))
     return 0
 
