@@ -105,7 +105,7 @@ E2E 9 条与它们证明的事：
 | `docs/management/part2-defense-evidence.md` | 新增 | **答辩材料**：老师要求→证据对照（按内容对照，不按编号）、10 分钟演示脚本、9 条预判提问的答法、仍待他人闭环的事项 |
 | `docs/management/part2-defect-log.md` | 新增 | **缺陷记录**：6 条已修 + 6 条开放（含 `run_dws_ads.sh` 对账假报警、预测站点集合校验、同库两套清洗口径）+ 2 条待观察风险 |
 | `docs/test/evidence/part2-2026-09-15/README.md` | 新增/改 | 抽验真值表（已换官方 PRL 口径）、五页截图索引、§4 桩状态修复复测、§6 对老师要求的核对、**§9 收尾（缺陷修复、口径标注、取证脚本固化、测试状态）** |
-| `docs/test/evidence/part2-2026-09-15/screenshots/*.{png,json}` | 新增/改 | 五页 1920×1080 截图 + 每页图表真实 option 的 JSON 存档（由 `62-capture-pages.mjs` 生成，不再手工截） |
+| `docs/test/evidence/part2-2026-09-15/screenshots/*.json` + `screenshots/png/*.png` | 新增/改 | 五页图表真实 option 的 JSON（根目录）+ 1920×1080 截图（`png/` 子目录），由 `62-capture-pages.mjs` 生成、不再手工截；**2026-09-15 深夜按重跑批次重采**（五页 20 图，宿主机用系统 Edge：`PART2_CHANNEL=msedge`），白天批次归档于 `screenshots-pre-rerun-20260915/` |
 | `scripts/part2/{50,51,52,53}-*.sh` | 新增 | **没有全局运行时的机器怎么跑官方链路**：装 shim → PRL 清洗 → 发布 DWD + 注册外部表 + `MSCK REPAIR` → DWS/ADS。顺序错一步就会 `TABLE_OR_VIEW_NOT_FOUND`，故串成脚本 |
 | `scripts/part2/{60,61}-*.sh`、`62-*.mjs`、`63-*.py` | 新增 | **体检与取证**：一键体检 / 抓全部 API 响应 / 取页面图表真实 option + 截图 / 导出 ADS 真值。三者正好对应抽验表的三段取值 |
 | `scripts/part2/README.md` | 改 | 新增两节：链路脚本（50–53，含「52 为什么不能省」与对账假报警说明）、体检与取证（60–63） |
