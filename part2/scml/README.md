@@ -59,7 +59,7 @@ bash scripts/hdfs_put_ods.sh           # 可选：入 HDFS
 ```bash
 python3 warehouse/jobs/build_local.py --ods handoff/ods --dws handoff/dws --ads handoff/ads
 python3 warehouse/jobs/reconcile.py   --ods handoff/ods --dws handoff/dws --ads handoff/ads/ads.db
-# → 30 项，通过 29，跳过 1（D 组待 #3 的 DWD）  [OK] 对账全绿
+# → 这是无 Hadoop 的历史快速夹具；若未显式传入 PRL DWD，D 组会跳过，不能把它当作正式 31 项对账
 python3 scripts/check_scml_delivery.py --ods handoff/ods --dws handoff/dws --ads handoff/ads
 # → SCML delivery: ready
 python3 scripts/check_scml_delivery.py --ods handoff/ods --dws handoff/dws --ads handoff/ads --require-full
@@ -167,6 +167,6 @@ bash scripts/run_dim_date.sh 2026-06-17 90 /ev-charging/dwd/dim_date
 
 ## 当前状态与遗留
 
-见 `docs/management/part2-scml-status.md`。**最大的外部依赖是 #3 的 `handoff/dwd`
-尚未交付** —— 它一到，`scripts/run_dws_ads.sh` 就能在虚拟机上跑通全部四层并出 YARN 记录；
-在那之前，本地 `build_local.py` 路径已能产出完整的 DWS/ADS 交接包。
+#3 的正式 `dwd-handoff` 已于 2026-09-15 交接，DWS/ADS、ML 预测和 Flask/web 均已在本机 YARN 环境跑通；当前有效的行数、应用 ID、哈希与 31/31 层间对账见 [`../docs/quality-verification.md`](../docs/quality-verification.md)。`build_local.py` 仍保留为无 Hadoop 的快速夹具/降级构建路径，但不替代正式批次。
+
+后续工作不再是“等待 DWD”，而是：在 Ubuntu 22.04 目标机复验同一份交接包，并由团队冻结 PRL 的 Q2/Q5/Q6/Q9 等策略。策略未冻结不影响当前技术演示，但不能被表述成数据治理制度已完成审批。

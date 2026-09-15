@@ -1,0 +1,140 @@
+{
+  "evidenceVersion": "formal-full-v1",
+  "capturedAt": "2026-09-15T12:04:16+08:00",
+  "scope": "ODS→PRL→DWD→DWS→ADS→Spark ML→Flask/web 端到端正式规模模拟数据验证",
+  "dataNature": "模拟运营数据；不代表真实生产充电站数据",
+  "source": {
+    "runId": "scml-20260914",
+    "kind": "ods-handoff",
+    "totalRows": 1162576,
+    "tables": {
+      "stations": 8,
+      "chargers": 288,
+      "users": 5000,
+      "orders": 120000,
+      "telemetry": 1000000,
+      "stationHourly": 17280,
+      "events": 20000
+    }
+  },
+  "prl": {
+    "runId": "prl-clean-20260915T024010Z-55661",
+    "applicationId": "application_1789439983572_0001",
+    "master": "yarn",
+    "sparkVersion": "3.5.7",
+    "pythonVersion": "3.10.21",
+    "elapsedSeconds": 351.23,
+    "inputRows": 1162576,
+    "quarantinedRows": 278845,
+    "dwdRows": 883731,
+    "dwdTables": {
+      "dwd_order_detail": 102332,
+      "dwd_telemetry_detail": 743937,
+      "dwd_station_hourly": 15073,
+      "dwd_event": 17146,
+      "dim_stations": 7,
+      "dim_chargers": 251,
+      "dim_users": 4985
+    },
+    "dwdAssertions": {
+      "passed": 7,
+      "failed": 0
+    },
+    "hourlyCoverage": {
+      "expected": 15120,
+      "retained": 15073,
+      "missing": 47,
+      "rowOffsetMlSafe": false
+    },
+    "qualityComparison": {
+      "Q1": { "truePositive": 5600, "falsePositive": 52, "falseNegative": 0 },
+      "Q2": { "truePositive": 9953, "falsePositive": 128817, "falseNegative": 1247 },
+      "Q3": { "truePositive": 3008, "falsePositive": 0, "falseNegative": 352 },
+      "Q4": { "truePositive": 11200, "falsePositive": 0, "falseNegative": 0 },
+      "Q5": { "truePositive": 412, "falsePositive": 0, "falseNegative": 0 },
+      "Q6": { "truePositive": 512, "falsePositive": 294, "falseNegative": 88 },
+      "Q7": { "truePositive": 360, "falsePositive": 0, "falseNegative": 0 },
+      "Q8": { "truePositive": 16, "falsePositive": 0, "falseNegative": 0 },
+      "Q9": { "truePositive": 1, "falsePositive": 0, "falseNegative": 0 },
+      "Q10": { "truePositive": 26, "falsePositive": 0, "falseNegative": 0 }
+    },
+    "readyForTeamDelivery": false,
+    "pendingPolicyNotes": [
+      "Q2 上游主键语义、Q5 超占用小时处理、Q6 单位修正边界、Q9 坐标策略尚待团队冻结。",
+      "合法未开工订单的时间分区策略与展示默认值仍须由团队确认。"
+    ]
+  },
+  "warehouse": {
+    "dwsRows": {
+      "station": 630,
+      "charger": 22320,
+      "user": 86889,
+      "region": 450
+    },
+    "ads": {
+      "runId": "ads-20260915105500",
+      "stations": 7,
+      "chargers": 251,
+      "orders": 97804,
+      "stationHourly": 15073,
+      "deliveryReconciliation": { "passed": 31, "skipped": 0, "failed": 0 }
+    }
+  },
+  "ml": {
+    "trainingApplicationId": "application_1789442046774_0001",
+    "predictionApplicationId": "application_1789442046774_0003",
+    "publishApplicationId": "application_1789442046774_0004",
+    "runId": "ml-20260915-111604",
+    "modelVersion": "spark-mllib-direct-20260915",
+    "selectedLoadAlgorithm": "gbt",
+    "loadModelHorizons": 24,
+    "forecastEnabledStationIds": [1, 2, 4, 5, 6],
+    "forecastRows": 120,
+    "metricRows": 24,
+    "isBaseline": false,
+    "horizonRange": [1, 24],
+    "materializationSafety": "逐 horizon 收集至最多 启用站点数×24 行的轻量 DataFrame，避免 24 个 PipelineModel 的联合长 lineage 导致低内存 executor OOM。"
+  },
+  "presentation": {
+    "productionEnv": {
+      "VITE_USE_MOCK": "false",
+      "VITE_API_BASE": "/api"
+    },
+    "oneClickVerified": {
+      "mode": "PART2_SKIP_HADOOP=1",
+      "port": 5051,
+      "adsRunId": "ads-20260915105500",
+      "kpiTotalOrders": 97804,
+      "forecastRunId": "ml-20260915-111604",
+      "forecastRows": 120,
+      "isBaseline": false
+    }
+  },
+  "regression": {
+    "prlPython": { "passed": 81, "failed": 0 },
+    "prlSpark": { "passed": 19, "failed": 0 },
+    "scml": { "passed": 49, "failed": 0 },
+    "ml": { "passed": 7, "failed": 0 },
+    "webNode": { "passed": 36, "failed": 0 },
+    "flaskContract": { "passed": 55, "failed": 0 },
+    "frontendShape": { "passed": 43, "failed": 0 },
+    "staticDist": { "passed": true }
+  },
+  "sha256": {
+    "prlQualityReport": "6f7bc109dcf153a4ea1465571db760ffee6a45d965917d1fbbd9dead9854f0d8",
+    "prlCleaningReport": "9649892798a43e211cccfd34d19887e53819b9e6f4441008002dd5b684342b54",
+    "prlRunResult": "e17307bb7b301ed2de20c82197f75cd8550a50fd45211045620bbb176ae8d2cb",
+    "dwdHandoffManifest": "8e60c584bc5d755becb23b136a152f172b6bf060f99f8a56876053b37a47ad2f",
+    "mlMetrics": "eec9d247395a328aace6ed66b3a084619b6c33903038e9a48ddfd58f3dfcca0c",
+    "mlForecastDb": "95c753854e16bc6a22c7ebf5f15b81234f98315346a9c56b9b15f25860cde2bf",
+    "mlManifest": "db7d4d1b440752fe17c95ebb48c1f4865d60e626ccba378f61ef7cdb6b482385",
+    "adsDb": "ab281d6d7f71a7029de00b913a7a405065c68f0a2f3e678bd383c8c99585eaef",
+    "adsManifest": "4cdf39e86c573da407aceb537a8f78a0ba1a79230138bb8d2d9f0b96d5794aaf",
+    "mlForecastReceipt": "f1a195c24a3575fab293c6b4858003f55465fa6340d2f3cdb1c51d5a355afc30"
+  },
+  "environmentBoundary": {
+    "verifiedOn": "Ubuntu 25.04 / Java 8 / Hadoop 3.2.1 / Spark 3.5.7 / Python 3.10.21",
+    "ubuntu2204Verified": false,
+    "note": "Ubuntu 22.04 需在目标机使用相同交接包和启动命令复验；本摘要不把本机结果误称为跨平台认证。"
+  }
+}

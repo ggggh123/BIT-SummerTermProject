@@ -1,6 +1,8 @@
 # #3 PRL ↔ #4 SCML 联调与交接说明
 
-日期：2026-09-15。本文记录 #3 对 #4 现有交接包、DWD schema、DWS/ADS SQL 和 SQLite 展示库的实际适配结果。它是集成证据，不是对待冻结策略的默认批准。
+日期：2026-09-15。本文保留 #3 对 #4 早期小样本交接包、DWD schema、DWS/ADS SQL 和 SQLite 展示库的适配过程，便于追溯联调问题；它不是当前规模结论，也不是对待冻结策略的默认批准。
+
+> **状态更新：** 该小样本之后已经完成正式规模 `ods-handoff` 的 PRL→DWD→DWS→ADS→ML→Flask/web 闭环。当前有效的行数、YARN 应用、哈希、预测批次和回归结果见 [正式规模验证记录](quality-verification.md) 及 [机器可读摘要](evidence/2026-09-15-formal-full.json)。本文件中所有“最新小样本”“未跑全量”的叙述只描述当时的历史基线，不能覆盖新记录。
 
 ## 1. 联调基线
 
@@ -74,7 +76,7 @@ hdfs://localhost:8020/ev-charging/quality/batches/<prl-run-id>/
 
 同时在 `/home/<user>/ev-part2/evidence/<prl-run-id>/dwd-handoff/` 导出本地试交接包。导出器会根据 `RUN_SUCCEEDED.json`、七表行数和所有文件 SHA-256 重新校验，不会发布到正式 `/ev-charging/dwd`。
 
-## 4. 最新小样本结果
+## 4. 历史小样本结果（已被正式规模结果取代）
 
 运行批次 `prl-clean-20260915T013909Z-44731`，YARN 应用 `application_1789436319409_0001`，作业内部耗时 80.67 秒。
 
