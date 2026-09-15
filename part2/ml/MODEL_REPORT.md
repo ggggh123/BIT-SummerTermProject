@@ -284,3 +284,30 @@ PRL 交付证据 [`../docs/evidence/2026-09-15-formal-full.json`](../docs/eviden
 4. **缺口阈值**：当前门限为 `missing == 0`（`--max-gap-tolerance 0`）。若上游确认缺口
    属于采集停机（而非数据丢失），可放宽阈值，但**必须同时**接受对齐后样本量的下降。
 
+### 12.5 目标机（Ubuntu 22.04 / JDK 17）真实批次复验
+
+2026-09-15 在本机按 `dev` 分支代码独立复现了完整链路
+（#4 生成器 → #3 PRL → #4 DWS/ADS → 本模块 ML → 合并回 ADS）：
+
+| 环节 | 结果 |
+|---|---|
+| ODS | `scml-20260914`：8 站 / 288 桩 / 5,000 用户 / 120,000 订单 / 1,000,000 遥测 |
+| PRL | `prl-clean-20260915T075040Z-37220`，YARN `application_1789433546680_0018`，308.89 s；DWD 7 表 883,731 行，断言 violations=0 |
+| 缺口 | `expected 15120 / retained 15073 / missing 47 / row_offset_ml_safe=false` —— 与 #3 正式批次逐项一致 |
+| **本模块训练** | YARN `application_1789433546680_0020`；**`rows raw=15120`**（对齐补齐 47 个缺口后的完整网格） |
+| 负荷 MAE (test) | 1h **48.60** / 6h **47.13** / 24h **50.82**（seasonal-naive 基线 79.32 / 79.35 / 80.63） |
+| 预测 | YARN `application_1789433546680_0021`；`forecast_enabled` 过滤 7 → **5 站**，**120 点**，`is_peak=10`，`busy/load 不一致行=0`，`zero_load=0` |
+| 合并 | `ads.db` 预测三表整体替换，`is_baseline=0`，**`wape < baseline_wape` 的步长 24/24** |
+
+**结论**：本模块在目标机（Ubuntu 22.04 / JDK 17 / Hadoop 3.4.1 / Spark 3.5.7）上可独立复现
+#3 在 Ubuntu 25.04 / JDK 8 上得到的同量级结果（h=1 负荷 MAE 48.60 vs 48.69），
+可补上 #3 交付证据中 `ubuntu22_verified: false` 的空缺。
+
+**运行适配说明（不修改上游代码）**：本机基线（Hadoop 3.4.1 / JDK 17）与 #3 的
+`install_global_runtime.sh`（要求独立安装 Hadoop 3.2.1 + JDK 8 + 自带 CPython，且拒绝覆盖既有
+`/usr/local/hadoop`）冲突，故用一层只读兼容 shim（`/usr/local/bin/ev-part2` + `env.sh`）
+把 `ev-part2 python|hdfs|spark-submit` 转发到本机工具链；另因 NameNode 只绑定
+`192.168.32.100:8020`，PRL 流水线用本地副本把硬编码的 `localhost:8020` 替换为主机名。
+**上游脚本与 SQL 均未改动。**
+
+
