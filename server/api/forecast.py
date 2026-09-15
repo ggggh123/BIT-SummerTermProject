@@ -1,8 +1,8 @@
 """预测端点（契约 §7）。
 
-当前批次来源：`ads_forecast_batch` 里 `is_baseline = 1` 的 seasonal-naive 基线
-（Spark MLlib 批次尚未从 #5 交接）。**没有有效批次时返回 `code: 4041`**，
-前端据此显示「暂无预测」，绝不返回伪造曲线 —— 这是《05-PE》§8 的硬要求。
+从 ``ads_forecast_batch`` 读取最近激活的预测批次；它可以是明确标识的基线，
+也可以是 Spark MLlib 训练产物，``isBaseline`` 会如实透传给前端。**没有有效
+批次时返回 ``code: 4041``**，前端据此显示「暂无预测」，绝不伪造曲线。
 """
 
 from __future__ import annotations

@@ -170,7 +170,12 @@ def main() -> int:
     if not selection:
         print("[predict] 未提供 metrics.json，全部 horizon 使用 --default-algo")
 
-    frames, versions = [], {}
+    # 每个 horizon 的输出只有“启用站点数”行（正式数据为 5 行）。不能把 24 个
+    # PipelineModel 的 transform 直接 union 成一张超长 lineage：Spark 会把全部树模型
+    # 一次序列化给同一个 executor，低内存演示机在最终 write 时容易 OOM。这里在每个
+    # horizon 完成后只 collect 这个有明确上限的小结果，再构造 24h 轻量 DataFrame。
+    # collect 的不是 DWD 原始数据，最大规模为 station_count × 24（本项目 ≤ 192 行）。
+    prediction_rows, versions = [], {}
     for h in horizons:
         acc = base.select("station_id", "observed_at", "pile_count", "rated_power_kw")
         for name, out_col in TARGETS:
@@ -197,7 +202,7 @@ def main() -> int:
         acc = ft.clip_to_physical(acc, "predicted_load_kw", None, 0.0)
         acc = ft.clip_to_physical(acc, "predicted_busy_count", "pile_count", 0.0)
 
-        frames.append(
+        frame = (
             acc.withColumn("horizon_h", F.lit(h))
             .withColumn("forecast_at_col", F.col("observed_at") + F.expr(f"INTERVAL {h} HOURS"))
             .select(
@@ -205,10 +210,14 @@ def main() -> int:
                 "predicted_load_kw", "predicted_busy_count", "pile_count",
             )
         )
+        prediction_rows.extend(row.asDict(recursive=True) for row in frame.collect())
 
-    allp = frames[0]
-    for fr in frames[1:]:
-        allp = allp.unionByName(fr)
+    expected_prediction_rows = n_station * len(horizons)
+    if len(prediction_rows) != expected_prediction_rows:
+        raise ValueError(
+            f"预测行数异常：{len(prediction_rows)}，期望 {n_station} × {len(horizons)}"
+        )
+    allp = spark.createDataFrame(prediction_rows)
 
     # ---- 1) 占用整数化：仅做上下界裁剪，不做下界抬升 ----
     allp = allp.withColumn(
