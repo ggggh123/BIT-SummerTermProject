@@ -1,0 +1,13 @@
+# 大数据、安装包和运行产物不进入 Git；小型测试夹具可以提交。
+data/
+handoff/
+artifacts/
+downloads/
+.cache/
+.pytest_cache/
+*.parquet
+*.tar.gz
+*.tgz
+*.tar.xz
+*.pid
+config/local/
