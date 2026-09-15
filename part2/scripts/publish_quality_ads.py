@@ -1,9 +1,14 @@
 """将 #3 的逐行对账结果事务化写入 #4 既有 ADS SQLite 质量三表。"""
 import argparse
 import json
+import os
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from part2.clean.normalization import SHANGHAI
 from part2.common.handoff import sha256_file
 
@@ -62,13 +67,69 @@ def quality_payload(quality, cleaning, quality_path):
     return table_rows, issue_rows, sorted(meta.items())
 
 
-def publish(quality_path, cleaning_path, database, backup, accept_pending=False):
+def prepare_manifest(manifest_path, database, quality, table_rows, issue_rows, accept_pending):
+    if manifest_path is None:
+        return None, None
+    manifest_path = Path(manifest_path)
+    if not manifest_path.is_file():
+        raise ValueError(f"ADS 清单不存在：{manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("contractVersion") != "ads-flask-v1":
+        raise ValueError("ADS 清单 contractVersion 不是 ads-flask-v1")
+    if manifest.get("database") != database.name:
+        raise ValueError("ADS 清单中的 database 与发布目标不一致")
+    if str(manifest.get("sourceRunId", "")) != str(quality["source_run_id"]):
+        raise ValueError("ADS 清单与质量报告来源批次不一致")
+
+    tables = dict(manifest.get("tables") or {})
+    tables["ads_quality_table"] = len(table_rows)
+    tables["ads_quality_issue"] = len(issue_rows)
+    manifest["tables"] = tables
+    manifest["quality"] = {
+        "source": "prl-quality-report",
+        "runId": quality["run_id"],
+        "injected": sum(row[2] for row in issue_rows),
+        "detected": sum(row[3] for row in issue_rows),
+        "readyForTeamDelivery": bool(quality.get("ready_for_team_delivery")),
+        "acceptedPendingPolicy": bool(
+            accept_pending and not quality.get("ready_for_team_delivery")
+        ),
+    }
+    return manifest_path, manifest
+
+
+def write_manifest_atomic(manifest_path, manifest):
+    temporary = manifest_path.with_name(f".{manifest_path.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    os.replace(temporary, manifest_path)
+
+
+def restore_database(database, backup):
+    source = sqlite3.connect(f"file:{backup.resolve()}?mode=ro", uri=True)
+    target = sqlite3.connect(database)
+    try:
+        source.backup(target)
+    finally:
+        target.close()
+        source.close()
+
+
+def publish(
+    quality_path, cleaning_path, database, backup, accept_pending=False, manifest_path=None
+):
     quality_path, cleaning_path, database, backup = map(Path, (quality_path, cleaning_path, database, backup))
     quality, cleaning = load_reports(quality_path, cleaning_path)
     if not quality.get("ready_for_team_delivery") and not accept_pending:
         raise ValueError("报告仍有未确认策略；试联调需显式 --accept-pending，不能冒充正式发布")
     if not database.is_file() or backup.exists() or database.resolve() == backup.resolve():
         raise ValueError("ADS 数据库不存在、备份已存在，或备份目标与原库相同")
+    table_rows, issue_rows, meta_rows = quality_payload(quality, cleaning, quality_path)
+    manifest_path, manifest = prepare_manifest(
+        manifest_path, database, quality, table_rows, issue_rows, accept_pending
+    )
+
     backup.parent.mkdir(parents=True, exist_ok=True)
     source = sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True)
     try:
@@ -86,7 +147,6 @@ def publish(quality_path, cleaning_path, database, backup, accept_pending=False)
             target.close()
     finally:
         source.close()
-    table_rows, issue_rows, meta_rows = quality_payload(quality, cleaning, quality_path)
     connection = sqlite3.connect(database)
     try:
         connection.execute("PRAGMA foreign_keys=ON")
@@ -105,7 +165,31 @@ def publish(quality_path, cleaning_path, database, backup, accept_pending=False)
         raise
     finally:
         connection.close()
-    return {"ok": True, "database": str(database.resolve()), "backup": str(backup.resolve()), "source_run_id": quality["source_run_id"], "quality_run_id": quality["run_id"], "quality_report_sha256": sha256_file(quality_path), "tables": 7, "rules": 10, "ready_for_team_delivery": bool(quality.get("ready_for_team_delivery")), "accepted_pending_policy": bool(accept_pending and not quality.get("ready_for_team_delivery"))}
+
+    if manifest is not None:
+        manifest["databaseSha256"] = sha256_file(database)
+        try:
+            write_manifest_atomic(manifest_path, manifest)
+        except Exception:
+            restore_database(database, backup)
+            raise
+
+    return {
+        "ok": True,
+        "database": str(database.resolve()),
+        "backup": str(backup.resolve()),
+        "manifest": str(manifest_path.resolve()) if manifest_path else None,
+        "source_run_id": quality["source_run_id"],
+        "quality_run_id": quality["run_id"],
+        "quality_report_sha256": sha256_file(quality_path),
+        "database_sha256": sha256_file(database),
+        "tables": 7,
+        "rules": 10,
+        "ready_for_team_delivery": bool(quality.get("ready_for_team_delivery")),
+        "accepted_pending_policy": bool(
+            accept_pending and not quality.get("ready_for_team_delivery")
+        ),
+    }
 
 
 def main():
@@ -113,13 +197,20 @@ def main():
     parser.add_argument("--quality", type=Path, required=True)
     parser.add_argument("--cleaning", type=Path, required=True)
     parser.add_argument("--ads-db", type=Path, required=True)
+    parser.add_argument(
+        "--ads-manifest", type=Path,
+        help="可选 ads_manifest.json；提供时与数据库一并更新并校验批次",
+    )
     parser.add_argument("--backup", type=Path, required=True)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--accept-pending", action="store_true")
     args = parser.parse_args()
     if args.receipt and args.receipt.exists():
         raise ValueError(f"回执已存在，拒绝在发布后才失败：{args.receipt}")
-    result = publish(args.quality, args.cleaning, args.ads_db, args.backup, args.accept_pending)
+    result = publish(
+        args.quality, args.cleaning, args.ads_db, args.backup,
+        args.accept_pending, args.ads_manifest,
+    )
     if args.receipt:
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         with args.receipt.open("x", encoding="utf-8") as target:

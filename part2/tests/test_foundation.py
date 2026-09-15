@@ -13,6 +13,14 @@ import xml.etree.ElementTree as ET
 
 
 class ContractTests(unittest.TestCase):
+    def test_contract_is_cached_for_full_scale_row_validation(self):
+        load_contract.cache_clear()
+        first = load_contract()
+        second = load_contract()
+        info = load_contract.cache_info()
+        self.assertIs(first, second)
+        self.assertEqual((info.misses, info.hits), (1, 1))
+
     def test_draft_is_not_team_approval(self):
         self.assertEqual(load_contract()["status"], "DRAFT_PENDING_TL_SCML_PE_REVIEW")
 

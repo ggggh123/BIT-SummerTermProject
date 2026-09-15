@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +33,10 @@ def main() -> int:
                         help="按本地路径读 Parquet，不连 HDFS")
     parser.add_argument("--out", type=Path, default=Path("handoff/dws"))
     parser.add_argument("--generated-at", type=str, default=None)
+    parser.add_argument(
+        "--source-manifest", type=Path,
+        help="可选 ODS manifest.json；用于把 sourceRunId 写入 DWS 交接清单",
+    )
     args = parser.parse_args()
 
     generated_at = (
@@ -58,8 +63,14 @@ def main() -> int:
         spark.stop()
 
     run_id = f"dws-{generated_at.strftime('%Y%m%d%H%M%S')}"
+    source_run_id = ""
+    if args.source_manifest:
+        source_manifest = json.loads(args.source_manifest.read_text(encoding="utf-8"))
+        source_run_id = str(source_manifest.get("runId") or source_manifest.get("run_id") or "")
+        if not source_run_id:
+            raise ValueError(f"ODS 清单缺少 runId：{args.source_manifest}")
     manifest = write_dws(args.out, tables, run_id=run_id, generated_at=generated_at,
-                         source_run_id="")
+                         source_run_id=source_run_id)
     print(f"[ok] {args.out}/manifest.json  runId={manifest['runId']}")
     return 0
 

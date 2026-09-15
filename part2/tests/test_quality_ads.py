@@ -13,6 +13,7 @@ class QualityAdsTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.db, self.backup = self.root / "ads.db", self.root / "ads.before.db"
+        self.manifest = self.root / "ads_manifest.json"
         con = sqlite3.connect(self.db)
         con.executescript("""
 CREATE TABLE ads_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -32,6 +33,14 @@ INSERT INTO ads_meta VALUES('runId','ads-1'); INSERT INTO ads_meta VALUES('sourc
         dwd_tables = ("dwd_order_detail", "dwd_telemetry_detail", "dwd_station_hourly", "dwd_event", "dim_stations", "dim_chargers", "dim_users")
         cleaning = {**common, "report_type": "cleaning_report", "tables": {name: {"before": 10, "after": 9} for name in ("users", "stations", "chargers", "orders", "telemetry", "station_hourly", "events")}, "dwd_assertions": [{"table": name, "ok": True} for name in dwd_tables]}
         self.q.write_text(json.dumps(quality)); self.c.write_text(json.dumps(cleaning))
+        self.manifest.write_text(json.dumps({
+            "contractVersion": "ads-flask-v1",
+            "runId": "ads-1",
+            "sourceRunId": "source-1",
+            "database": "ads.db",
+            "tables": {"ads_quality_table": 1, "ads_quality_issue": 1},
+            "quality": {"source": "baseline"},
+        }))
 
     def test_pending_requires_explicit_acknowledgement(self):
         with self.assertRaisesRegex(ValueError, "accept-pending"):
@@ -39,7 +48,7 @@ INSERT INTO ads_meta VALUES('runId','ads-1'); INSERT INTO ads_meta VALUES('sourc
         self.assertFalse(self.backup.exists())
 
     def test_transaction_replaces_only_quality_tables_and_keeps_backup(self):
-        result = publish(self.q, self.c, self.db, self.backup, True)
+        result = publish(self.q, self.c, self.db, self.backup, True, self.manifest)
         self.assertTrue(result["ok"]); self.assertTrue(result["accepted_pending_policy"])
         con = sqlite3.connect(self.db)
         self.assertEqual(con.execute("SELECT COUNT(*) FROM ads_quality_table").fetchone()[0], 7)
@@ -53,6 +62,20 @@ INSERT INTO ads_meta VALUES('runId','ads-1'); INSERT INTO ads_meta VALUES('sourc
         old = sqlite3.connect(self.backup)
         self.assertEqual(old.execute("SELECT value FROM ads_quality_meta WHERE key='old'").fetchone()[0], "old")
         old.close()
+        manifest = json.loads(self.manifest.read_text())
+        self.assertEqual(manifest["tables"]["ads_quality_table"], 7)
+        self.assertEqual(manifest["tables"]["ads_quality_issue"], 10)
+        self.assertEqual(manifest["quality"]["source"], "prl-quality-report")
+        self.assertTrue(manifest["quality"]["acceptedPendingPolicy"])
+        self.assertEqual(manifest["databaseSha256"], result["database_sha256"])
+
+    def test_manifest_batch_mismatch_rejected_before_backup(self):
+        manifest = json.loads(self.manifest.read_text())
+        manifest["sourceRunId"] = "other"
+        self.manifest.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "清单.*来源批次"):
+            publish(self.q, self.c, self.db, self.backup, True, self.manifest)
+        self.assertFalse(self.backup.exists())
 
     def test_source_batch_mismatch_rejected_before_backup(self):
         con = sqlite3.connect(self.db); con.execute("UPDATE ads_meta SET value='other' WHERE key='sourceRunId'"); con.commit(); con.close()

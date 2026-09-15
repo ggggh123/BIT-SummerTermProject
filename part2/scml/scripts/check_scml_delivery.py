@@ -99,6 +99,14 @@ def check_ads(ads: Path) -> dict[str, object]:
                 return fail("ADS database is missing contract tables", missing=missing)
             meta = dict(db.execute("SELECT key, value FROM ads_meta"))
             forecast_point_count = db.execute("SELECT COUNT(1) FROM ads_forecast_24h").fetchone()[0]
+            forecast_station_count = db.execute(
+                "SELECT COUNT(1) FROM ads_station WHERE forecast_enabled = 1"
+            ).fetchone()[0]
+            forecast_orphan_count = db.execute(
+                """SELECT COUNT(1) FROM ads_forecast_24h f
+                     LEFT JOIN ads_station s ON s.station_id = f.station_id
+                     WHERE s.station_id IS NULL OR s.forecast_enabled <> 1"""
+            ).fetchone()[0]
     except sqlite3.Error as exc:
         return fail(f"cannot read ads.db: {exc}")
 
@@ -110,6 +118,8 @@ def check_ads(ads: Path) -> dict[str, object]:
         chargerCount=int(meta.get("chargerCount", 0)),
         orderCount=int(meta.get("orderCount", 0)),
         forecastPointCount=int(forecast_point_count),
+        forecastStationCount=int(forecast_station_count),
+        forecastOrphanCount=int(forecast_orphan_count),
     )
 
 
@@ -127,12 +137,24 @@ def check_scale(ods_check: dict[str, object], ads_check: dict[str, object]) -> d
             "formal delivery requires ODS manifest kind=ods-handoff; run scripts/run_scml_full.sh first",
             actualKind=ods_check.get("kind"),
         )
-    if int(ads_check.get("forecastPointCount", 0)) != 144:
+    forecast_stations = int(ads_check.get("forecastStationCount", 0))
+    forecast_points = int(ads_check.get("forecastPointCount", 0))
+    forecast_orphans = int(ads_check.get("forecastOrphanCount", 0))
+    expected_points = forecast_stations * 24
+    if forecast_stations <= 0 or forecast_points != expected_points or forecast_orphans:
         return fail(
-            "formal delivery requires 144 forecast points (6 forecast stations x 24h)",
-            actualForecastPointCount=ads_check.get("forecastPointCount", 0),
+            "formal delivery requires every surviving forecast-enabled station to have 24 non-orphan points",
+            forecastStationCount=forecast_stations,
+            expectedForecastPointCount=expected_points,
+            actualForecastPointCount=forecast_points,
+            orphanForecastPointCount=forecast_orphans,
         )
-    return ok("formal delivery scale is confirmed", kind=ods_check.get("kind"), forecastPointCount=144)
+    return ok(
+        "formal delivery scale is confirmed",
+        kind=ods_check.get("kind"),
+        forecastStationCount=forecast_stations,
+        forecastPointCount=forecast_points,
+    )
 
 
 def check_reconcile(ods: Path, dws: Path, ads: Path, dwd: Path, require_dwd: bool) -> dict[str, object]:
