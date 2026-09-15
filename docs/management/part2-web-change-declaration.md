@@ -118,7 +118,7 @@ E2E 9 条与它们证明的事：
 
 1. **主页版面已重构**（`feat/part2-web-layout`）：内容压到 1080 设计高度以内、1920×1080 一屏放下，地图升为 380px 主视区（E2E 第 6 条守护）。**往主页加内容前先看这条断言**。
 2. **DataV 已铺到五个页面**（主页 + 4 个子页，见 §2 的 `DvFrame` 行）；子页**不套 `ScaleFrame`**（响应式看板，只有主页做大屏等比缩放），这是有意为之，不要给子页加缩放。
-3. **本机 `ads.db` 的预测是基线**：`ads_forecast_batch.is_baseline=1`（seasonal-naive），因为 15:00 重建 ADS 时没带 `FORECAST_HANDOFF`（见缺陷记录 D8）。真 MLlib 批次由 #5 交付后，用 `53-run-dws-ads.sh --forecast-handoff handoff/forecast` 或 `part2/ml/merge_ads.py` 接回。
+3. **本机 `ads.db` 的预测是基线**：`ads_forecast_batch.is_baseline=1`（seasonal-naive），因为 15:00 重建 ADS 时没带 `FORECAST_HANDOFF`（见缺陷记录 D8）。**#5 的真实批次已经在目标机跑出来并合并好了**（`part2/ml/MODEL_REPORT.md` §12.5：5 站 / 120 点 / `is_baseline=0`），差的是把 `handoff/forecast/forecast.db` 交到演示机后跑 `part2/ml/merge_ads.py`（或 `53-run-dws-ads.sh --forecast-handoff handoff/forecast`）接回。
 4. **HDFS 各层已全部由官方链路产出**：`/ods` 104.7MB、`/dwd` 19.5MB（8 张，PRL 清洗 on YARN）、`/dws` 1.0MB（4 张）、`/ads` 179.4KB（11 张 Parquet）。早期文档写的「DWD/ADS 仍是旧数据」**已过期**。
 5. **KPI 在线率 99.6%**：251 桩里故障桩 1 个。「偏理想」是生成器的故障注入比例问题，不是缺陷。
 6. **电量 0.001 kWh 差异**：`ads_daily` 逐日四舍五入后汇总（3,430,028.399）与接口取整（3,430,028.4）之差；金额是整数分，无差异。

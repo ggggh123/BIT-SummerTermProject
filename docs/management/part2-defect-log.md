@@ -21,8 +21,8 @@
 | # | 缺陷 | 现象与影响 | 归属 | 现状与建议 |
 |---|---|---|---|---|
 | D7 | `run_dws_ads.sh` 内置对账「假报警」 | 本机实测 24/30、6 项失败：① 小时表容差写死 0（15,073 vs 15,120）② 「重算」用 SCML 的 Python 口径（112,422 单）与 PRL 口径（97,804 单）不可比 ③ 找 DWD 时不认 `dt=` 分区目录。**不是数据问题**，但答辩当场跑对账会尴尬 | #3 / #4 | 临时规避：`53-run-dws-ads.sh --skip-reconcile`；建议按 PRL 口径改基准并支持分区目录 |
-| D8 | ML 批次被一次 ADS 重建静默丢掉 | 2026-09-15 15:00 在本机重建 `ads.db` 时没带 `FORECAST_HANDOFF`，预测三表退回 seasonal-naive 基线（`is_baseline=1`），而 dev 文档记的是真实 MLlib 批次 `ml-20260915-111604` | #4 / #5 | 重建 ADS 一律带上 `--forecast-handoff`；本机已由 #5 重跑批次后合并 |
-| D9 | 预测站点集合与 ADS 不一致会被拒合并 | `merge_ads.py` 硬校验「预测站点集合 == `ads_station.forecast_enabled=1` 的集合」，并校验每站 `busy + idle == charger_cnt`。本机官方 ADS 是 7 站 / 5 个启用站（120 点）；另一台机器自产的 8 站批次（192 点）会被直接拒绝 | #5 / #2 | 合并前先确认站点集合；若要整体换成自产批次，营收/订单/KPI 与抽验表都要整体重填 |
+| D8 | ML 批次被一次 ADS 重建静默丢掉 | 2026-09-15 15:00 在本机重建 `ads.db` 时没带 `FORECAST_HANDOFF`，预测三表退回 seasonal-naive 基线（`is_baseline=1`），而 dev 文档记的是真实 MLlib 批次 `ml-20260915-111604` | #4 / #5 | 重建 ADS 一律带上 `--forecast-handoff`；**#5 已在目标机重跑并合并（`MODEL_REPORT.md` §12.5，5 站 / 120 点 / `is_baseline=0`），本机演示库仍是基线，待把 `handoff/forecast/forecast.db` 交到演示机后合并** |
+| D9 | 预测站点集合与 ADS 不一致会被拒合并 | `merge_ads.py` 硬校验「预测站点集合 == `ads_station.forecast_enabled=1` 的集合」，并校验每站 `busy + idle == charger_cnt`。本机官方 ADS 是 7 站 / 5 个启用站（120 点）；早前那批 8 站（192 点）来自自测的 17,280 行合成数据，会被直接拒绝 | #5 / #2 | **已排除**：#5 的真实批次过滤后正是 **5 站 / 120 点**（`MODEL_REPORT.md` §12.5），与本机 ADS 一致；仍不要用自测数据产出的批次去合 |
 | D10 | 同库两套清洗口径 | `ads_quality_table` 的 8 站 / 287 桩 / 112,422 单来自 `export_ads_db.py` 的 Python 旁路复算，业务表是 PRL 清洗的 7 站 / 251 桩 / 97,804 单，两者并存于同一 `ads.db` | #3 / #4 | `ads_meta.cleaningSource` 已标注为过渡口径；统一后抽验表备注④可撤 |
 | D11 | 数据质量规则缺口 | R02 重复记录、R04 时间格式混杂各注入 11,200 条、**检出 0**，合计占注入量 68%；`ready_for_team_delivery=false` | #3 | 补检测规则，或明确声明「这两类以 #3 的 PRL 报告为准」 |
 | D12 | 生成器注册时间全在业务窗口之前 | 导致 `new_user_cnt` 全 0（见 D6） | #4 | 在窗口内注入注册时间并重新交接 ODS，或固定「首单新客」口径 |

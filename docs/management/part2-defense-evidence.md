@@ -26,7 +26,7 @@
 | 5 | 用 PySpark 进行数据清洗 | #3 | PRL 清洗 **Spark on YARN**：输入 **1,162,576** 行 → 隔离 **278,845** → DWD **883,731** 行；**7/7 断言零违规**；本机 TimeMachine 实测 **712.83 秒** | `docs/test/evidence/part2-2026-09-15/vm-integration-run.md`；YARN 历史里的 `application_1789453914196_0001` |
 | 6 | SparkSQL 完成 ODS→DWD→DWS→ADS | #4 | DWD **8 张 / 19.5 MB**（订单 102,332、遥测 743,937、小时 15,073、事件 17,146、桩 251、站 7、用户 4,985）→ DWS **4 张** → ADS **11 张 Parquet** + 本地 `ads.db` **15 张表** | `hdfs dfs -ls /ev-charging/{dwd,dws,ads}`；`handoff/ads/ads.db` |
 | 7 | 数据可视化 Flask + Vue + ECharts + DataV | #1 | Flask **28 个 API**（`/api/health` 回 `apiRouteCount=28`、`contractEndpointCount=27`）；Vue3 + ECharts + DataV，**5 个页面 / 20 个图表**；前端单测 **36/36**、第一阶段回归 **36/36**、页面 E2E **8/8** | 打开 `http://192.168.88.131:5000`：主页 → 点地图站点跳子页 → 四个子页切换 |
-| 8 | 数据预测 Spark MLlib（老师标注选做，本组按必做） | #5 | 本机 TimeMachine **不重复跑**（#5 已在做完整链路，方案 A）；接入方式由 `part2/ml/merge_ads.py` 把 `handoff/forecast/forecast.db` 合并进 `ads.db`，合并前校验站点集合 / horizon 1–24 / 占用守恒 / 峰值成对 | 大屏主页「24 小时负荷与预测」；`/api/forecast/24h`、`/metrics`、`/recommend` |
+| 8 | 数据预测 Spark MLlib（老师标注选做，本组按必做） | #5 | **已在目标机独立复现完整链路并合并**（`part2/ml/MODEL_REPORT.md` §12.5）：PRL 缺口 `expected 15120 / retained 15073 / missing 47` 与正式批逐项一致 → 训练 `raw=15120`（补齐网格）→ 预测 `forecast_enabled` 过滤 7→**5 站 / 120 点**、`busy/load 不一致行=0` → 合并 `is_baseline=0`、`wape < baseline_wape` **24/24**；负荷 test MAE 1h **48.60** / 6h 47.13 / 24h 50.82（seasonal-naive 基线 79.32 / 79.35 / 80.63）。本机演示库仍是基线，接入方式见 §5 | 大屏主页「24 小时负荷与预测」；`/api/forecast/24h`、`/metrics`、`/recommend` |
 
 ## 2. 大屏演示脚本（约 10 分钟）
 
@@ -72,5 +72,5 @@
 | `run_dws_ads.sh` 内置对账与新布局不兼容（小时表容差写死 0、用 SCML Python 口径重算、不认 `dt=` 分区） | #3 / #4 | 对账会"假报警"24/30、6 项失败；**不是数据问题**，但答辩若当场跑对账会尴尬 |
 | 冻结 Q2/Q5/Q6/Q9 清洗策略（现 `ready_forTeamDelivery=false`） | #3 / #4 | 上面「预判提问」里的 R02/R04 答复口径 |
 | 抽验表复核签字 | #3 | 老师要求「与 #3 共同抽查至少 10 个指标」——**需要 #3 在表末签字** |
-| MLlib 批次交付并合并进 `ads.db` | #5 → #1 | 老师第 7（或第 8）条的现场证据；合并前请确认**站点集合一致**，否则 `merge_ads.py` 会拒绝 |
+| MLlib 批次**落到演示机**的 `ads.db` | #5 → #1 | 老师第 7（或第 8）条的现场证据。批次已在 #5 那台机复现并合并（5 站 / 120 点 / `is_baseline=0`，见 `MODEL_REPORT.md` §12.5），**但本机演示库仍是 seasonal-naive 基线**（`forecastIsBaseline=1`）。需要他把 `handoff/forecast/forecast.db` + `manifest.json` 交到演示机，再跑 `part2/ml/merge_ads.py`（它校站点集合 / horizon 1–24 / 占用守恒 / 峰值成对，不通过就直接报错，不会静默出错） |
 | PyCharm 环境证据 | #2 | 见 §1 第 2 行 |

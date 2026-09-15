@@ -41,6 +41,11 @@
 
 第 21 行逐类（`rule / 注入 / 检出 / 召回率`）：
 
+> **预测三表的现状**：本机 `handoff/ads/ads.db` 目前是 seasonal-naive 基线（`is_baseline=1`，120 点 / 5 站）。
+> 真实 MLlib 批次已由 #5 在其目标机跑出并合并（`part2/ml/MODEL_REPORT.md` §12.5：5 站 / 120 点 /
+> `is_baseline=0` / `wape<baseline_wape` 24/24，负荷 test MAE 1h 48.60），**待把 `handoff/forecast/forecast.db`
+> 交到演示机后用 `part2/ml/merge_ads.py` 接回**，届时本表第 22 行与主页预测曲线一并刷新。
+
 ```text
 R01 缺失值      5600 / 5652 / 1.000     R06 金额口径错误   600 /  581 / 0.968
 R02 重复记录   11200 /    0 / 0.000     R07 孤儿引用       360 /  684 / 1.000

@@ -71,7 +71,7 @@
 
 ## 未完成项
 
-- 第 22 行等 ML 批次合并进 `ads.db` 后回填（本机正在重跑 ML 阶段）。
+- 第 22 行等 ML 批次落到**本机演示库**后回填：批次已由 #5 在目标机产出并合并（`part2/ml/MODEL_REPORT.md` §12.5，5 站 / 120 点 / `is_baseline=0` / `wape<baseline_wape` 24/24），本机 `ads.db` 仍是 seasonal-naive 基线，需把 `handoff/forecast/forecast.db` 交到演示机后跑 `part2/ml/merge_ads.py`。
 - 第 19、20 行的「大屏显示」依赖政府页 KPI 文案口径，见备注③。
 - 第 7、13、16、21 行的数值取自图表画布，已用 `getOption()` 取值核对，但**截图为证**仍建议补一轮（见 `docs/test/evidence/part2-2026-09-15/screenshots/`）。
 
