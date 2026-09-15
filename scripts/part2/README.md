@@ -20,6 +20,22 @@
 | `11-fix-profile-and-start.sh` | 只补做"清 `/etc/profile` 旧块 + 格式化 + 启动 + 建目录" | 是 |
 | `env-check.sh` | 只读体检：版本、配置、五进程、HDFS、Python 依赖、SSH 免密、共享文件夹 | 否 |
 | `40-verify.sh` | 验收：版本、五进程、HDFS 读写、**Spark on YARN 读 HDFS**、SparkSQL、YARN 记录、Web UI | 否 |
+| `30-start-demo.sh` | **一键起全栈**（可移植版）：挑 Python → HDFS/YARN → ADS 库 → `web/dist` → Flask 同进程托管大屏与 `/api/*` | 否 |
+| `31-stop-demo.sh` | 一键停（默认只停 Flask；`--all` 再按反向顺序停 YARN → HDFS） | 否 |
+
+### `30-start-demo.sh` 与 `part2/scripts/start_part2.sh`（#2 版）的分工
+
+两者做同一件事，但适用范围不同：
+
+| | #2 版 `part2/scripts/start_part2.sh` | 本目录 `30-start-demo.sh` |
+|---|---|---|
+| 仓库根 | 写死 `/home/bit/part2`（可用 `PART2_ROOT` 覆盖） | 按脚本位置自动推导 |
+| Hadoop | `sudo -u hadoop ...`（需 hadoop 用户与免密 sudo） | 直接调 `start-dfs.sh`，已在运行则跳过，失败只提示 |
+| Python | 系统 `python3` | 自动挑「能 `import flask`」的解释器（本机是 `~/venvs/part2/bin/python`） |
+| 健康检查 | `curl`（本机未装） | `curl` → `wget` → Python `urllib` 三级回退 |
+
+实测（`TimeMachine`，2026-09-15）：连起两遍 → 停 → 再起，四次调用均正常，`守护进程 5/5`。跨机适配的完整缺陷记录与给 #2 的补丁建议见
+`docs/test/evidence/part2-2026-09-15/vm-integration-run.md` §2/§4。
 
 ```bash
 # 前置：三个 tarball 下载到 ~/software/

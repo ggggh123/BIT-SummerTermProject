@@ -50,3 +50,18 @@ R05 逻辑矛盾     412 /  412 / 1.000     R10 文本脏数据      26 /   26 /
 **3.3（#2 TL）一键脚本的跨机适配**（`part2/scripts/start_part2.sh`）：`PART2_ROOT` 写死 `/home/bit/part2`、`sudo -u hadoop`、依赖 `curl`、用系统 `python3`。本机（`spiderboy` / `/mnt/hgfs/...` / 无 curl / flask 在 venv）三处断点，详见 `vm-integration-run.md` §2 与 §4 的补丁建议。
 
 **3.4（#4 SCML）`/etc/profile.d/ev-second-project.sh` 在本机不存在**，而 `part2/scml/scripts/*.sh` 会 source 它 → SparkSQL 链路在本机跑不起来（本机是 `part2-env.sh`）。
+
+## 4. 状态快照修复验证（#4 `6cbbd11`，2026-09-15 10:12 复测）
+
+#4 在 `6cbbd11` 里按站点利用率重塑了桩状态快照。重新生成 ODS + 物化 ADS 后（`runId=ads-20260915101224`）复测：
+
+| 项 | 修复前 | 修复后 |
+|---|---|---|
+| 桩状态分布（287 桩） | `idle 285 / fault 2` | **`idle 197 / charging 61 / reserved 27 / fault 2`** |
+| 主页「桩状态环图」 | 只有 1 个扇区 | **4 个扇区** |
+| 各站空闲桩 | 8 站里 7 站并列 36 | **30 / 29 / 26 / 26 / 24 / 22 / 21 / 19**（有区分度） |
+| 主页 KPI | — | `空闲桩 197`、订单 112,422、营收 ¥4,758,207.37（金额与订单未变，仅状态分布变化） |
+
+同一轮修复还包含：`reconcile.py` 不再硬要求 `is_baseline=1`（真实 ML 批次可过）、`build_local.py` / `export_ads_db.py` 新增 `--forecast-handoff <path>` 用于接入 #5 的预测包、`test_delivery_check.py` 子进程输出加 `errors="replace"`（已验证：**不设 `PYTHONIOENCODING` 也 3/3 通过**）。
+
+> 残余项：`onlineRate` 仍是 99.3%，因为故障桩仍只有 2 个——若答辩希望在线率更接近真实运营，需要 #4 调整故障注入比例（与状态快照是两件事）。

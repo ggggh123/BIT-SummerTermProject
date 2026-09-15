@@ -123,6 +123,10 @@ def main() -> int:
     parser.add_argument("--ods", type=Path, default=Path("handoff/ods"))
     parser.add_argument("--out", type=Path, default=Path("handoff/ads"))
     parser.add_argument("--generated-at", type=str, default=None)
+    parser.add_argument(
+        "--forecast-handoff", type=Path, default=None,
+        help="可选：读取 #5 的 handoff/forecast，整体替换 ADS 三张预测表",
+    )
     args = parser.parse_args()
 
     generated_at = (
@@ -198,12 +202,28 @@ def main() -> int:
     forecast_hourly = [
         row for row in hourly if int(row["station_id"]) in ads_station_ids
     ]
-    batch, forecast_points = extras.build_baseline_forecast(
-        forecast_hourly, forecast_stations, generated_at
-    )
-    metrics = (
-        extras.build_baseline_metrics(forecast_hourly, forecast_stations) if batch else []
-    )
+    if args.forecast_handoff:
+        batch, forecast_points, metrics = extras.load_forecast_handoff(
+            args.forecast_handoff, generated_at
+        )
+    else:
+        batch, forecast_points = extras.build_baseline_forecast(
+            forecast_hourly, forecast_stations, generated_at
+        )
+        metrics = (
+            extras.build_baseline_metrics(forecast_hourly, forecast_stations) if batch else []
+        )
+
+    enabled_station_ids = {
+        int(row["station_id"]) for row in tables["ads_station"]
+        if int(row.get("forecast_enabled") or 0) == 1
+    }
+    point_station_ids = {int(row["station_id"]) for row in forecast_points}
+    if point_station_ids != enabled_station_ids:
+        raise ValueError(
+            "预测交接站点与清洗后 forecast_enabled 站点不一致："
+            f"forecast={sorted(point_station_ids)} ads={sorted(enabled_station_ids)}"
+        )
 
     # ---- 窗口与总量：取自 Spark 侧产出的 ads_daily，保证 meta 与业务表自洽 ----
     daily = sorted(tables["ads_daily"], key=lambda row: row["dt"])

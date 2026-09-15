@@ -58,7 +58,7 @@ Hadoop 的机器上。两条路的交接包格式**完全一致**（同一个 `w
 | `ads_station` `ads_charger` `ads_daily` `ads_station_day` `ads_station_hourly` `ads_user_rfm` `ads_district` | **SparkSQL** | 纯 SQL 聚合/窗口函数，正是要求（5）的验收点 |
 | `ads_meta` | Python | 要拼 ODS manifest 的 runId/seed 与一串口径说明文本，是元数据装配 |
 | `ads_quality_table` `ads_quality_issue` `ads_quality_meta` | Python | R01–R10 的检出逻辑（金额单位识别、坐标范围、手机号正则、重复行判定）与 #3 的 DWD 清洗**共用一套规则**；再写一份 SQL 必然两处漂移，反而失去「独立复算」的对账意义 |
-| `ads_forecast_batch` `ads_forecast_24h` `ads_forecast_metric` | Python | seasonal-naive 降级基线（《05-PE》§8）；#5 交付真实 MLlib 批次后整表替换 |
+| `ads_forecast_batch` `ads_forecast_24h` `ads_forecast_metric` | Python | 默认产出 seasonal-naive 降级基线（《05-PE》§8）；传 `--forecast-handoff` 后读取 #5 交接包并整表替换 |
 | `ads_event` | Python | 事件流文案要 JOIN 站点名与订单金额，属展示层组装 |
 
 规则只在 `warehouse/jobs/_lib.py` 一处实现。`tests/test_ads_schema_contract.py` 会
@@ -199,8 +199,11 @@ ads_manifest.json   表行数、数据窗口、质量统计、预测来源
    它直接从 ODS 按同一套 PRL 规则清洗，属于过渡口径。
 2. **ADS 的 3 张质量表是 ADS 侧独立复算**，不是 #3 的清洗报告。等
    `handoff/dwd/cleaning_report.json` 到位后以其为准。
-3. **预测是降级基线**：`seasonal-naive`，`ads_forecast_batch.is_baseline = 1`，
-   响应里带 `note`。回测指标（`ads_forecast_metric`）给出 WAPE 与「常量基线 WAPE」对照。
+3. **预测支持两种来源**：默认是 `seasonal-naive` 降级基线，
+   `ads_forecast_batch.is_baseline = 1`，响应里带 `note`。若 #5 已交付
+   `handoff/forecast`，执行 `build_local.py` 或 `export_ads_db.py` 时传
+   `--forecast-handoff <path>`，会读取真实 MLlib 批次并整表替换三张预测表，
+   此时 `is_baseline = 0`。
 4. **行政区人口**是外部参考数据（七普常住人口），来源写在 `ads_meta.populationSource`。
 5. **服务半径**是运营规划参数（按站点订单需求规模折算），**非实测**，
    见 `ads_meta.serviceRadiusNote`。

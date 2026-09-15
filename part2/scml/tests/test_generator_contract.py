@@ -3,6 +3,7 @@ import json
 import sys
 import tempfile
 import unittest
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -24,6 +25,11 @@ def read_jsonl_partitions(handoff_dir: Path, table: str) -> list[dict[str, objec
     for path in sorted((handoff_dir / table).glob("dt=*/part-*.jsonl")):
         rows.extend(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
     return rows
+
+
+def read_snapshot_csv(handoff_dir: Path, table: str) -> list[dict[str, str]]:
+    with (handoff_dir / table / "part-00000.csv").open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
 
 
 class GeneratorContractTest(unittest.TestCase):
@@ -173,6 +179,41 @@ class GeneratorContractTest(unittest.TestCase):
             manifest = json.loads((handoff_dir / "manifest.json").read_text(encoding="utf-8"))
             self.assertIn("ods_orders", PARTITION_COLUMNS)
             self.assertTrue(manifest["tables"]["ods_orders"]["partitions"])
+
+    def test_formal_charger_snapshot_has_utilization_shaped_statuses(self):
+        from generator import GenerationConfig, generate_handoff
+
+        config = GenerationConfig(
+            seed=20260914,
+            station_count=8,
+            chargers_per_station=36,
+            user_count=50,
+            order_count=100,
+            telemetry_count=200,
+            history_days=2,
+            event_count=40,
+            start_date="2026-09-01",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            handoff_dir = Path(temp_dir) / "handoff" / "ods"
+            generate_handoff(config, handoff_dir)
+
+            chargers = read_snapshot_csv(handoff_dir, "ods_chargers")
+            status_counts = Counter(row["status"] for row in chargers)
+            self.assertGreater(status_counts["charging"], 0)
+            self.assertGreater(status_counts["reserved"], 0)
+            self.assertGreater(status_counts["idle"], 0)
+
+            idle_by_station: dict[str, int] = defaultdict(int)
+            for row in chargers:
+                if row["status"] == "idle":
+                    idle_by_station[row["station_id"]] += 1
+            self.assertGreater(
+                max(idle_by_station.values()) - min(idle_by_station.values()),
+                4,
+                "各站空闲数应随站点利用率拉开，不应所有站几乎相同",
+            )
 
 
 class DemandShapeTest(unittest.TestCase):

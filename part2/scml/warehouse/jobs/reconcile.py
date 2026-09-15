@@ -194,6 +194,18 @@ def main() -> int:
         return 1
 
     connection = read_ads(args.ads)
+    try:
+        return reconcile(args, connection, report, info_lines)
+    finally:
+        connection.close()
+
+
+def reconcile(
+    args: argparse.Namespace,
+    connection: sqlite3.Connection,
+    report: Report,
+    info_lines: list[str],
+) -> int:
     meta = {row["key"]: row["value"] for row in connection.execute("SELECT key, value FROM ads_meta")}
     scalar = lambda sql, params=(): connection.execute(sql, params).fetchone()[0]  # noqa: E731
 

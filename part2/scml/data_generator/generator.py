@@ -371,6 +371,29 @@ def _stations(config: GenerationConfig, rng: random.Random, base: datetime) -> l
     return _with_row_ids("stations", rows)
 
 
+def _charger_snapshot_status(
+    station_id: int,
+    charger_index: int,
+    chargers_per_station: int,
+    station_count: int,
+    charger_id: int,
+) -> str:
+    if charger_id % 97 == 0:
+        return "fault"
+
+    rank = (station_id - 1) / max(1, station_count - 1)
+    active_ratio = 0.46 - rank * 0.30
+    active_slots = max(1, round(chargers_per_station * active_ratio))
+    reserved_slots = max(1, round(active_slots * 0.32)) if active_slots >= 3 else 0
+    charging_slots = max(0, active_slots - reserved_slots)
+
+    if charger_index < charging_slots:
+        return "charging"
+    if charger_index < active_slots:
+        return "reserved"
+    return "idle"
+
+
 def _chargers(config: GenerationConfig, rng: random.Random, base: datetime, stations: list[dict[str, object]]) -> list[dict[str, object]]:
     rows = []
     charger_id = 1
@@ -386,7 +409,13 @@ def _chargers(config: GenerationConfig, rng: random.Random, base: datetime, stat
                     "code": f"C{charger_id:05d}",
                     "type": "fast" if fast else "slow",
                     "power_kw": power,
-                    "status": "fault" if charger_id % 97 == 0 else "idle",
+                    "status": _charger_snapshot_status(
+                        int(station["id"]),
+                        index,
+                        config.chargers_per_station,
+                        config.station_count,
+                        charger_id,
+                    ),
                     "charge_count": rng.randint(0, 250),
                     "total_duration_sec": rng.randint(0, 3600 * 500),
                     "updated_at": iso_at(base, hours=rng.randint(0, config.history_days * 24)),
