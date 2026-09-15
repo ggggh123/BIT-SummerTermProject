@@ -1,0 +1,37 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "district": "朝阳区",
+      "orderCount": 38314,
+      "servedUserCnt": 2101,
+      "avgWaitMin": 17.5
+    },
+    {
+      "district": "海淀区",
+      "orderCount": 14826,
+      "servedUserCnt": 3345,
+      "avgWaitMin": 5.1
+    },
+    {
+      "district": "丰台区",
+      "orderCount": 19334,
+      "servedUserCnt": 2430,
+      "avgWaitMin": 11.8
+    },
+    {
+      "district": "通州区",
+      "orderCount": 17688,
+      "servedUserCnt": 3501,
+      "avgWaitMin": 15.3
+    },
+    {
+      "district": "大兴区",
+      "orderCount": 39871,
+      "servedUserCnt": 2792,
+      "avgWaitMin": 4.9
+    }
+  ],
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

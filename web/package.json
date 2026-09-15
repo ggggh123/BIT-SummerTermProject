@@ -1,0 +1,32 @@
+{
+  "name": "ev-part2-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "build:live": "vite build",
+    "preview": "vite preview --port 4173",
+    "mock": "node scripts/gen-mock.mjs",
+    "mock:ads": "node scripts/use-ads-json.mjs",
+    "mock:ads:restore": "node scripts/use-ads-json.mjs --restore",
+    "test:e2e": "playwright test"
+  },
+  "engines": {
+    "node": ">=23"
+  },
+  "dependencies": {
+    "@kjgl77/datav-vue3": "^1.7.4",
+    "axios": "^1.7.7",
+    "echarts": "^5.6.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@vitejs/plugin-vue": "^5.1.4",
+    "vite": "^5.4.11"
+  }
+}

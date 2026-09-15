@@ -1,0 +1,33 @@
+{
+  "observedAt": "2026-09-06T03:04:48+08:00",
+  "serverSource": "661c91e3dbe252628b4b8411a73495d9d3137005",
+  "scope": "真实服务端、长度前缀TCP、独立新建诊断SQLite；不是完整三端窗口验收",
+  "outcome": "known_defects_present",
+  "health": {
+    "fiveDataFieldsValid": true,
+    "status": "degraded",
+    "forecastRunId": null
+  },
+  "duplicateRecharge": {
+    "amountFen": 100,
+    "beforeBalanceFen": 50000,
+    "firstBalanceFen": 50100,
+    "repeatBalanceFen": 50200,
+    "sameAckBytes": false
+  },
+  "duplicateTelemetry": {
+    "firstOk": true,
+    "repeatOk": false,
+    "repeatCode": "ORDER_STATE_CONFLICT",
+    "sameAckBytes": false
+  },
+  "stopPreservation": {
+    "before": {"energyKwh": 0.75, "amountFen": 113, "elapsedSec": 0},
+    "after": {"energyKwh": 1, "amountFen": 100, "elapsedSec": 3600},
+    "startedAt": "2026-09-06T03:04:49",
+    "endedAt": "2026-09-06T03:04:49"
+  },
+  "sameTimestampRecovery": {"ok": false, "code": "ORDER_STATE_CONFLICT"},
+  "databaseIntegrity": "ok",
+  "ownServerStopped": true
+}

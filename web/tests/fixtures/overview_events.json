@@ -1,0 +1,57 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "eventType": "order_completed",
+      "message": "订单完成：京A·3F2K9 在朝阳国贸中心充电站结算 68.40 元",
+      "createdAt": "2026-09-14T09:58:00+08:00"
+    },
+    {
+      "eventType": "charging_started",
+      "message": "开始充电：海淀中关村科技园充电站 12 号桩",
+      "createdAt": "2026-09-14T09:55:00+08:00"
+    },
+    {
+      "eventType": "fault",
+      "message": "设备告警：丰台科技园东区充电站 7 号桩通信中断",
+      "createdAt": "2026-09-14T09:52:00+08:00"
+    },
+    {
+      "eventType": "recovered",
+      "message": "设备恢复：丰台科技园东区充电站 7 号桩已恢复空闲",
+      "createdAt": "2026-09-14T09:49:00+08:00"
+    },
+    {
+      "eventType": "order_completed",
+      "message": "订单完成：京N·88T21 在通州运河商务区充电站结算 41.20 元",
+      "createdAt": "2026-09-14T09:46:00+08:00"
+    },
+    {
+      "eventType": "charging_started",
+      "message": "开始充电：大兴亦庄经开区充电站 31 号桩",
+      "createdAt": "2026-09-14T09:43:00+08:00"
+    },
+    {
+      "eventType": "forecast_published",
+      "message": "预测发布：未来 24 小时负荷预测已更新（Spark MLlib）",
+      "createdAt": "2026-09-14T09:40:00+08:00"
+    },
+    {
+      "eventType": "restarting",
+      "message": "远程重启：朝阳望京SOHO充电站 5 号桩",
+      "createdAt": "2026-09-14T09:37:00+08:00"
+    },
+    {
+      "eventType": "order_completed",
+      "message": "订单完成：京Q·7M4L2 在海淀西二旗软件园充电站结算 96.80 元",
+      "createdAt": "2026-09-14T09:34:00+08:00"
+    },
+    {
+      "eventType": "order_cancelled",
+      "message": "订单取消：丰台丽泽商务区充电站 3 号桩预约超时释放",
+      "createdAt": "2026-09-14T09:31:00+08:00"
+    }
+  ],
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

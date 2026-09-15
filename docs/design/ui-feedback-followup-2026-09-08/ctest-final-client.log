@@ -1,0 +1,14 @@
+[OUTPUT]
+Internal ctest changing into directory: /home/hushengyuan/ev-release/build-energy-pulse
+
+[HANDLER_OUTPUT]
+Test project /home/hushengyuan/ev-release/build-energy-pulse
+
+    Start 6: user_chargepage
+    Start 8: user_mobileui
+1/2 Test #8: user_mobileui ....................   Passed    6.37 sec
+2/2 Test #6: user_chargepage ..................   Passed   19.46 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =  19.46 sec

@@ -36,9 +36,15 @@ UserAppConfig UserAppConfig::load(const QString &iniPath) {
         config.validationErrors.append(QStringLiteral("服务器端口无效（EV_SERVER_PORT 或 config.local.ini）"));
     }
     if (config.tencentMapKey.isEmpty()) {
-        config.validationErrors.append(QStringLiteral("缺少腾讯地图密钥（EV_TENCENT_MAP_KEY 或 config.local.ini）"));
+        config.tencentMapKey = bundledTencentMapKey();
     }
     return config;
+}
+
+QString UserAppConfig::bundledTencentMapKey() {
+    // 注意：该 Key 会进入版本库。若仓库公开或 Key 配额异常，
+    // 需在腾讯位置服务控制台调整配额/白名单并轮换此值。
+    return QStringLiteral("II3BZ-TK5C7-NXRXH-PCEX2-XZ365-HYFIV");
 }
 
 bool UserAppConfig::isValid() const {

@@ -1,6 +1,6 @@
-"""Seal the final golden database with one approved 144-record forecast run.
+"""将一份已批准的 144 条预测批次封存进最终黄金库。
 
-Usage::
+用法::
 
     python3 database/finalize_golden.py \\
         --output-dir runtime/golden --base runtime/golden/base.db \\

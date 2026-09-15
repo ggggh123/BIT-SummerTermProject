@@ -1,0 +1,160 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "days": 30,
+    "points": [
+      {
+        "date": "2026-08-16",
+        "newUsers": 31,
+        "activeUsers": 797
+      },
+      {
+        "date": "2026-08-17",
+        "newUsers": 59,
+        "activeUsers": 765
+      },
+      {
+        "date": "2026-08-18",
+        "newUsers": 39,
+        "activeUsers": 531
+      },
+      {
+        "date": "2026-08-19",
+        "newUsers": 19,
+        "activeUsers": 888
+      },
+      {
+        "date": "2026-08-20",
+        "newUsers": 34,
+        "activeUsers": 756
+      },
+      {
+        "date": "2026-08-21",
+        "newUsers": 58,
+        "activeUsers": 723
+      },
+      {
+        "date": "2026-08-22",
+        "newUsers": 46,
+        "activeUsers": 687
+      },
+      {
+        "date": "2026-08-23",
+        "newUsers": 28,
+        "activeUsers": 908
+      },
+      {
+        "date": "2026-08-24",
+        "newUsers": 40,
+        "activeUsers": 853
+      },
+      {
+        "date": "2026-08-25",
+        "newUsers": 36,
+        "activeUsers": 617
+      },
+      {
+        "date": "2026-08-26",
+        "newUsers": 20,
+        "activeUsers": 729
+      },
+      {
+        "date": "2026-08-27",
+        "newUsers": 53,
+        "activeUsers": 596
+      },
+      {
+        "date": "2026-08-28",
+        "newUsers": 49,
+        "activeUsers": 875
+      },
+      {
+        "date": "2026-08-29",
+        "newUsers": 19,
+        "activeUsers": 739
+      },
+      {
+        "date": "2026-08-30",
+        "newUsers": 46,
+        "activeUsers": 688
+      },
+      {
+        "date": "2026-08-31",
+        "newUsers": 53,
+        "activeUsers": 823
+      },
+      {
+        "date": "2026-09-01",
+        "newUsers": 40,
+        "activeUsers": 641
+      },
+      {
+        "date": "2026-09-02",
+        "newUsers": 42,
+        "activeUsers": 656
+      },
+      {
+        "date": "2026-09-03",
+        "newUsers": 20,
+        "activeUsers": 894
+      },
+      {
+        "date": "2026-09-04",
+        "newUsers": 23,
+        "activeUsers": 635
+      },
+      {
+        "date": "2026-09-05",
+        "newUsers": 60,
+        "activeUsers": 616
+      },
+      {
+        "date": "2026-09-06",
+        "newUsers": 31,
+        "activeUsers": 883
+      },
+      {
+        "date": "2026-09-07",
+        "newUsers": 35,
+        "activeUsers": 894
+      },
+      {
+        "date": "2026-09-08",
+        "newUsers": 61,
+        "activeUsers": 640
+      },
+      {
+        "date": "2026-09-09",
+        "newUsers": 25,
+        "activeUsers": 530
+      },
+      {
+        "date": "2026-09-10",
+        "newUsers": 20,
+        "activeUsers": 598
+      },
+      {
+        "date": "2026-09-11",
+        "newUsers": 53,
+        "activeUsers": 681
+      },
+      {
+        "date": "2026-09-12",
+        "newUsers": 21,
+        "activeUsers": 1007
+      },
+      {
+        "date": "2026-09-13",
+        "newUsers": 33,
+        "activeUsers": 959
+      },
+      {
+        "date": "2026-09-14",
+        "newUsers": 24,
+        "activeUsers": 618
+      }
+    ]
+  },
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

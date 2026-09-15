@@ -1,0 +1,50 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "cityAvgFenPerKwh": 112,
+    "stations": [
+      {
+        "stationId": 1,
+        "name": "朝阳国贸中心充电站",
+        "priceFenPerKwh": 134
+      },
+      {
+        "stationId": 2,
+        "name": "海淀中关村科技园充电站",
+        "priceFenPerKwh": 120
+      },
+      {
+        "stationId": 3,
+        "name": "丰台丽泽商务区充电站",
+        "priceFenPerKwh": 131
+      },
+      {
+        "stationId": 4,
+        "name": "通州运河商务区充电站",
+        "priceFenPerKwh": 110
+      },
+      {
+        "stationId": 5,
+        "name": "大兴亦庄经开区充电站",
+        "priceFenPerKwh": 83
+      },
+      {
+        "stationId": 6,
+        "name": "朝阳望京SOHO充电站",
+        "priceFenPerKwh": 154
+      },
+      {
+        "stationId": 7,
+        "name": "海淀西二旗软件园充电站",
+        "priceFenPerKwh": 83
+      },
+      {
+        "stationId": 8,
+        "name": "丰台科技园东区充电站",
+        "priceFenPerKwh": 81
+      }
+    ]
+  },
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

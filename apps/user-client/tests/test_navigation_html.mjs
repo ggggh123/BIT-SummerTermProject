@@ -180,15 +180,31 @@ async function configureWithFakeMap(page, key = 'runtime key +&=') {
   return fake;
 }
 
-test('qrc manifest exposes only the checked-in navigation page and default avatar', () => {
+test('qrc manifest exposes the checked-in navigation, avatar and approved local UI assets', () => {
   const qrc = readFileSync(qrcPath, 'utf8');
   const files = [...qrc.matchAll(/<file(?:\s[^>]*)?>([^<]+)<\/file>/g)].map((match) => match[1].trim());
-  assert.deepEqual(files, ['map/navigation.html', 'images/default-avatar.svg']);
+  const approvedFiles = [
+    'map/navigation.html', 'images/default-avatar.svg', 'ui/login-illustration.png',
+    'ui/location.svg', 'ui/battery-charging.svg', 'ui/history.svg', 'ui/person.svg',
+    'ui/back.svg', 'ui/charger.svg', 'ui/expand-more.svg',
+  ];
+  assert.deepEqual(files, approvedFiles);
+  for (const file of approvedFiles) {
+    assert.ok(readFileSync(new URL(`../resources/${file}`, import.meta.url)).length > 0,
+      `${file} must exist as a nonempty checked-in local resource`);
+  }
   const mapping = execFileSync(rccExecutable, ['--list-mapping', qrcPath.pathname], { encoding: 'utf8' });
   assert.deepEqual(
-    mapping.trim().split('\n').map((line) => line.split('\t')[0]),
-    [':/images/default-avatar.svg', ':/map/navigation.html'],
+    mapping.trim().split('\n').map((line) => line.split('\t')[0]).sort(),
+    [':/images/default-avatar.svg', ':/map/navigation.html', ':/ui/back.svg',
+      ':/ui/battery-charging.svg', ':/ui/charger.svg', ':/ui/expand-more.svg', ':/ui/history.svg',
+      ':/ui/location.svg', ':/ui/login-illustration.png', ':/ui/person.svg'],
   );
+  const resolved = new Map(mapping.trim().split('\n').map((line) => line.split('\t')));
+  for (const file of approvedFiles) {
+    assert.equal(resolved.get(`:/${file}`), new URL(`../resources/${file}`, import.meta.url).pathname,
+      `${file} must retain its exact source-to-resource mapping`);
+  }
 });
 
 test('page has no committed key and does not load remote code before configuration', () => {

@@ -1,0 +1,117 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "runId": "q-20260914-01",
+    "tables": [
+      {
+        "name": "ods_orders",
+        "rowsBefore": 128640,
+        "rowsAfter": 126421
+      },
+      {
+        "name": "ods_telemetry",
+        "rowsBefore": 1048576,
+        "rowsAfter": 1041902
+      },
+      {
+        "name": "ods_users",
+        "rowsBefore": 5000,
+        "rowsAfter": 4988
+      },
+      {
+        "name": "ods_stations",
+        "rowsBefore": 8,
+        "rowsAfter": 8
+      },
+      {
+        "name": "ods_chargers",
+        "rowsBefore": 296,
+        "rowsAfter": 294
+      }
+    ],
+    "issues": [
+      {
+        "rule": "R01",
+        "type": "缺失值",
+        "injected": 640,
+        "detected": 640,
+        "handled": 640,
+        "recall": 1
+      },
+      {
+        "rule": "R02",
+        "type": "重复记录",
+        "injected": 1284,
+        "detected": 1284,
+        "handled": 1284,
+        "recall": 1
+      },
+      {
+        "rule": "R03",
+        "type": "异常值",
+        "injected": 385,
+        "detected": 385,
+        "handled": 385,
+        "recall": 1
+      },
+      {
+        "rule": "R04",
+        "type": "时间格式混杂",
+        "injected": 1902,
+        "detected": 1902,
+        "handled": 1902,
+        "recall": 1
+      },
+      {
+        "rule": "R05",
+        "type": "逻辑矛盾",
+        "injected": 372,
+        "detected": 372,
+        "handled": 372,
+        "recall": 1
+      },
+      {
+        "rule": "R06",
+        "type": "金额口径错误",
+        "injected": 640,
+        "detected": 640,
+        "handled": 640,
+        "recall": 1
+      },
+      {
+        "rule": "R07",
+        "type": "孤儿引用",
+        "injected": 358,
+        "detected": 358,
+        "handled": 358,
+        "recall": 1
+      },
+      {
+        "rule": "R08",
+        "type": "非法字段值",
+        "injected": 364,
+        "detected": 364,
+        "handled": 364,
+        "recall": 1
+      },
+      {
+        "rule": "R09",
+        "type": "经纬度越界",
+        "injected": 2,
+        "detected": 2,
+        "handled": 2,
+        "recall": 1
+      },
+      {
+        "rule": "R10",
+        "type": "文本脏数据",
+        "injected": 611,
+        "detected": 611,
+        "handled": 611,
+        "recall": 1
+      }
+    ]
+  },
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

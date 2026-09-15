@@ -2,6 +2,7 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QUuid>
 
 #include "contracts/Actions.h"
 #include "protocol/JsonEnvelope.h"
@@ -12,7 +13,7 @@ namespace {
 
 QString isoPlus08(const QDateTime &dt)
 {
-    return dt.toOffsetFromUtc(8 * 3600).toString(Qt::ISODate);
+    return dt.toOffsetFromUtc(8 * 3600).toString(Qt::ISODateWithMs);
 }
 
 } // namespace
@@ -21,18 +22,24 @@ SimulatorClient::SimulatorClient(const SimulatorConfig &config,
                                  TelemetryEngine *engine, QObject *parent)
     : ISimulatorClient(parent),
       config_(config),
-      engine_(engine)
+      engine_(engine),
+      instanceId_(QUuid::createUuid().toString(QUuid::WithoutBraces))
 {
     connect(&socket_, &QTcpSocket::connected, this, &SimulatorClient::onConnected);
     connect(&socket_, &QTcpSocket::readyRead, this, &SimulatorClient::onReadyRead);
     connect(&socket_, &QTcpSocket::disconnected, this, &SimulatorClient::onDisconnected);
     connect(&socket_, &QTcpSocket::errorOccurred, this, &SimulatorClient::onErrorOccurred);
     connect(&reconnectTimer_, &QTimer::timeout, this, &SimulatorClient::onReconnectTimeout);
+    statusRefreshTimer_.setInterval(qBound(1000, config_.intervalMs, 10000));
+    connect(&statusRefreshTimer_, &QTimer::timeout,
+            this, &SimulatorClient::onStatusRefreshTimeout);
 }
 
 void SimulatorClient::start()
 {
     stopping_ = false;
+    if (config_.token.trimmed().isEmpty())
+        emit logMessage(QStringLiteral("simulator authentication token is empty"));
     connectToServer();
 }
 
@@ -40,6 +47,7 @@ void SimulatorClient::stop()
 {
     stopping_ = true;
     reconnectTimer_.stop();
+    statusRefreshTimer_.stop();
     if (socket_.state() != QAbstractSocket::UnconnectedState)
         socket_.disconnectFromHost();
 }
@@ -60,27 +68,50 @@ void SimulatorClient::onConnected()
 {
     reconnectAttempt_ = 0;
     reconnectTimer_.stop();
+    sessionReady_ = false;
     emit connected();
+    statusRefreshTimer_.start();
     sendStatus();
-    flushPending();
 }
 
+void SimulatorClient::setRunning(bool running)
+{
+    running_ = running;
+    // R13：暂停时立即上报状态，避免服务端残留过期的 running 心跳。
+    requestStatusRefresh();
+}
+
+void SimulatorClient::requestStatusRefresh()
+{
+    if (!isConnected())
+        return;
+    if (!pendingStatusRequestId_.isEmpty()) {
+        statusRefreshQueued_ = true;
+        return;
+    }
+    sendStatus();
+}
+
+// 上报运行状态：requestId 含进程 UUID + 序号，避免重启后命中服务端缓存的旧 ACK。
 void SimulatorClient::sendStatus()
 {
     QJsonObject payload;
-    payload[QStringLiteral("state")] = QStringLiteral("running");
+    payload[QStringLiteral("state")] =
+        running_ ? QStringLiteral("running") : QStringLiteral("paused");
     payload[QStringLiteral("simulatedAt")] = isoPlus08(engine_->currentTime());
     payload[QStringLiteral("eventCount")] = eventCount_;
 
-    pendingStatusRequestId_ = QStringLiteral("sim-status-%1")
-                                  .arg(engine_->currentTime().toMSecsSinceEpoch());
+    pendingStatusRequestId_ = QStringLiteral("sim-status-%1-%2-%3")
+                                  .arg(instanceId_)
+                                  .arg(engine_->currentTime().toMSecsSinceEpoch())
+                                  .arg(++statusRequestSequence_);
     sendRequest(ev::actions::SimulatorStatus, payload, pendingStatusRequestId_);
 }
 
 void SimulatorClient::refresh()
 {
     if (isConnected())
-        sendStatus();
+        requestStatusRefresh();
     else
         emit logMessage(QStringLiteral("refresh: not connected"));
 }
@@ -88,21 +119,13 @@ void SimulatorClient::refresh()
 void SimulatorClient::sendTelemetry(const QList<TelemetrySample> &samples)
 {
     for (const TelemetrySample &s : samples) {
-        if (isConnected()) {
-            QJsonObject payload;
-            payload[QStringLiteral("chargerId")] = s.chargerId;
-            payload[QStringLiteral("recordedAt")] = isoPlus08(s.recordedAt);
-            payload[QStringLiteral("powerKw")] = s.powerKw;
-            payload[QStringLiteral("energyIncrementKwh")] = s.energyIncrementKwh;
-            payload[QStringLiteral("status")] = s.status;
-            sendRequest(ev::actions::TelemetryPush, payload,
-                        requestIdForSample(s));
-            ++eventCount_;
-        } else {
-            if (pendingSamples_.size() >= config_.maxQueueSamples)
-                pendingSamples_.dequeue();  // drop oldest
-            pendingSamples_.enqueue(s);
-        }
+        QJsonObject payload;
+        payload[QStringLiteral("chargerId")] = s.chargerId;
+        payload[QStringLiteral("recordedAt")] = isoPlus08(s.recordedAt);
+        payload[QStringLiteral("powerKw")] = s.powerKw;
+        payload[QStringLiteral("energyIncrementKwh")] = s.energyIncrementKwh;
+        payload[QStringLiteral("status")] = s.status;
+        enqueueEvent(ev::actions::TelemetryPush, payload, requestIdForSample(s));
     }
 }
 
@@ -116,29 +139,49 @@ void SimulatorClient::sendFault(const FaultIntent &intent)
     const QString requestId = QStringLiteral("fault-%1-%2")
         .arg(intent.chargerId)
         .arg(intent.recordedAt.toMSecsSinceEpoch());
-    if (isConnected()) {
-        sendRequest(ev::actions::SimulatorFaultSet, payload, requestId);
-        ++eventCount_;
-    } else {
-        emit logMessage(QStringLiteral("fault event dropped: not connected"));
-    }
+    enqueueEvent(ev::actions::SimulatorFaultSet, payload, requestId);
 }
 
 void SimulatorClient::flushPending()
 {
-    while (!pendingSamples_.isEmpty()) {
-        const TelemetrySample s = pendingSamples_.dequeue();
-        QJsonObject payload;
-        payload[QStringLiteral("chargerId")] = s.chargerId;
-        payload[QStringLiteral("recordedAt")] = isoPlus08(s.recordedAt);
-        payload[QStringLiteral("powerKw")] = s.powerKw;
-        payload[QStringLiteral("energyIncrementKwh")] = s.energyIncrementKwh;
-        payload[QStringLiteral("status")] = s.status;
-        sendRequest(ev::actions::TelemetryPush, payload, requestIdForSample(s));
-        ++eventCount_;
+    if (!isConnected() || !sessionReady_)
+        return;
+    for (PendingEvent &event : pendingEvents_) {
+        if (event.sent)
+            continue;
+        event.sent = true;
+        sendRequest(event.action, event.payload, event.requestId);
     }
 }
 
+// 事件入队：队列有上限，满了丢最老的并记日志；本地生成条数 ≠ 服务端入库条数。
+void SimulatorClient::enqueueEvent(const QString &action,
+                                   const QJsonObject &payload,
+                                   const QString &requestId)
+{
+    const int limit = qMax(1, config_.maxQueueSamples);
+    if (pendingEvents_.size() >= limit) {
+        const PendingEvent dropped = pendingEvents_.dequeue();
+        emit logMessage(QStringLiteral("event queue full, dropped %1")
+                            .arg(dropped.requestId));
+    }
+    pendingEvents_.enqueue({action, payload, requestId, false});
+    ++eventCount_;
+    flushPending();
+}
+
+// 收到回执即从队列移除（requestId 配对）；未确认的事件留在队列里等待重发。
+void SimulatorClient::acknowledgeEvent(const QString &requestId)
+{
+    for (int i = 0; i < pendingEvents_.size(); ++i) {
+        if (pendingEvents_.at(i).requestId == requestId) {
+            pendingEvents_.removeAt(i);
+            return;
+        }
+    }
+}
+
+// 组装 JSON 信封（requestId/action/token/payload）→ 长度前缀帧 → TCP 发出。
 void SimulatorClient::sendRequest(const QString &action,
                                   const QJsonObject &payload,
                                   const QString &requestId)
@@ -179,24 +222,60 @@ void SimulatorClient::handleResponse(const QByteArray &json)
     emit logMessage(QStringLiteral("response %1 %2")
                         .arg(response.requestId, response.code));
 
-    if (response.requestId == pendingStatusRequestId_ && response.ok
-        && response.data.isObject()) {
-        const QJsonObject data = response.data.toObject();
-        const QJsonValue chargersValue = data.value(QStringLiteral("chargers"));
-        if (chargersValue.isArray()) {
-            QList<ChargerSnapshot> chargers;
-            for (const QJsonValue &v : chargersValue.toArray()) {
-                const QJsonObject c = v.toObject();
-                ChargerSnapshot snapshot;
-                snapshot.chargerId = c.value(QStringLiteral("chargerId")).toInt();
-                snapshot.status = c.value(QStringLiteral("status")).toString();
-                snapshot.powerKw = c.value(QStringLiteral("powerKw")).toDouble();
-                chargers.append(snapshot);
-            }
-            engine_->replaceChargers(chargers);
-            emit chargersReceived(chargers);
+    const bool authenticationRejected =
+        response.code == QLatin1String("AUTH_REQUIRED")
+        || response.code == QLatin1String("FORBIDDEN");
+    if (authenticationRejected) {   // 鉴权失败：会话作废，UI 显示"鉴权失败"而非误报已接入
+        sessionReady_ = false;
+        statusRefreshTimer_.stop();
+        statusRefreshQueued_ = false;
+        emit authenticationFailed(response.code);
+    }
+
+    bool deviceEventResponse = false;
+    for (const PendingEvent &event : pendingEvents_) {
+        if (event.requestId == response.requestId) {
+            deviceEventResponse = true;
+            break;
         }
+    }
+    acknowledgeEvent(response.requestId);
+
+    if (response.requestId == pendingStatusRequestId_) {
         pendingStatusRequestId_.clear();
+        if (response.ok && response.data.isObject()) {
+            const QJsonObject data = response.data.toObject();
+            const QJsonValue chargersValue = data.value(QStringLiteral("chargers"));
+            if (chargersValue.isArray()) {
+                QList<ChargerSnapshot> chargers;
+                for (const QJsonValue &v : chargersValue.toArray()) {
+                    const QJsonObject c = v.toObject();
+                    ChargerSnapshot snapshot;
+                    snapshot.chargerId = c.value(QStringLiteral("chargerId")).toInt();
+                    snapshot.status = c.value(QStringLiteral("status")).toString();
+                    snapshot.powerKw = c.value(QStringLiteral("powerKw")).toDouble();
+                    chargers.append(snapshot);
+                }
+                engine_->replaceChargers(chargers);   // 服务端权威快照覆盖本地状态
+                emit chargersReceived(chargers);
+                sessionReady_ = true;                 // 拿到权威快照才算"已接入"
+                emit sessionReady();
+                flushPending();                       // 重连后按原序补发未确认事件
+            } else {
+                emit logMessage(QStringLiteral(
+                    "invalid simulator.status response: chargers snapshot missing"));
+            }
+        }
+        if (statusRefreshQueued_ && !authenticationRejected) {
+            statusRefreshQueued_ = false;
+            sendStatus();
+        }
+    }
+
+    // 设备事件被服务端判为状态冲突（如用户先开始充电）→ 立即刷新权威快照，不靠旧状态猜测。
+    if (deviceEventResponse
+        && response.code == QLatin1String("ORDER_STATE_CONFLICT")) {
+        requestStatusRefresh();
     }
 }
 
@@ -212,15 +291,26 @@ void SimulatorClient::onErrorOccurred()
 void SimulatorClient::onDisconnected()
 {
     decoder_.reset();
+    statusRefreshTimer_.stop();
+    sessionReady_ = false;
+    pendingStatusRequestId_.clear();
+    statusRefreshQueued_ = false;
+    for (PendingEvent &event : pendingEvents_)
+        event.sent = false;    // 未确认事件标记为未发送，重连后原 requestId 重发
     emit disconnected();
     if (!stopping_ && !reconnectTimer_.isActive())
-        reconnectTimer_.start(reconnectDelayMs(reconnectAttempt_++));
+        reconnectTimer_.start(reconnectDelayMs(reconnectAttempt_++));   // 1s/2s/4s 退避重连
 }
 
 void SimulatorClient::onReconnectTimeout()
 {
     if (!stopping_)
         connectToServer();
+}
+
+void SimulatorClient::onStatusRefreshTimeout()
+{
+    requestStatusRefresh();
 }
 
 int SimulatorClient::reconnectDelayMs(int attempt)

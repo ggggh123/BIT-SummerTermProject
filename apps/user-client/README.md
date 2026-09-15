@@ -1,13 +1,16 @@
 # Qt 用户端
 
+最终版（2026-09-08）已包含个人用电统计、账号切换／退出、冻结状态同步、预约成功提示、持久结算错误与驾车／步行按钮切换；范围、三端同步升级和团队启动入口见[最终交付说明](../../docs/release/final-2026-09-08.md)。本文件保留单独运行与接口验证方法。
+
 ## 前置环境
 
-- CMake 3.25+、Ninja 和支持 C++17 的编译器。
+- 默认 Ubuntu 22.04，CMake 3.22+、Ninja、GCC 11 / C++17，先按[团队开发指南](../../docs/development/ubuntu22.md)安装。
 - Qt 6.2+，包含 Core、Gui、Widgets、Network、WebEngineWidgets 和 Test 组件。
 - Node.js 18+，仅用于本地导航 HTML 合同测试。
-- 运行中的项目 Qt 服务端，以及本机自行申请的腾讯地图 WebService/Web JavaScript API Key。
+- 运行中的项目 Qt 服务端。腾讯地图 Key 已内置团队申请的默认值，**零配置即可使用**；
+  如需覆盖，可在本机环境变量或已忽略的 `config.local.ini` 中配置。
 
-Key 只能放在本机环境变量或已忽略的 `config.local.ini`，不得提交。以下命令均从仓库根目录执行；可在该目录创建不含真实密钥的本地配置：
+Key 解析优先级：`EV_TENCENT_MAP_KEY` > `config.local.ini` 的 `tencent/mapKey` > 代码内置默认值（`UserAppConfig::bundledTencentMapKey()`）。以下命令均从仓库根目录执行；可在该目录创建本地配置覆盖默认 Key：
 
 ```ini
 [server]
@@ -23,12 +26,34 @@ mapKey=<your-local-tencent-map-key>
 ## 构建、运行与测试
 
 ```bash
-cmake --preset debug
-cmake --build --preset debug
-./build/debug/apps/user-client/ev_user_client
-ctest --preset debug -R '^user_' --output-on-failure
+cmake --preset ubuntu22
+cmake --build --preset ubuntu22
+./build/ubuntu22/apps/user-client/ev_user_client
+# 完整测试版与日常三程序构建分开。
+cmake --preset ubuntu22-test
+cmake --build --preset ubuntu22-test
+ctest --preset ubuntu22-test -R '^user_' --output-on-failure
+# 下行是独立可选检查，需另备 Node 18+；不是核心编译前提。
 node --test apps/user-client/tests/test_navigation_html.mjs
 ```
+
+## 竖屏主题与 UI 验证
+
+UI 工作分支采用 Linux 原生 Qt 的手机式单列布局：默认以390×844逻辑像素为构图参考，根据当前屏幕可用高度缩短窗口，长内容纵向滚动。没有手机模拟器、假系统状态栏或替代Qt的网页界面。公共主题为浅色青绿，中文正文使用 Noto Sans CJK SC；登录插画与真实表单控件独立。
+
+`user_mobileui` 使用真实 Qt 页面和回环 TCP 测试响应验证布局与交互，不连接真实业务服务器或腾讯地图。通常运行不写截图；需要重新留档时显式指定输出目录：
+
+```bash
+EV_UI_SCREENSHOT_DIR="$PWD/runtime/mobile-ui-captures" \
+QT_SCALE_FACTOR=2.18718 \
+ctest --preset ubuntu22-test -R '^user_mobileui$' --output-on-failure
+```
+
+该缩放比例用于将390逻辑像素窗口捕获为约853像素宽，方便与已批准的设计稿对照，不改变产品的逻辑布局。截图中的站点、账号、余额属于受控测试数据，不能作为真实服务端联调证据。地图HTML的Node测试仍需单独执行，不能只运行CTest后就声称所有客户端测试已通过。
+
+本轮范围、截图与验证结果见 [竖屏 UI 验证记录](../../docs/test/user-mobile-ui-2026-09-05.md) 和 [视觉对照记录](../../design-qa.md)。
+
+2026-09-06 补充：[充电与结算 UI 收尾](../../docs/test/user-charge-ui-2026-09-06.md)落实大号电量/金额、状态相关操作与窄屏可达性。待结算仍是 `charging + endedAt`，只有服务端确认 `completed` 才显示结算成功。订单合同未提供成交单价，因此不将当前站点价冒充订单价；选择阶段的价格明确标为“站点挂牌价”。历史订单、账户和导航外观的后续精修不在此批完成范围。
 
 ## 错误、离线缓存与地图降级
 
@@ -45,17 +70,18 @@ node --test apps/user-client/tests/test_navigation_html.mjs
 1. 使用手机号 `13800138000` 登录。
 2. 起点选择 `北京理工大学中关村校区`，等待服务端返回附近站点。
 3. 在返回结果中选择含空闲充电桩 ID `1001` 的站点，并由操作人现场确认响应中的站点名称和充电桩编码；不要预设站点名称。
-4. 依次展示桩详情、腾讯导航、充电流程、历史订单，以及断线缓存和真实重连后的安全刷新。预测仅为可选项，未启用时显示“暂无预测”，不妨碍找站和导航。
+4. 依次展示桩详情、腾讯导航、充电流程、历史订单，以及断线缓存和真实重连后的安全刷新。预测仅为保留的可选项，本批找站页在无可用预测时隐藏装饰性占位，不妨碍找站和导航；有有效结果时仍按现有逻辑呈现。
 
 ## 显式在线地图冒烟（不依赖项目服务端）
 
 该测试复用真实 `MainWindow` 和内嵌腾讯地图，通过本地 TCP 测试响应完成登录与站桩查询，腾讯地址解析、驾车/步行和恢复重试均访问真实服务。业务数据在界面中明确标注为模拟数据，**不能作为真实服务端、数据库或充电结算联调证据**。
 
 ```bash
-cmake --build --preset debug --target user_map_online_smoke
+cmake --preset ubuntu22-test
+cmake --build --preset ubuntu22-test --target user_map_online_smoke
 # 先通过已忽略的 config.local.ini 或 EV_TENCENT_MAP_KEY 配置本机 Key。
 EV_MAP_SMOKE_OUTPUT_DIR="$PWD/runtime/map-smoke" \
-  ./build/debug/apps/user-client/user_map_online_smoke
+  ./build/ubuntu22-test/apps/user-client/user_map_online_smoke
 ```
 
 在可用的图形会话中运行；离屏自动化不替代截图检查。Linux 虚拟机可按实际环境使用 `QT_QPA_PLATFORM=xcb`。测试显式构建、显式运行，不加入默认 CTest，不自动消耗腾讯额度。单次正常执行包含一次地址解析、驾车/步行各一次、解除本地网络阻断后的驾车重试一次；SDK 底图资源请求不计入这一应用层次数。

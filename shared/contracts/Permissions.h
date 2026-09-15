@@ -12,6 +12,8 @@ inline bool isAnonymous(QStringView actorType)
     return actorType.isEmpty();
 }
 
+// 权限矩阵：四种角色（user/admin/simulator/ml）各自能调哪些 action，
+// 匿名只允许登录；未列出的组合一律拒绝。
 inline bool allows(QStringView actorType, QStringView action)
 {
     const QString actor = actorType.toString();
@@ -28,6 +30,7 @@ inline bool allows(QStringView actorType, QStringView action)
 
     if (actor == QStringLiteral("user")) {
         return actionText == ev::actions::UserGet
+            || actionText == ev::actions::UserStatistics
             || actionText == ev::actions::UserUpdate
             || actionText == ev::actions::WalletRecharge
             || actionText == ev::actions::StationList
@@ -39,6 +42,7 @@ inline bool allows(QStringView actorType, QStringView action)
             || actionText == ev::actions::ChargeSettle
             || actionText == ev::actions::OrderCurrent
             || actionText == ev::actions::OrderList
+            || actionText == ev::actions::OrderTelemetry
             || actionText == ev::actions::OrderCancel
             || actionText == ev::actions::ForecastLatest;
     }

@@ -1,0 +1,129 @@
+{
+  "evidenceVersion": "prl-scml-integration-v1",
+  "recordedAt": "2026-09-15T09:45:00+08:00",
+  "scope": "#3 PRL against #4 SCML deterministic sample; not full-scale, not production publish",
+  "baselines": {
+    "prlBaseCommit": "1bd4b89f4049b3b735fd2bc5d29e40092cc12bba",
+    "scmlCommit": "e519d8d72129415af583e00ecbb1debbc93393d6",
+    "scmlLatestReviewedCommit": "13b18f0dff21b6988074cac65d7389057bcbce01",
+    "integrationLatestReviewedCommit": "eced236e444e8cdf311f49be22c1eb09ff17bc62",
+    "sourceContract": "ods-dwd-v0.1",
+    "dwdProfile": "scml-dwd-v0.1",
+    "os": "Ubuntu 25.04",
+    "ubuntu22Verified": false,
+    "spark": "3.5.7",
+    "hadoop": "3.2.1",
+    "java": "1.8.0_504",
+    "python": "3.10.21"
+  },
+  "source": {
+    "runId": "scml-20260914",
+    "kind": "prl-test-fixture",
+    "rows": {
+      "ods_users": 100,
+      "ods_stations": 8,
+      "ods_chargers": 48,
+      "ods_orders": 3000,
+      "ods_telemetry": 8000,
+      "ods_station_hourly": 1344,
+      "ods_events": 100,
+      "total": 12600
+    },
+    "sourceManifestSha256": "21b09adc260ac27a9d29342828ece1f82c9e3a875f1a77ef362722400c47a046",
+    "verifiedInputSpecSha256": "d7fea532994b69e8d102253f9a1ac96776b65af8a6a22ad630c820fbeb75ece9"
+  },
+  "tests": {
+    "purePython": {"passed": 78, "failed": 0},
+    "localSpark": {
+      "passed": 19,
+      "failed": 0,
+      "master": "local[2]",
+      "logSha256": "d69e2c02570b0fc3791690dd4835d4a3280da7ad9c57ee98c41af8820afb0588"
+    }
+  },
+  "qualityRun": {
+    "runId": "prl-clean-20260915T013909Z-44731",
+    "applicationId": "application_1789436319409_0001",
+    "master": "yarn",
+    "ok": true,
+    "elapsedSeconds": 80.67,
+    "inputRows": 12600,
+    "quarantinedRows": 2207,
+    "dwdRows": 10393,
+    "dwd": {
+      "dwd_order_detail": 2553,
+      "dwd_telemetry_detail": 6433,
+      "dwd_station_hourly": 1172,
+      "dwd_event": 87,
+      "dim_stations": 7,
+      "dim_chargers": 42,
+      "dim_users": 99
+    },
+    "allSevenReadbackAssertionsPassed": true,
+    "hourlyCoverage": {"expected": 1176, "retained": 1172, "missing": 4, "rowOffsetMlSafe": false},
+    "readyForTeamDelivery": false,
+    "hashes": {
+      "codeZip": "87eaf6dc2c7b10be3779bfea9f0bfcf0fa19a52b45327668be31f67cb1dd3669",
+      "qualityReport": "43644cd8ec45c5af570ea67e85d9a24bee1e0810e2a0817e58be3d935d81b1f7",
+      "cleaningReport": "fa70b038bf30ab766d22ac30905c9d64eba360b0d1c9486ae8e2815bc91d0732",
+      "runResult": "82a219966274b689da2817ce87fb8751a6596822f5289da0d4b47e10941c8438",
+      "dwdHandoffManifest": "d9f084fbc11d57a86bade14f5fd5edb5fa1eb7beb2c506054ca77202ca474d4a"
+    }
+  },
+  "injectionComparison": {
+    "Q1": {"tp": 55, "fp": 0, "fn": 0},
+    "Q2": {"tp": 78, "fp": 505, "fn": 32},
+    "Q3": {"tp": 30, "fp": 0, "fn": 3},
+    "Q4": {"tp": 110, "fp": 0, "fn": 0},
+    "Q5": {"tp": 13, "fp": 0, "fn": 0},
+    "Q6": {"tp": 14, "fp": 8, "fn": 1},
+    "Q7": {"tp": 9, "fp": 0, "fn": 0},
+    "Q8": {"tp": 2, "fp": 0, "fn": 0},
+    "Q9": {"tp": 1, "fp": 0, "fn": 0},
+    "Q10": {"tp": 2, "fp": 0, "fn": 0}
+  },
+  "downstream": {
+    "applicationId": "application_1789436319409_0002",
+    "ok": true,
+    "sourceSqlFilesUnmodified": true,
+    "executedSqlMode": "iso-timestamp-adapter",
+    "dwsTables": 4,
+    "adsTables": 7,
+    "checksPassed": 10,
+    "checksFailed": 0,
+    "completedOrders": 2443,
+    "revenueFen": 9978037,
+    "chargeDurationSec": 14273160,
+    "reportSha256": "9102885886a3c28b7037ae6f4d8084cdcbbd81a2f7bf628768029b6d7d341433",
+    "originalSqlFailure": {
+      "applicationId": "application_1789434286185_0001",
+      "cause": "UNIX_TIMESTAMP did not parse required ISO8601 +08:00 strings, duration aggregated to zero",
+      "reportSha256": "fdaa3fc740437f4635e5020785a9accea594688d41bdcaca106917217bd786a7"
+    }
+  },
+  "sqliteQualityPublish": {
+    "ok": true,
+    "sourceRunId": "scml-20260914",
+    "qualityRunId": "prl-clean-20260915T013909Z-44731",
+    "tables": 7,
+    "rules": 10,
+    "backupCreated": true,
+    "acceptedPendingPolicy": true,
+    "receiptSha256": "3129da4898113168dbb70a7d04afb1d7d416ed0d45d3aaf7d844c2c3745a0a1b"
+  },
+  "remaining": [
+    "freeze Q2/Q3/Q5/Q6/Q9 and dynamic-price policies",
+    "land the ISO timestamp duration fix in the SCML/integration branch and rerun original SQL mode",
+    "run the formal full-scale ods-handoff and capture performance evidence",
+    "unify the PRL local runtime and integration-branch Java/Hadoop/Python baseline",
+    "verify on Ubuntu 22.04",
+    "publish formal DWD/ADS and verify Flask/dashboard against the same source run"
+  ],
+  "remoteEvidenceBoundary": {
+    "fullScaleAdsAndDashboardEvidenceExists": true,
+    "reportedOrders": 112422,
+    "reportedTelemetry": 1000000,
+    "passedThroughThisPrlPipeline": false,
+    "note": "远端正式规模 ADS 为 #4 旁路产物，不作为本批 PRL 全量验收证据"
+  }
+}

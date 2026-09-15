@@ -1,0 +1,8 @@
+********* Start testing of AdminUiTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 14.2.0), ubuntu 25.04
+PASS   : AdminUiTest::initTestCase()
+PASS   : AdminUiTest::healthOverviewBackgroundMatchesCard(1360x860)
+PASS   : AdminUiTest::healthOverviewBackgroundMatchesCard(1280x720)
+PASS   : AdminUiTest::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 458ms
+********* Finished testing of AdminUiTest *********

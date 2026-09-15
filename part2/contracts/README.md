@@ -1,0 +1,79 @@
+# #3 PRL 输入／输出契约与冻结边界
+
+当前状态分为两层：
+
+- **#4 结构已适配**：已按 SCML 提交 `e519d8d72129415af583e00ecbb1debbc93393d6` 中的 manifest、ODS 字段和 `dwd_contract.sql` 实现原生接收及七表 DWD 投影。2026-09-15 又复核到该分支最新 `13b18f0dff21b6988074cac65d7389057bcbce01`；新提交只增加正式规模交付闸门，没有改变生成器、ODS/DWD 字段或数仓 SQL。对应机器文件是 [scml-dwd-v0.1.json](scml-dwd-v0.1.json)。
+- **质量策略尚未冻结**：Q2/Q3/Q5/Q6/Q9、动态价格、可选展示字段和小时缺口处理仍需 #2 TL、#4 SCML、#5 PE 评审。对应文件是 [quality-policy-v0.1.json](quality-policy-v0.1.json)。
+
+[ods-dwd-v0.1.json](ods-dwd-v0.1.json) 是 PRL 内部严格读入／规则契约，保留了第一阶段 `database/schema.sql` 的字段语义。SCML 适配层只转换清单元数据、表名和输出 schema，不改写 #4 的原始 CSV/JSONL。
+
+## 1. #4 原生 ODS 输入
+
+- 契约版本为 `contractVersion=ods-dwd-v0.1`；`runId` 与 `run_id` 必须一致。
+- 七类表为 `ods_users`、`ods_stations`、`ods_chargers`、`ods_orders`、`ods_telemetry`、`ods_station_hourly`、`ods_events`。
+- users、stations、chargers 是快照 CSV，不按日分区；orders、telemetry、station_hourly、events 必须位于 `dt=YYYY-MM-DD` 分区目录，且分区日期在 manifest `dataWindow` 内。
+- 前六类数据为 UTF-8 CSV，events 为 JSONL。CSV null 写为 `\N`；空串与 null 不混用。JSON 数字在校验中保留原词法，不先经过 float 导致精度变化。
+- CSV 表头允许 #4 按自己的列顺序输出，但列名集合必须精确相等；读入时按列名归一，不按位置猜测。
+- 每个数据文件的相对路径、格式、行数和 SHA-256 都必须与 manifest 一致；表级 `rows/files` 摘要也要二次对上。除无业务数据的 `_SUCCESS` 外，未列入 manifest 的文件不会被上传执行。
+- `injection_log.json` 本身也受 manifest 哈希和行数保护。`issues` 中的 `(rule, table, row_id)` 必须引用已存在原始行；它们只用于检测后对账，不传入检测函数。
+- 日常联调允许 `kind=prl-test-fixture`；正式 PRL 全量运行必须附加 `--require-full-input`，此时只接受 #4 原生 `kind=ods-handoff`。该标记是交付等级声明，仍要与行数、哈希、分区和注入日志校验共同使用。
+
+## 2. 内部字段语义
+
+| 原始字段 | 清洗后字段／处理 |
+|---|---|
+| `users.id`、`users.mobile` | `dim_users.user_id`、`mobile` |
+| `stations.id` | `dim_stations.station_id` |
+| `chargers.id`、`chargers.power_kw` | `dim_chargers.charger_id`、`power_kw` |
+| `orders.id` | `dwd_order_detail.order_id` |
+| orders 不含 `station_id` | 通过已通过清洗的 `chargers.station_id` 派生 |
+| `telemetry.energy_increment_kwh` | #4 DWD 仍使用 `energy_increment_kwh`；PRL 内部旧投影名为 `energy_delta_kwh` |
+| `station_hourly_history` | 交接表 `ods_station_hourly`，输出 `dwd_station_hourly` |
+| `events.charger_fault` | DWD 中归一为 `event_type=fault` |
+
+`_row_id` 是 #4 生成的原始行追踪键，在表内唯一。清洗后的业务表不追加非 #4 DDL 字段；`_row_id`、业务键和 PRL `run_id` 的对应放在 `audit/dwd_lineage`。
+
+## 3. 状态、时间与金额
+
+- 金额使用整数分；清洗计算使用 Decimal，ROUND_HALF_UP。NaN、Infinity、负数和非法文本不得默认为 0。
+- 当前参考金额假设“同一模拟批次内站点单价恒定”，容差为 `max(1 分, 参考值×1%)`。只有“原值×100 与参考分值精确相等”才修正元／分混入；无价格快照的真实变价历史不适用该假设。
+- 订单状态为 reserved、charging、completed、cancelled。reserved 允许无开始／结束；charging 必须有开始、可无结束；completed 必须有开始与结束。
+- 无时区的可识别时间按 Asia/Shanghai 解释，带时区的时间换算为 `+08:00`；支持秒／毫秒 Unix 时间。非法日期不宽松溢出修补。
+- #4 DWD 的时间列是形如 `2026-06-17T12:34:56+08:00` 的 STRING。下游 SparkSQL 计算时长时必须先 `CAST(... AS TIMESTAMP)`；直接 `UNIX_TIMESTAMP(string)` 在当前 Spark 3.5.7 上得到 null，最终聚合为 0。
+
+## 4. 质量报告对账
+
+- TP＝正确检出的规则／记录对，FP＝未匹配注入标签的直接命中，FN＝注入标签未检出。
+- 召回率＝TP/(TP+FN)，精确率＝TP/(TP+FP)；分母为 0 时返回 null，不写成 100%。
+- 同一行可同时命中多条规则。问题命中按规则计数，隔离量按唯一原始行计数；不能相加 Q1～Q10 得出删除行数。
+- 维度被隔离后导致事实外键失效的记录标为 `cascade`，与原始直接问题分开报告，不计入注入对账 FP。
+- 报告包含来源批次、源 manifest 哈希、字段／策略版本、Spark/YARN 应用号、行数、样本、处置、金额平衡和七表读回断言。
+
+## 5. #4 七表 DWD 交付
+
+| 表 | 主键 | 分区／说明 |
+|---|---|---|
+| `dwd_order_detail` | `order_id` | `dt=started_at` 的 +08:00 日期；未开工订单允许 NULL 分区 |
+| `dwd_telemetry_detail` | `telemetry_id` | 按 `recorded_at` 的 `dt` 分区 |
+| `dwd_station_hourly` | `station_id, observed_at` | 按 `observed_at` 的 `dt` 分区 |
+| `dwd_event` | `event_id` | 按 `created_at` 的 `dt` 分区；DWS 故障统计来源 |
+| `dim_stations` | `station_id` | 当期快照，不分区 |
+| `dim_chargers` | `charger_id` | 当期快照，不分区 |
+| `dim_users` | `user_id` | 当期快照，不分区 |
+
+`dim_date` 由 #4 生成，不在 #3 七表交接包中。四张事实表物理分区，包括全空表时的可读 schema 占位；读回后 `dt` 强制按 STRING 契约验证。
+
+## 6. DWD 包与 ADS 发布边界
+
+- DWD 试交接包使用 `prl-dwd-package-0.1-draft` manifest；表级行数来自 Spark 写后读回，文件 bytes／SHA-256 在 HDFS 导出后计算。接收方校验文件后，仍需在 Spark 中刷新分区并重跑约束。
+- `ready_for_team_delivery=false` 意味着仅允许试联调。将质量结果写入 #4 `ads.db` 时需显式 `--accept-pending`；该参数只是承认当前有待决策，不会把报告标为已冻结。
+- SQLite 发布器要求 `ads_meta.sourceRunId` 与质量报告 `source_run_id` 一致，验证 4 张现有表 schema，且备份文件和回执均拒绝覆盖。
+- 正式 `/ev-charging/dwd`、DWS/ADS 库和演示 `ads.db` 必须由集成流程发布；PRL 默认只写 `/ev-charging/quality/batches/<run_id>` 和独立本地交接目录。
+
+## 7. 最小冻结清单
+
+1. #2／#4：将 DWS 时长解析修正为显式 TIMESTAMP cast，重跑对账。
+2. #4：明确 Q2 的“重复”是主键重复还是业务内容重复，并使注入器与文档一致。
+3. #4／#3：修正 Q3 中“乘 10 仍不超额定值”的标签，并明确 Q6 已丢失小数分位的处理。
+4. #2／#4／#5：决定 Q5 超占用小时是隔离还是裁剪、Q9 越界坐标是隔离还是回填，并确认 ML 如何处理小时缺口。
+5. #2／#1：确认 `ads_quality_*` 字段及页面对 FP/FN、级联影响和“未冻结”标志的展示口径。

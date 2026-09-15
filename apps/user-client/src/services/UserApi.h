@@ -20,6 +20,9 @@ public:
 
     [[nodiscard]] QString loadSystemHealth();
     void loginByPhone(const QString &mobile);
+    [[nodiscard]] bool canLogout() const;
+    [[nodiscard]] bool logout();
+    [[nodiscard]] QString loadUsageStatistics();
     [[nodiscard]] ev::user::RequestContext loadCurrentOrder(
         quint64 pageGeneration = 0, quint64 selectionGeneration = 0,
         ev::user::ChargeOperation operation = ev::user::ChargeOperation::Guard);
@@ -38,6 +41,7 @@ public:
     void cancelSafeRead(const QString &requestId);
     [[nodiscard]] QString loadNearbyStations(const ev::user::GeoPoint &origin);
     [[nodiscard]] QString loadStationDetail(qint64 stationId);
+    [[nodiscard]] QString loadOrderTelemetry(qint64 orderId);
     [[nodiscard]] QString loadChargers(qint64 stationId);
     [[nodiscard]] QString loadLatestForecast(const QString &stationListRequestId);
     [[nodiscard]] ev::user::HistoryRequestContext loadOrderHistory(
@@ -50,6 +54,8 @@ public:
     [[nodiscard]] bool profileNeedsReconciliation() const;
 
 signals:
+    void usageStatisticsLoaded(QString requestId, ev::user::UsageStatistics result);
+    void usageStatisticsFailed(ev::user::ApiError error);
     void systemHealthLoaded(QString requestId, ev::user::SystemHealthResult result);
     void chargerListLoaded(QString requestId, ev::user::ChargerListResult result);
     void loginSucceeded(ev::user::User user);
@@ -64,6 +70,7 @@ signals:
                              bool uncertain);
     void nearbyStationsLoaded(QString requestId, ev::user::StationListResult result);
     void stationDetailLoaded(QString requestId, ev::user::StationDetailResult result);
+    void orderTelemetryLoaded(QString requestId, ev::user::OrderTelemetry result);
     void latestForecastLoaded(QString requestId, ev::user::ForecastLatestResult result);
     void orderHistoryLoaded(ev::user::HistoryRequestContext context,
                             ev::user::OrderListResult result);
@@ -88,6 +95,8 @@ private:
         ChargerList,
         LatestForecast,
         HistoryList,
+        OrderTelemetry,
+        UsageStatistics,
         ProfileGet,
         ProfileUpdate,
         ProfileRecharge,

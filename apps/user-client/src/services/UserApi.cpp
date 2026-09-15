@@ -8,6 +8,7 @@
 #include "protocol/Envelope.h"
 
 #include <QJsonArray>
+#include <QDateTime>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSet>
@@ -127,6 +128,39 @@ bool finiteNumber(const QJsonObject &object, const char *field, double minimum, 
     }
     *result = number;
     return true;
+}
+
+bool parseUsageStatistics(const QJsonObject &data, ev::user::UsageStatistics *result)
+{
+    if (!hasExactlyKeys(data, {"userId", "asOf", "orderCount", "completedCount", "energyKwh",
+                              "paidFen", "durationSec", "pendingSettlementCount", "pendingSettlementFen",
+                              "monthEnergyKwh", "days"})
+        || !positiveInteger(data, "userId", &result->userId)
+        || !validTimestamp(data.value("asOf"), &result->asOf)
+        || !nonnegativeInteger(data, "orderCount", &result->orderCount)
+        || !nonnegativeInteger(data, "completedCount", &result->completedCount)
+        || !nonnegativeInteger(data, "paidFen", &result->paidFen)
+        || !nonnegativeInteger(data, "durationSec", &result->durationSec)
+        || !nonnegativeInteger(data, "pendingSettlementCount", &result->pendingSettlementCount)
+        || !nonnegativeInteger(data, "pendingSettlementFen", &result->pendingSettlementFen)
+        || !finiteNumber(data, "energyKwh", 0, kMaxSafeInteger, &result->energyKwh)
+        || !finiteNumber(data, "monthEnergyKwh", 0, result->energyKwh + 1e-7, &result->monthEnergyKwh)
+        || result->completedCount > result->orderCount
+        || result->pendingSettlementCount > result->orderCount - result->completedCount
+        || !data.value("days").isArray() || data.value("days").toArray().size() != 7) return false;
+    const QDate today = QDateTime::fromString(result->asOf, Qt::ISODate).date();
+    double weekEnergy = 0;
+    for (const auto &value : data.value("days").toArray()) {
+        const auto day = value.toObject();
+        ev::user::DailyUsage item;
+        if (!value.isObject() || !hasExactlyKeys(day, {"date", "energyKwh"})
+            || !nonblankString(day, "date", &item.date)
+            || item.date != today.addDays(result->days.size() - 6).toString(Qt::ISODate)
+            || !finiteNumber(day, "energyKwh", 0, result->energyKwh + 1e-7, &item.energyKwh)) return false;
+        weekEnergy += item.energyKwh;
+        result->days.append(item);
+    }
+    return weekEnergy <= result->energyKwh + qMax(1e-7, result->energyKwh * 1e-10);
 }
 
 bool parseStation(const QJsonValue &value, bool requireDistance, ev::user::Station *station)
@@ -628,6 +662,7 @@ UserApi::UserApi(TcpJsonClient *client, QObject *parent)
     Q_ASSERT(client_ != nullptr);
     qRegisterMetaType<ev::user::User>();
     qRegisterMetaType<ev::user::Order>();
+    qRegisterMetaType<ev::user::OrderTelemetry>();
     qRegisterMetaType<ev::user::CurrentOrderResult>();
     qRegisterMetaType<ev::user::ChargeOperation>();
     qRegisterMetaType<ev::user::RequestContext>();
@@ -770,11 +805,41 @@ void UserApi::cancelSafeRead(const QString &requestId)
         && it->operation != Operation::ChargerList
         && it->operation != Operation::NearbyStations
         && it->operation != Operation::LatestForecast
-        && it->operation != Operation::HistoryList) {
+        && it->operation != Operation::HistoryList
+        && it->operation != Operation::UsageStatistics
+        && it->operation != Operation::OrderTelemetry) {
         return;
     }
     client_->cancelRequest(requestId);
     pendingOperations_.erase(it);
+}
+
+bool UserApi::canLogout() const
+{
+    if (!user_ || token_.isEmpty() || profileOutcomeUncertain_) return false;
+    for (const auto &pending : pendingOperations_) {
+        if (isProfileMutation(pending.operation) || isChargeMutation(pending.operation)) return false;
+    }
+    return true;
+}
+
+bool UserApi::logout()
+{
+    if (!canLogout()) return false;
+    // 仅结束本机登录，不更改充电/订单，不自动重放旧会话的请求。
+    resetSession();
+    emit loginPendingChanged(false);
+    return true;
+}
+
+QString UserApi::loadUsageStatistics()
+{
+    if (!user_ || token_.isEmpty()) return {};
+    const auto id = client_->send(ev::actions::UserStatistics, {}, token_);
+    PendingOperation pending{Operation::UsageStatistics, sessionGeneration_};
+    pending.expectedEntityId = user_->userId;
+    pendingOperations_.insert(id, pending);
+    return id;
 }
 
 QString UserApi::loadNearbyStations(const ev::user::GeoPoint &origin)
@@ -810,6 +875,17 @@ QString UserApi::loadStationDetail(qint64 stationId)
         ev::actions::StationDetail, QJsonObject{{QStringLiteral("stationId"), stationId}}, token_);
     pendingOperations_.insert(requestId, {Operation::StationDetail, sessionGeneration_, {}, stationId});
     return requestId;
+}
+
+QString UserApi::loadOrderTelemetry(qint64 orderId)
+{
+    if (!user_.has_value() || token_.isEmpty() || orderId<=0 || orderId>kMaxSafeInteger)
+        return {};
+    const auto id=client_->send(ev::actions::OrderTelemetry,{{"orderId",orderId}},token_);
+    PendingOperation pending{Operation::OrderTelemetry,sessionGeneration_};
+    pending.expectedEntityId=orderId;
+    pendingOperations_.insert(id,pending);
+    return id;
 }
 
 QString UserApi::loadChargers(qint64 stationId)
@@ -1140,6 +1216,21 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
         expireAuthenticatedSession();
         return;
     }
+    if (pending.operation == Operation::UsageStatistics) {
+        if (!response.ok && validFailure(response)) {
+            emit usageStatisticsFailed({response.requestId, response.code, response.message});
+            return;
+        }
+        ev::user::UsageStatistics result;
+        if (!response.ok || response.code != QStringLiteral("OK") || !response.data.isObject()
+            || !parseUsageStatistics(response.data.toObject(), &result)
+            || !user_ || result.userId != user_->userId || result.userId != pending.expectedEntityId) {
+            emit usageStatisticsFailed({response.requestId, kInvalidResponse, kInvalidResponseMessage});
+            return;
+        }
+        emit usageStatisticsLoaded(response.requestId, result);
+        return;
+    }
     if (isProfileOperation(pending.operation)) {
         const auto invalidProfileResponse = [this, &response, &pending] {
             if (isProfileMutation(pending.operation)) {
@@ -1387,6 +1478,39 @@ void UserApi::handleResponse(const ev::protocol::ResponseEnvelope &response)
         emit nearbyStationsLoaded(response.requestId, result);
         return;
     }
+    if (pending.operation == Operation::OrderTelemetry) {
+        ev::user::OrderTelemetry result;
+        if (!hasExactlyKeys(data,{"orderId","chargerId","ratedPowerKw","startedAt","samples","truncated"})
+            || !positiveInteger(data,"orderId",&result.orderId)
+            || result.orderId!=pending.expectedEntityId
+            || !positiveInteger(data,"chargerId",&result.chargerId)
+            || !finiteNumber(data,"ratedPowerKw",0,1e6,&result.ratedPowerKw)
+            || !nullableTimestamp(data,"startedAt",&result.startedAt)
+            || !data.value("samples").isArray() || data.value("samples").toArray().size()>600
+            || !data.value("truncated").isBool()) {
+            emitInvalidResponse(response.requestId); return;
+        }
+        QString previous=result.startedAt;
+        double previousEnergy=0;
+        for (const auto &value:data.value("samples").toArray()) {
+            const auto p=value.toObject();
+            ev::user::PowerSample point;
+            if (result.startedAt.isEmpty() || !value.isObject()
+                || !hasExactlyKeys(p,{"recordedAt","powerKw","energyKwh"})
+                || !validTimestamp(p.value("recordedAt"),&point.recordedAt)
+                || !finiteNumber(p,"powerKw",0,1e6,&point.powerKw)
+                || !finiteNumber(p,"energyKwh",previousEnergy,1e12,&point.energyKwh)) {
+                emitInvalidResponse(response.requestId); return;
+            }
+            const auto comparison=ev::user::compareContractTimestamps(point.recordedAt,previous);
+            if (!comparison || *comparison!=ev::user::TimestampComparison::Later) { emitInvalidResponse(response.requestId); return; }
+            previous=point.recordedAt; previousEnergy=point.energyKwh;
+            result.samples.append(point);
+        }
+        result.truncated=data.value("truncated").toBool();
+        emit orderTelemetryLoaded(response.requestId,result);
+        return;
+    }
     if (pending.operation == Operation::StationDetail) {
         ev::user::StationDetailResult result;
         if (!parseStationDetail(data, pending.stationId, &result)) {
@@ -1427,6 +1551,10 @@ void UserApi::handleTransportFailure(const QString &requestId, const QString &co
     if (pending.operation == Operation::Login) {
         emit loginPendingChanged(false);
         emitFailure(requestId, code, loginTransportMessage(code));
+        return;
+    }
+    if (pending.operation == Operation::UsageStatistics) {
+        emit usageStatisticsFailed({requestId, code, message});
         return;
     }
     if (isProfileOperation(pending.operation)) {

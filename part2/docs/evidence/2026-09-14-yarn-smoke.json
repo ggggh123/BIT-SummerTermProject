@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "kind": "environment-smoke-not-dwd",
+  "application_id": "application_1789358753550_0001",
+  "master": "yarn",
+  "spark": "3.5.7",
+  "driver_python": "3.10.21",
+  "worker_python": [
+    "3.10.21",
+    "3.10.21"
+  ],
+  "tables": 7,
+  "rows": 24,
+  "output": "hdfs://localhost:8020/ev-charging/quality/_smoke/prl-smoke-20260914T040636Z-15587/profile"
+}

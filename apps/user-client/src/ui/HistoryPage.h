@@ -43,6 +43,9 @@ private:
     class QPushButton *nextButton_;
     class QPushButton *retryButton_;
     class QLabel *connectionBanner_;
+    class QFrame *emptyState_;
+    class QLabel *emptyTitle_;
+    class QLabel *emptyDescription_;
     bool active_ = false;
     bool connected_ = false;
     bool reconnectRefreshPending_ = false;

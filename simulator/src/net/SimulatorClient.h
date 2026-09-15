@@ -14,7 +14,7 @@
 
 namespace ev::simulator {
 
-// Interface used by SimulatorWindow so the panel can be driven by a fake in tests.
+// 供 SimulatorWindow 依赖的抽象接口：测试里可以用假实现驱动界面。
 class ISimulatorClient : public QObject
 {
     Q_OBJECT
@@ -28,15 +28,21 @@ public:
     virtual void sendTelemetry(const QList<TelemetrySample> &samples) = 0;
     virtual void sendFault(const FaultIntent &intent) = 0;
 
+    // R13：面板上报真实运行状态，保证 simulator.status 不虚报；
+    // 默认空实现让测试用的假客户端无需改动即可编译。
+    virtual void setRunning(bool running) { Q_UNUSED(running); }
+
 signals:
     void connected();
     void disconnected();
+    void sessionReady();
+    void authenticationFailed(const QString &code);
     void chargersReceived(const QList<ChargerSnapshot> &chargers);
     void logMessage(const QString &message);
 };
 
-// Framed TCP client: sends simulator.status on connect, publishes telemetry
-// and fault events, and keeps a bounded queue while disconnected.
+// 帧协议 TCP 客户端：连接后先发 simulator.status 取权威快照，再上报遥测/故障事件；
+// 断线期间事件留在有界队列，重连鉴权后按原序重发（requestId 不变，防重复入库）。
 class SimulatorClient : public ISimulatorClient
 {
     Q_OBJECT
@@ -50,8 +56,9 @@ public:
     void refresh() override;
     void sendTelemetry(const QList<TelemetrySample> &samples) override;
     void sendFault(const FaultIntent &intent) override;
+    void setRunning(bool running) override;
 
-    int queuedSamples() const { return pendingSamples_.size(); }
+    int queuedSamples() const { return pendingEvents_.size(); }
 
     static int reconnectDelayMs(int attempt);
     static QString requestIdForSample(const TelemetrySample &sample);
@@ -62,25 +69,44 @@ private slots:
     void onErrorOccurred();
     void onDisconnected();
     void onReconnectTimeout();
+    void onStatusRefreshTimeout();
 
 private:
+    struct PendingEvent
+    {
+        QString action;
+        QJsonObject payload;
+        QString requestId;
+        bool sent = false;
+    };
+
     void connectToServer();
+    void requestStatusRefresh();
     void sendStatus();
     void flushPending();
+    void enqueueEvent(const QString &action, const QJsonObject &payload,
+                      const QString &requestId);
+    void acknowledgeEvent(const QString &requestId);
     void sendRequest(const QString &action, const QJsonObject &payload,
                      const QString &requestId);
     void handleResponse(const QByteArray &json);
 
     SimulatorConfig config_;
     TelemetryEngine *engine_;
+    QString instanceId_;
     QTcpSocket socket_;
     QTimer reconnectTimer_;
+    QTimer statusRefreshTimer_;
     ev::protocol::FrameDecoder decoder_;
     int reconnectAttempt_ = 0;
     int eventCount_ = 0;
     bool stopping_ = false;
+    bool running_ = false;
+    bool sessionReady_ = false;
     QString pendingStatusRequestId_;
-    QQueue<TelemetrySample> pendingSamples_;
+    bool statusRefreshQueued_ = false;
+    quint64 statusRequestSequence_ = 0;
+    QQueue<PendingEvent> pendingEvents_;
 };
 
 } // namespace ev::simulator

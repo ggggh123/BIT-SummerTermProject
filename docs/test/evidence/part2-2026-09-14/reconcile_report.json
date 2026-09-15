@@ -1,0 +1,84 @@
+{
+  "checks": [
+    {
+      "check": "DWS 营收合计 = DWD 金额合计",
+      "expected": 49863703.0,
+      "actual": 49863703.0,
+      "ok": true
+    },
+    {
+      "check": "DWS 电量合计 = DWD 电量合计",
+      "expected": 437904.04,
+      "actual": 437904.04,
+      "ok": true
+    },
+    {
+      "check": "DWS 订单数合计 = DWD 行数",
+      "expected": 11424.0,
+      "actual": 11424.0,
+      "ok": true
+    },
+    {
+      "check": "区域日营收合计 = DWD 金额合计",
+      "expected": 49863703.0,
+      "actual": 49863703.0,
+      "ok": true
+    },
+    {
+      "check": "区域日订单合计 = DWD 行数",
+      "expected": 11424.0,
+      "actual": 11424.0,
+      "ok": true
+    },
+    {
+      "check": "DWS 站点日粒度唯一",
+      "expected": 0.0,
+      "actual": 0.0,
+      "ok": true
+    },
+    {
+      "check": "抽验 2026-06-26 站8 营收",
+      "expected": 90052.0,
+      "actual": 90052.0,
+      "ok": true
+    },
+    {
+      "check": "抽验 2026-06-26 站8 订单数",
+      "expected": 14.0,
+      "actual": 14.0,
+      "ok": true
+    },
+    {
+      "check": "抽验 2026-09-13 站6 营收",
+      "expected": 22534.0,
+      "actual": 22534.0,
+      "ok": true
+    },
+    {
+      "check": "抽验 2026-09-13 站6 订单数",
+      "expected": 8.0,
+      "actual": 8.0,
+      "ok": true
+    },
+    {
+      "check": "抽验 2026-08-20 站1 营收",
+      "expected": 76421.0,
+      "actual": 76421.0,
+      "ok": true
+    },
+    {
+      "check": "抽验 2026-08-20 站1 订单数",
+      "expected": 14.0,
+      "actual": 14.0,
+      "ok": true
+    },
+    {
+      "check": "ADS 站点营收合计 = DWD 金额合计",
+      "expected": 49863703.0,
+      "actual": 49863703.0,
+      "ok": true
+    }
+  ],
+  "passed": 13,
+  "failed": 0
+}

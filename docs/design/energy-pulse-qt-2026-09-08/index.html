@@ -1,0 +1,19 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>能量脉冲 · Qt 还原对照</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:26px;font-family:"Noto Sans CJK SC",sans-serif;color:#d6e6ec;background:#081822}h1{font-size:24px;font-weight:500;margin:0 0 8px}p{font-size:13px;color:#99b1be;line-height:1.8}a{color:#8be4ce}h2{font-size:18px;font-weight:500;margin-top:32px}.pair{display:flex;gap:26px;align-items:flex-start}.column{flex:none}.label{margin:12px 0;font-size:13px}.crop{position:relative;overflow:hidden;background:#102536}iframe{border:0;position:absolute;max-width:none}.phone{width:390px;height:844px}.phone iframe{width:390px;height:844px;left:0;top:0}.phone img{width:390px;height:844px}.admin{width:1360px;height:860px}.admin iframe{width:1360px;height:860px;left:0;top:0}.admin img{width:1360px;height:860px}.admin-pair{width:max-content}.scaled{width:612px;height:387px}.scaled .admin{transform:scale(.45);transform-origin:top left}.focused{width:270px;height:440px}.focused .admin{left:-1085px;top:-181px;position:absolute}.crop img{display:block}.raw{display:flex;gap:14px;flex-wrap:wrap}.raw img{max-width:46%;object-fit:contain;object-position:top}.note{max-width:1000px;border-left:2px solid #72ddc3;padding-left:14px}
+</style>
+<h1>能量脉冲 · 设计稿与原生 Qt 对照</h1>
+<p>左侧为已选 HTML 原稿，右侧为 Qt 自动化测试实际截屏。使用同一组 17 点样本，测试数据仅进入测试进程，不写入正式数据库。<br>手机 390 × 844；管理端 1360 × 860。可滚动查看，原稿内的演示按钮不控制 Qt。</p>
+<p><a href="reference-frame.html?concept=pulse">打开保留的原设计稿</a> · <a href="#admin">管理端</a> · <a href="#states">其他状态</a> · <a href="simulator.html">新增模拟器与其他管理页实拍</a></p>
+<h2>用户端 · 充电中 / 最新样本</h2><div class="pair">
+<div class="column"><div class="label">方案 2 原稿 · 1:1</div><div class="crop phone"><iframe title="用户端原设计" src="reference-frame.html?concept=pulse&view=phone"></iframe></div></div>
+<div class="column"><div class="label">原生 Qt · 1:1</div><div class="crop phone"><img alt="Qt 充电页面" src="captures/pulse-charging-390x844.png"></div></div></div>
+<h2 id="admin">管理端 · 同一组双设备采样</h2><div class="pair admin-pair">
+<div class="column"><div class="label">方案 2 原稿 · 45%</div><div class="crop scaled"><div class="admin"><iframe title="管理端原设计" src="reference-frame.html?concept=pulse&view=admin"></iframe></div></div></div>
+<div class="column"><div class="label">原生 Qt · 45%</div><div class="crop scaled"><div class="admin"><img alt="Qt 管理端全景" src="captures/pulse-admin-1360x860.png"></div></div></div></div>
+<p class="note">有意保留的业务差异：正式版显示实际服务状态、站点筛选、营收统计切换；采样缺失显示“—”。用户端金额和总电量以订单为准；管理端窗口积分明确标注“非账单”。图表可以拖动，也支持左右方向键和 End 回到最新。</p>
+<h2>管理端 · 读数区域 1:1 细节</h2><div class="pair">
+<div class="crop focused"><div class="admin"><iframe title="管理端原稿读数细节" src="reference-frame.html?concept=pulse&view=admin"></iframe></div></div>
+<div class="crop focused"><div class="admin"><img alt="Qt 读数细节" src="captures/pulse-admin-1360x860.png"></div></div></div>
+<h2 id="states">响应式与原有页面</h2><div class="raw"><img alt="720 高手机窗口" src="captures/pulse-charging-390x720.png"><img alt="历史样本游标" src="captures/pulse-cursor-390x844.png"><img alt="紧凑管理端" src="captures/pulse-admin-1280x720.png"><img alt="结算确认" src="captures/settlement-390x844.png"></div>
+</html>

@@ -1,0 +1,17 @@
+[OUTPUT]
+Internal ctest changing into directory: /home/hushengyuan/ev-release/build-energy-pulse
+
+[HANDLER_OUTPUT]
+Test project /home/hushengyuan/ev-release/build-energy-pulse
+
+    Start 37: demo_runtime_live
+1/1 Test #37: demo_runtime_live ................   Passed    8.58 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Label Time Summary:
+core                             =   8.58 sec*proc (1 test)
+live-offscreen-not-manual-gui    =   8.58 sec*proc (1 test)
+runtime                          =   8.58 sec*proc (1 test)
+
+Total Test time (real) =   8.59 sec

@@ -238,6 +238,8 @@ class ChargePageTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void stateSpecificActionsHideUnrelatedMutations_data();
+    void stateSpecificActionsHideUnrelatedMutations();
     void exactStateTableUsesOnlyAuthoritativeFields();
     void lifecycleUsesExactPayloadsAndUpdatesBalanceByRevision();
     void canonicalDecoderRejectsBadTimestampNullAndExtraFields();
@@ -245,6 +247,7 @@ private slots:
     void pollIsTwoSecondsSingleFlightAndStopsOnTerminalOrLeave();
     void uncertainMutationNeverReplaysAndReconcilesCurrentFirst();
     void businessErrorsUseFixedChineseMappingsAndSafeRefresh();
+    void settlementFailureSurvivesSuccessfulReadsUntilExplicitRetry();
     void stalePageMutationAppliesGloballyWithoutRepaintingAndOrdersUserRevision();
     void notConnectedBeforeWriteIsDefiniteAndMalformedMutationIsUncertain();
     void terminalMutationRejectsOlderOutstandingPoll();
@@ -254,6 +257,55 @@ private slots:
     void factsFailureRetryReconcilesCurrentBeforeRestoringReservedActions();
     void nullReconciliationRetainsIdleSelectionUntilFactsRestoreReserve();
 };
+
+void ChargePageTest::stateSpecificActionsHideUnrelatedMutations_data()
+{
+    QTest::addColumn<QString>("state");
+    QTest::addColumn<bool>("ended");
+    QTest::addColumn<QStringList>("visibleActions");
+    QTest::newRow("selection") << QString() << false << QStringList{"chargeReserveButton"};
+    QTest::newRow("reserved") << QString("reserved") << false
+        << QStringList{"chargeStartButton", "chargeCancelButton"};
+    QTest::newRow("charging") << QString("charging") << false << QStringList{"chargeStopButton"};
+    QTest::newRow("awaiting-settlement") << QString("charging") << true << QStringList{"chargeSettleButton"};
+    QTest::newRow("completed") << QString("completed") << true << QStringList{"chargeBackButton"};
+    QTest::newRow("cancelled") << QString("cancelled") << true << QStringList{"chargeBackButton"};
+}
+
+void ChargePageTest::stateSpecificActionsHideUnrelatedMutations()
+{
+    QFETCH(QString, state);
+    QFETCH(bool, ended);
+    QFETCH(QStringList, visibleActions);
+    TcpJsonClient client;
+    UserApi api(&client);
+    ChargePage page(&api);
+    page.setConnectionAvailable(true);
+    if (state.isEmpty()) page.enterSelection(selection());
+    else page.enterOrder(decodedOrder(state, ended), selection(12, QStringLiteral("reserved")));
+    auto *success = page.findChild<QWidget *>(QStringLiteral("reservationSuccess"));
+    QVERIFY(success);
+    QCOMPARE(success->isVisibleTo(&page), state == QStringLiteral("reserved"));
+    const QStringList actions{"chargeReserveButton", "chargeStartButton", "chargeCancelButton",
+                              "chargeStopButton", "chargeSettleButton", "chargeBackButton"};
+    for (const auto &name : actions) {
+        auto *action = page.findChild<QPushButton *>(name);
+        QVERIFY(action);
+        QCOMPARE(action->isVisibleTo(&page), visibleActions.contains(name));
+    }
+    if (state == QStringLiteral("charging")) {
+        auto *caption = page.findChild<QLabel *>(QStringLiteral("chargeMetricCaption"));
+        QVERIFY(caption);
+        QCOMPARE(caption->text(), ended ? QStringLiteral("应付金额") : QStringLiteral("本次已充电"));
+        QCOMPARE(label(page, "chargeMeter")->text(), ended ? QStringLiteral("23.45") : QStringLiteral("12.500"));
+        QVERIFY(!label(page, "chargeStatus")->text().contains(QStringLiteral("成功")));
+    }
+    page.setConnectionAvailable(false);
+    QVERIFY(button(page, "chargeRetryButton")->isVisibleTo(&page));
+    for (const auto &name : actions.mid(0, 5)) {
+        QVERIFY(!page.findChild<QPushButton *>(name)->isEnabled());
+    }
+}
 
 void ChargePageTest::exactStateTableUsesOnlyAuthoritativeFields()
 {
@@ -275,7 +327,8 @@ void ChargePageTest::exactStateTableUsesOnlyAuthoritativeFields()
     page.enterOrder(decodedOrder(QStringLiteral("reserved")), selection(12, QStringLiteral("reserved")));
     auto *identity = label(page, "chargeOrderIdentity");
     QVERIFY(identity->isVisibleTo(&page));
-    QVERIFY(identity->text().contains(QStringLiteral("订单 ID：99")));
+    QVERIFY(identity->accessibleDescription().contains(QStringLiteral("订单 ID：99")));
+    QVERIFY(button(page, "chargeDetailsButton")->text().contains(QStringLiteral("#99")));
     QVERIFY(identity->text().contains(QStringLiteral("星火充电站")));
     QVERIFY(identity->text().contains(QStringLiteral("A-07")));
     QVERIFY(button(page, "chargeStartButton")->isEnabled());
@@ -284,16 +337,18 @@ void ChargePageTest::exactStateTableUsesOnlyAuthoritativeFields()
     page.enterOrder(decodedOrder(QStringLiteral("charging"), false, 7.125, 876, 543));
     QVERIFY(button(page, "chargeStopButton")->isEnabled());
     QVERIFY(label(page, "chargeMeter")->isVisibleTo(&page));
-    QVERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("543")));
-    QVERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("7.125")));
-    QVERIFY(label(page, "chargeMeter")->text().contains(QStringLiteral("8.76")));
+    QCOMPARE(label(page, "chargeMeter")->text(), QStringLiteral("7.125"));
+    QCOMPARE(label(page, "chargeDuration")->text(), QStringLiteral("09:03"));
+    QCOMPARE(label(page, "chargeSecondaryMetric")->text(), QStringLiteral("¥ 8.76"));
 
     page.enterOrder(decodedOrder(QStringLiteral("charging"), true, 8.5, 999, 600),
                     selection(13, QStringLiteral("fault")));
     QVERIFY(button(page, "chargeSettleButton")->isEnabled());
+    button(page, "chargeDetailsButton")->click();
     QVERIFY(label(page, "chargeSummary")->isVisibleTo(&page));
-    QVERIFY(label(page, "chargeSummary")->text().contains(QStringLiteral("8.500")));
-    QVERIFY(label(page, "chargeSummary")->text().contains(QStringLiteral("9.99")));
+    QCOMPARE(label(page, "chargeSecondaryMetric")->text(), QStringLiteral("8.500 kWh"));
+    QCOMPARE(label(page, "chargeMeter")->text(), QStringLiteral("9.99"));
+    QVERIFY(label(page, "chargeSummary")->text().contains(QString::fromLatin1(kEndedTimestamp)));
 
     page.enterOrder(decodedOrder(QStringLiteral("completed"), true));
     QVERIFY(button(page, "chargeBackButton")->isEnabled());
@@ -320,6 +375,8 @@ void ChargePageTest::lifecycleUsesExactPayloadsAndUpdatesBalanceByRevision()
     QSignalSpy nearbyRefresh(&page, &ChargePage::nearbyRefreshRequested);
     page.setConnectionAvailable(true);
     page.enterSelection(selection(21));
+    auto *success = page.findChild<QWidget *>(QStringLiteral("reservationSuccess"));
+    QVERIFY(success && !success->isVisibleTo(&page));
 
     button(page, "chargeReserveButton")->click();
     const auto reserve = takeRequest(peer.data());
@@ -327,9 +384,11 @@ void ChargePageTest::lifecycleUsesExactPayloadsAndUpdatesBalanceByRevision()
     const QJsonObject reservePayload{{QStringLiteral("chargerId"), 7}};
     QCOMPARE(reserve.payload, reservePayload);
     QVERIFY(!button(page, "chargeReserveButton")->isEnabled());
+    QVERIFY(!success->isVisibleTo(&page)); // 发送预约请求不能提前显示成功。
     reply(peer.data(), reserve.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
     QTRY_COMPARE(label(page, "chargeStatus")->text(), QStringLiteral("已预约"));
+    QVERIFY(!success->isVisibleTo(&page)); // 预约后的设备核验门尚未解除。
     QTRY_COMPARE(nearbyRefresh.size(), 1);
 
     const auto detailAfterReserve = takeRequest(peer.data());
@@ -340,8 +399,10 @@ void ChargePageTest::lifecycleUsesExactPayloadsAndUpdatesBalanceByRevision()
           QJsonObject{{QStringLiteral("station"), stationObject(0)},
                       {QStringLiteral("chargers"), QJsonArray{chargerObject(QStringLiteral("reserved"))}}});
     QTRY_VERIFY(button(page, "chargeStartButton")->isEnabled());
+    QVERIFY(success->isVisibleTo(&page));
 
     button(page, "chargeStartButton")->click();
+    QVERIFY(!success->isVisibleTo(&page));
     const auto start = takeRequest(peer.data());
     QCOMPARE(start.action, QStringLiteral("charge.start"));
     const QJsonObject orderPayload{{QStringLiteral("orderId"), 99}};
@@ -381,6 +442,63 @@ void ChargePageTest::lifecycleUsesExactPayloadsAndUpdatesBalanceByRevision()
     QVERIFY(userApplied.at(0).at(1).toULongLong() > 0);
     QVERIFY(userApplied.at(0).at(2).toULongLong() > 0);
     QVERIFY(button(page, "chargeBackButton")->isEnabled());
+}
+
+void ChargePageTest::settlementFailureSurvivesSuccessfulReadsUntilExplicitRetry()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    TcpJsonClient client;
+    client.configure(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(connectToFakeServer(client, server));
+    QScopedPointer<QTcpSocket> peer(server.nextPendingConnection());
+    UserApi api(&client);
+    api.loginByPhone(QString::fromLatin1(kMobile));
+    const auto auth = takeRequest(peer.data());
+    reply(peer.data(), auth.requestId, true, "OK", {}, QJsonObject{
+        {"token", "settlement-low-balance"}, {"user", userObject("active", 0)}});
+    QTRY_VERIFY(api.sessionUser().has_value());
+    ChargePage page(&api);
+    page.resize(390, 720);
+    page.show();
+    page.setConnectionAvailable(true);
+    page.enterOrder(decodedOrder("charging", true, 1.097, 165, 70));
+    auto *settle = button(page, "chargeSettleButton");
+    auto *recharge = button(page, "chargeRechargeButton");
+    settle->click();
+    const auto write = takeRequest(peer.data());
+    QCOMPARE(write.action, QStringLiteral("charge.settle"));
+    reply(peer.data(), write.requestId, false, "INSUFFICIENT_BALANCE", "余额不足", QJsonObject{});
+    const auto current = takeRequest(peer.data());
+    QCOMPARE(current.action, QStringLiteral("order.current"));
+    QVERIFY(!settle->isEnabled());
+    reply(peer.data(), current.requestId, true, "OK", {}, QJsonObject{{"order", orderObject("charging", true, 1.097, 165, 70)}});
+    const auto facts = takeRequest(peer.data());
+    QCOMPARE(facts.action, QStringLiteral("station.detail"));
+    reply(peer.data(), facts.requestId, true, "OK", {}, QJsonObject{
+        {"station", stationObject(0)}, {"chargers", QJsonArray{chargerObject("charging")}}});
+    QTRY_VERIFY(settle->isEnabled());
+    QVERIFY(label(page, "chargeError")->isVisible());
+    QCOMPARE(label(page, "chargeError")->text(), QStringLiteral("余额不足，请充值后再结算"));
+    QVERIFY(recharge->isVisible());
+    QVERIFY(recharge->isEnabled());
+    QSignalSpy goRecharge(&page, &ChargePage::rechargeRequested);
+    recharge->click();
+    QCOMPARE(goRecharge.size(), 1);
+    QTest::qWait(100);
+    QCOMPARE(peer->bytesAvailable(), qint64{0}); // 核验不自动重放支付请求。
+    QCOMPARE(api.sessionUser()->balanceFen, qint64{0});
+    settle->click();
+    const auto retry = takeRequest(peer.data());
+    QCOMPARE(retry.action, QStringLiteral("charge.settle"));
+    QVERIFY(retry.requestId != write.requestId);
+    QVERIFY(label(page, "chargeError")->isHidden());
+    reply(peer.data(), retry.requestId, true, "OK", {}, QJsonObject{
+        {"order", orderObject("completed", true, 1.097, 165, 70)}, {"balanceFen", 835}});
+    QTRY_COMPARE(label(page, "chargeStatus")->text(), QStringLiteral("已完成"));
+    QVERIFY(label(page, "chargeError")->isHidden());
+    QVERIFY(recharge->isHidden());
+    QCOMPARE(api.sessionUser()->balanceFen, qint64{835});
 }
 
 void ChargePageTest::canonicalDecoderRejectsBadTimestampNullAndExtraFields()
@@ -799,7 +917,7 @@ void ChargePageTest::ordinaryReconnectReconcilesCurrentAndFactsBeforeActions()
     QVERIFY(!button(page, "chargeStartButton")->isEnabled());
     reply(secondPeer.data(), current.requestId, true, QStringLiteral("OK"), QString(),
           QJsonObject{{QStringLiteral("order"), orderObject(QStringLiteral("reserved"))}});
-    QTRY_VERIFY(label(page, "chargeOrderIdentity")->text()
+    QTRY_VERIFY(label(page, "chargeOrderIdentity")->accessibleDescription()
                     .contains(QStringLiteral("订单 ID：99")));
     QVERIFY(label(page, "chargeOrderIdentity")->text()
                 .contains(QStringLiteral("星火充电站")));

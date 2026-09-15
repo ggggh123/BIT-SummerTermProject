@@ -1,6 +1,6 @@
 # 第二阶段 Ubuntu 环境：安装、修补与验收
 
-依据《06-TL-Hadoop伪分布式安装部署指南》。**本组不用老师下发的 hadoop-3.2.1 + jdk-8u261**，改用官方 tarball。
+依据桌面 `Part2/06-TL-Hadoop伪分布式安装部署指南.md`（2026-09-14 版）。**本组不用老师下发的 hadoop-3.2.1 + jdk-8u261**，改用官方 tarball。
 
 ## 版本基线（全组必须一致）
 
@@ -24,12 +24,9 @@
 | **`30-start-demo.sh`** | **一键起全栈（跨机适配版）**：挑 Python → HDFS/YARN → ADS 库 → `web/dist` → Flask 同进程托管大屏与 `/api/*` | 否 |
 | **`31-stop-demo.sh`** | 一键停（默认只停 Flask；`--all` 再按反向顺序停 YARN → HDFS） | 否 |
 
-## 一键启停：统一入口（2026-09-15 合并）
+## 一键启停：跨机适配版（2026-09-15 合并）
 
-**`30-start-demo.sh` / `31-stop-demo.sh` 是唯一入口。**
-原 `part2/scripts/start_part2.sh`、`stop_part2.sh`（#2 集成机专用版）已合并进本目录并删除，避免两台机器两套脚本。
-
-合并后的脚本同时适配组内两种部署形态：
+`30-start-demo.sh` / `31-stop-demo.sh` 已合并原 `part2/scripts/start_part2.sh`（#2 集成机专用版）的跨机兼容能力，同一套脚本可适配组内两种部署形态：
 
 | 差异点 | 形态 A：Hadoop 以当前登录用户运行 | 形态 B：Hadoop 以独立 `hadoop` 用户运行（集成机 `niyujun01`） |
 |---|---|---|
@@ -40,6 +37,32 @@
 | 健康检查 | `curl` → `wget` → Python `urllib` 三级回退 | 同 |
 
 脚本自动探测当前属于哪种形态，无需手工切换。
+统一路由入口的最终归属见仓库 `part2/scripts/start_part2.sh`（#3 于 2026-09-15 重写，支持 `PART2_SKIP_HADOOP` 纯演示模式）。
+
+### 30-start-demo.sh 与 part2/scripts/start_part2.sh 的分工
+
+两者做同一件事，但适用范围不同：
+
+| | `part2/scripts/start_part2.sh`（#3 重写版，主线推荐） | 本目录 `30-start-demo.sh` |
+|---|---|---|
+| 仓库根 | 按脚本位置自动推导（`PART2_ROOT` 可覆盖） | 按脚本位置自动推导 |
+| Hadoop | `sudo -u hadoop ...`，支持 `PART2_SKIP_HADOOP=1` 跳过 | 自动探测形态，直接调 `start-dfs.sh`，已在运行则跳过 |
+| Python | 系统 `python3` + 依赖探测 | 自动挑「能 `import flask`」的解释器（本机是 `~/venvs/part2/bin/python`） |
+| 健康检查 | `curl` | `curl` → `wget` → Python `urllib` 三级回退 |
+
+跨机适配的完整缺陷记录与给 #2 的补丁建议见
+`docs/test/evidence/part2-2026-09-15/vm-integration-run.md` §2/§4。
+
+```bash
+# 前置：三个 tarball 下载到 ~/software/
+#   jdk17.tar.gz                 （Adoptium Temurin 17，清华镜像）
+#   hadoop-3.4.1.tar.gz          （清华 apache 镜像）
+#   spark-3.5.7-bin-hadoop3.tgz  （清华没有，用华为云 mirrors.huaweicloud.com/apache/spark/）
+
+sudo bash scripts/part2/10-install-newstack.sh   # 安装（在共享文件夹路径下执行）
+bash scripts/part2/env-check.sh | tee env-report.txt   # 体检
+bash scripts/part2/40-verify.sh                  # 验收
+```
 
 ## 本机已记录的偏差（如实声明）
 

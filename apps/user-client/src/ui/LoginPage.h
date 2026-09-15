@@ -16,6 +16,7 @@ public:
     void setPending(bool pending);
     void setConnectionAvailable(bool available);
     void setError(const QString &message);
+    void prepareForAccountChange(bool switching);
 
 signals:
     void loginRequested(QString mobile);

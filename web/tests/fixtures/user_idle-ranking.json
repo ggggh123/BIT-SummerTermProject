@@ -1,0 +1,63 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "stationId": 3,
+      "name": "丰台丽泽商务区充电站",
+      "idleCount": 13,
+      "chargerCount": 47,
+      "idleRate": 27.7
+    },
+    {
+      "stationId": 1,
+      "name": "朝阳国贸中心充电站",
+      "idleCount": 12,
+      "chargerCount": 48,
+      "idleRate": 25
+    },
+    {
+      "stationId": 6,
+      "name": "朝阳望京SOHO充电站",
+      "idleCount": 8,
+      "chargerCount": 26,
+      "idleRate": 30.8
+    },
+    {
+      "stationId": 5,
+      "name": "大兴亦庄经开区充电站",
+      "idleCount": 7,
+      "chargerCount": 32,
+      "idleRate": 21.9
+    },
+    {
+      "stationId": 7,
+      "name": "海淀西二旗软件园充电站",
+      "idleCount": 7,
+      "chargerCount": 38,
+      "idleRate": 18.4
+    },
+    {
+      "stationId": 2,
+      "name": "海淀中关村科技园充电站",
+      "idleCount": 6,
+      "chargerCount": 28,
+      "idleRate": 21.4
+    },
+    {
+      "stationId": 4,
+      "name": "通州运河商务区充电站",
+      "idleCount": 5,
+      "chargerCount": 24,
+      "idleRate": 20.8
+    },
+    {
+      "stationId": 8,
+      "name": "丰台科技园东区充电站",
+      "idleCount": 4,
+      "chargerCount": 36,
+      "idleRate": 11.1
+    }
+  ],
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

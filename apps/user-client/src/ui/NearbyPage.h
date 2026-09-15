@@ -98,6 +98,10 @@ private:
     class QLabel *detailStatus_;
     class QVBoxLayout *stationLayout_;
     class QVBoxLayout *detailLayout_;
+    class QStackedWidget *nearbyViews_;
+    class QWidget *stationListView_;
+    class QWidget *stationDetailView_;
+    bool detailControlsEnabled_ = true;
     QString pendingGeocodeId_;
     QString pendingStationsRequestId_;
     QString pendingForecastRequestId_;

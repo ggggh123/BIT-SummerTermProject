@@ -6,6 +6,8 @@
 #include <QRandomGenerator>
 #include <QString>
 
+#include <functional>
+
 namespace ev::simulator {
 
 struct ChargerSnapshot
@@ -31,19 +33,23 @@ struct FaultIntent
     QDateTime recordedAt;
 };
 
-// Pure, deterministic in-memory state machine. Never touches SQLite.
+// 纯内存确定性状态机：固定 seed 产出相同遥测序列，只生成数据、不碰 SQLite、
+// 不算钱——订单金额等权威状态一律由服务端决定。
 class TelemetryEngine
 {
 public:
-    TelemetryEngine(quint32 seed, const QDateTime &initialTime, int intervalMs);
+    using Clock = std::function<QDateTime()>;
+
+    TelemetryEngine(quint32 seed, const QDateTime &initialTime, int intervalMs,
+                    Clock wallClock = {});
 
     void replaceChargers(const QList<ChargerSnapshot> &chargers);
     QList<ChargerSnapshot> chargers() const;
 
-    // Advance simulated time by intervalMs and produce one sample per charger.
+    // 推进 intervalMs 的模拟时间，并为每台桩生成一条采样。
     QList<TelemetrySample> tick();
 
-    // Drain fault/recovery intents queued since the last call.
+    // 取出上次调用以来排队的故障/恢复事件。
     QList<FaultIntent> takePendingIntents();
 
     bool requestFault(int chargerId);
@@ -53,10 +59,16 @@ public:
     int intervalMs() const { return intervalMs_; }
 
 private:
+    // R14：v1 契约要求每台桩的遥测与故障事件 recordedAt 严格递增，
+    // 因此所有事件时间戳都由该单调时钟分配，而不是直接复用 currentTime_。
+    QDateTime nextEventTime(const QDateTime &base);
+
     quint32 seed_;
     QRandomGenerator rng_;
     QDateTime currentTime_;
+    QDateTime lastEventAt_;
     int intervalMs_;
+    Clock wallClock_;
     QMap<int, ChargerSnapshot> chargers_;
     QList<FaultIntent> pendingIntents_;
 };

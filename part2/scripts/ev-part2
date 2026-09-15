@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source /usr/local/ev-part2/env.sh
+case "${1:-help}" in
+  configure)
+    exec "$EV_PART2_PYTHON" /usr/local/ev-part2/bin/configure_local.py ;;
+  start|stop|status)
+    exec bash /usr/local/ev-part2/bin/cluster.sh "$1" ;;
+  python)
+    shift
+    exec "$EV_PART2_PYTHON" "$@" ;;
+  help)
+    echo '用法：ev-part2 configure|start|stop|status|python|hdfs|hadoop|yarn|spark-submit|pyspark [参数]'
+    echo '全局安装、当前用户运行。Python 3.10 显式调用，不替换系统 Python。' ;;
+  hdfs|hadoop|yarn|spark-submit|pyspark|java|javac|jps)
+    exec "$@" ;;
+  *)
+    echo "未知命令：$1" >&2
+    exit 2 ;;
+esac

@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/admin-ui">
+    <file alias="chevron-down.xpm">icons/chevron-down.xpm</file>
+    <file alias="chevron-up.xpm">icons/chevron-up.xpm</file>
+  </qresource>
+</RCC>

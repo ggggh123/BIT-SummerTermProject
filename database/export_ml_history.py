@@ -1,6 +1,6 @@
-"""Read-only CSV snapshot of the 90-day hourly ML history.
+"""只读导出 90 天逐小时 ML 历史的 CSV 快照。
 
-Usage::
+用法::
 
     python3 database/export_ml_history.py \\
         --db runtime/golden/base.db \\
