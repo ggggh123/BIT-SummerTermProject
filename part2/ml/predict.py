@@ -15,7 +15,18 @@
   * ``is_peak`` = 未来 24h 内负荷最大的**连续 2h**，该 2 小时**两个点都标 1**
     （与 #1 的 ``web/src/mock/forecast_24h.json`` 契约一致）；
   * ``congestion_level``：预测占用率 ≥80% 为 high，≥50% 为 medium，其余 low；
-  * 物理约束：负荷非负、占用数 ∈ [0, pile_count]、``busy + idle = pile_count``。
+  * 物理约束见下节。
+
+负荷与占用的一致性（依据 ``tmp/diag_low.py`` 的实测诊断）
+--------------------------------------------------------
+自测数据中 ``load_kw`` 与 ``busy_count`` 同号：``busy = 0`` 时 ``load`` 必为 0，
+且 ``hour = 0`` 的负荷有约 10% 的样本真的是 0（P05 = 0）。因此：
+
+  1. **不对占用做「下界抬升」** —— 凌晨 ``busy = 0`` 是数据的真实形态，
+     用历史分位把 0 抬成 1 反而会制造与负荷不一致的占用；
+  2. 先整数化占用，再用「占用锚定」修正负荷：
+     ``busy = 0`` → ``load = 0``；``busy > 0`` → ``load ≥ busy × 该站该整点历史单桩功率 P05``；
+  3. 这样既避免 GBT 在低谷外推出 0 附近的病态值，又保证 ``busy + idle = pile_count``。
 
     spark-submit --master yarn predict.py \
         --dwd       hdfs://pangxiangzhen01:8020/ev-charging/dwd/dwd_station_hourly \
@@ -45,6 +56,9 @@ from train import parse_horizons
 #: 拥堵阈值（《05》§2.3）
 CONGESTION_HIGH = 0.80
 CONGESTION_MEDIUM = 0.50
+
+#: 单桩功率缺省下限（kW）：最小额定功率 7 kW × 50% 负载率，仅作兜底
+DEFAULT_KW_PER_BUSY = 3.5
 
 TARGETS = (("load", "predicted_load_kw"), ("busy", "predicted_busy_count"))
 
@@ -161,18 +175,44 @@ def main() -> int:
     for fr in frames[1:]:
         allp = allp.unionByName(fr)
 
-    # 整数化占用，并保证 busy + idle = pile_count
+    # ---- 1) 占用整数化：仅做上下界裁剪，不做下界抬升 ----
+    allp = allp.withColumn(
+        "predicted_busy_count",
+        F.round(
+            F.greatest(
+                F.least(F.col("predicted_busy_count"), F.col("pile_count").cast("double")),
+                F.lit(0.0),
+            )
+        ).cast("int"),
+    )
+
+    # ---- 2) 负荷按占用锚定：busy=0 → load=0；busy>0 → load ≥ busy × 历史单桩功率 P05 ----
+    kw_per_busy = (
+        feat.filter(F.col("busy_count") > 0)
+        .groupBy("station_id", "hour")
+        .agg(
+            F.expr("percentile_approx(load_kw / busy_count, 0.05)")
+            .cast("double")
+            .alias("_kw_per_busy_p05")
+        )
+    )
+    allp = allp.withColumn("hour", F.hour("forecast_at_col")).join(
+        kw_per_busy, on=["station_id", "hour"], how="left"
+    )
+    allp = allp.withColumn(
+        "predicted_load_kw",
+        F.when(F.col("predicted_busy_count") <= 0, F.lit(0.0)).otherwise(
+            F.greatest(
+                F.col("predicted_load_kw"),
+                F.col("predicted_busy_count").cast("double")
+                * F.coalesce(F.col("_kw_per_busy_p05"), F.lit(DEFAULT_KW_PER_BUSY)),
+            )
+        ),
+    )
+
+    # ---- 3) 空闲桩守恒 + 拥堵分级 ----
     allp = (
         allp.withColumn(
-            "predicted_busy_count",
-            F.round(
-                F.greatest(
-                    F.least(F.col("predicted_busy_count"), F.col("pile_count").cast("double")),
-                    F.lit(0.0),
-                )
-            ).cast("int"),
-        )
-        .withColumn(
             "predicted_idle_count",
             F.greatest(F.col("pile_count") - F.col("predicted_busy_count"), F.lit(0)).cast("int"),
         )
@@ -189,7 +229,7 @@ def main() -> int:
         )
     )
 
-    # is_peak：未来 24h 内负荷最大的「连续 2h」，该 2h 两个点都标 1
+    # ---- 4) is_peak：未来 24h 内负荷最大的「连续 2h」，该 2h 两个点都标 1 ----
     w_st = Window.partitionBy("station_id").orderBy("horizon_h")
     allp = allp.withColumn("_pair", F.avg("predicted_load_kw").over(w_st.rowsBetween(0, 1)))
     best = allp.groupBy("station_id").agg(F.max("_pair").alias("_best"))
@@ -219,7 +259,13 @@ def main() -> int:
     result.write.mode("overwrite").parquet(args.out)
     n_out = result.count()
     peak_cnt = result.filter(F.col("is_peak") == 1).count()
-    print(f"[predict] ads_forecast_24h rows={n_out} (is_peak 标记 {peak_cnt} 行) -> {args.out}")
+    zero_load = result.filter(F.col("predicted_load_kw") <= 0.001).count()
+    inconsistent = result.filter(
+        ((F.col("predicted_busy_count") > 0) & (F.col("predicted_load_kw") <= 0.001))
+        | ((F.col("predicted_busy_count") <= 0) & (F.col("predicted_load_kw") > 0.001))
+    ).count()
+    print(f"[predict] ads_forecast_24h rows={n_out} is_peak={peak_cnt} "
+          f"zero_load={zero_load} busy/load 不一致行={inconsistent} -> {args.out}")
     result.filter(F.col("horizon_h").isin(1, 6, 24)).orderBy("station_id", "horizon_h").show(30, truncate=False)
 
     meta_path = os.path.join(os.path.dirname(os.path.abspath(args.metrics or "./_.json")), "predict_meta.json")
@@ -228,7 +274,8 @@ def main() -> int:
             json.dump(
                 {"run_id": run_id, "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
                  "horizons": horizons, "t0": str(t0), "stations": n_station,
-                 "rows": n_out, "peak_rows": peak_cnt, "model_versions": versions,
+                 "rows": n_out, "peak_rows": peak_cnt, "zero_load_rows": zero_load,
+                 "busy_load_inconsistent_rows": inconsistent, "model_versions": versions,
                  "output": args.out},
                 fh, ensure_ascii=False, indent=2,
             )
