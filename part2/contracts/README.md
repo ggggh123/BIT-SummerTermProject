@@ -88,6 +88,10 @@
    理由：`stations` 是维度表，被订单/充电桩/遥测引用；整行剔除会使该站关联事实全部变成孤儿引用并触发 Q7 级联——实测使 DWD 站点由 8 降至 7、订单由 12 万降至 102,332。置空字段既不臆造坐标，也不牵连其他数据。
    「回填坐标」因无外部权威数据源（坐标本身由生成器随机产生）、等同编造数据，已排除。
    **代码改动**：`part2/quality/record_rules.py` 的 Q9 分支由 `reject` 改为置空字段 + `repair`；策略文件 `bbox_note` 同步更新；测试 `test_record_rules.py::test_coordinate_bounds` 更新为断言新行为（含「坐标确实被置空」）。改动 `reject` → `repair` 不会触发整行剔除（剔除判据见 `quality/rules.py:39` 仅含 `reject`/`deduplicate`）。
+   → **断言同步（2026-09-15 晚补，实测踩坑）**：坐标被**合法置空**后，两处「必填」检查必须同步声明坐标可空，否则会把 repair 结果误判为违规、直接让 PRL 作业失败（实测连续两轮）——
+   ① `quality-policy-v0.1.json` 的 `optional` 增 `"stations": ["latitude", "longitude"]`（影响 `assert_dwd` 的必填检查与 Q1 缺失判定；版本升至 `0.2.2-draft`）；
+   ② `scml-dwd-v0.1.json` 的 `dim_stations.optional` 增 `latitude/longitude`（影响 `assert_scml` 的写后读回验收；该断言用的是**SCML 契约自己的** optional 列表，与 ① 是两处独立配置）。
+   `assert_dwd` 的 bbox 检查（`~between`）本身对 NULL 安全（`coalesce` 后按未违规处理），无需改动；`coord_imputed` 恒为 0（`clean/scml_dwd.py:37`），不触发断言。
 
 5. ~~#2／#1：确认 `ads_quality_*` 字段及页面对 FP/FN、级联影响和“未冻结”标志的展示口径。~~
    → **#2 已完成口径决定（2026-09-15），待 #1（UI 负责人）二次确认后实施**：大屏「数据质量」面板**全部显示**以下 6 项——

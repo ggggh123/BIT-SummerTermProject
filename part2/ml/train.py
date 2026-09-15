@@ -133,9 +133,15 @@ def main() -> int:
 
     train_df, valid_df, test_df, bounds = ft.split_by_time(feat, horizons)
     # 54 个模型共享同一组窗口特征；不缓存会为每个模型重复构造完整窗口计划。
-    train_df.cache()
-    valid_df.cache()
-    test_df.cache()
+    # 提速（2026-09-15，由 #2 在集成机执行）：本数据集仅 1.7 万行，而单 executor 只有 2 核；
+    # Parquet 的默认分区数远多于核数，导致每个模型 fit/transform 的 task 调度开销占绝对多数
+    # （集成机实测 116 s/模型，约为 #5 目标机的 4 倍）。这里先收敛到少量分区再缓存，
+    # 使每个 task 有足够数据量、把调度开销摊薄。
+    # 不改算法、超参、特征与产物格式；聚合类算子（直方图/分位）与分区无关，结果等价。
+    _parts = max(1, int(args.shuffle_partitions))
+    train_df = train_df.repartition(_parts).cache()
+    valid_df = valid_df.repartition(_parts).cache()
+    test_df = test_df.repartition(_parts).cache()
     n_raw = raw.count()
     split_counts = (train_df.count(), valid_df.count(), test_df.count())
     if not all(split_counts):
