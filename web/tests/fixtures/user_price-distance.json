@@ -1,0 +1,63 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "stationId": 1,
+      "name": "朝阳国贸中心充电站",
+      "distanceKm": 5.43,
+      "priceFenPerKwh": 134,
+      "idleCount": 12
+    },
+    {
+      "stationId": 3,
+      "name": "丰台丽泽商务区充电站",
+      "distanceKm": 8.36,
+      "priceFenPerKwh": 131,
+      "idleCount": 13
+    },
+    {
+      "stationId": 2,
+      "name": "海淀中关村科技园充电站",
+      "distanceKm": 10.82,
+      "priceFenPerKwh": 120,
+      "idleCount": 6
+    },
+    {
+      "stationId": 6,
+      "name": "朝阳望京SOHO充电站",
+      "distanceKm": 12,
+      "priceFenPerKwh": 154,
+      "idleCount": 8
+    },
+    {
+      "stationId": 8,
+      "name": "丰台科技园东区充电站",
+      "distanceKm": 12.1,
+      "priceFenPerKwh": 81,
+      "idleCount": 4
+    },
+    {
+      "stationId": 5,
+      "name": "大兴亦庄经开区充电站",
+      "distanceKm": 15.64,
+      "priceFenPerKwh": 83,
+      "idleCount": 7
+    },
+    {
+      "stationId": 7,
+      "name": "海淀西二旗软件园充电站",
+      "distanceKm": 17.73,
+      "priceFenPerKwh": 83,
+      "idleCount": 7
+    },
+    {
+      "stationId": 4,
+      "name": "通州运河商务区充电站",
+      "distanceKm": 22.26,
+      "priceFenPerKwh": 110,
+      "idleCount": 5
+    }
+  ],
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}

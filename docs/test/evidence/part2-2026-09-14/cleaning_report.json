@@ -1,0 +1,46 @@
+{
+  "tables": [
+    {
+      "table": "dim_stations",
+      "rows_before": 8,
+      "rows_after": 7,
+      "removed": 1,
+      "keep_rate": 0.875
+    },
+    {
+      "table": "dim_users",
+      "rows_before": 500,
+      "rows_after": 488,
+      "removed": 12,
+      "keep_rate": 0.976
+    },
+    {
+      "table": "dim_chargers",
+      "rows_before": 30,
+      "rows_after": 30,
+      "removed": 0,
+      "keep_rate": 1.0
+    },
+    {
+      "table": "dwd_order_detail",
+      "rows_before": 12196,
+      "rows_after": 11424,
+      "removed": 772,
+      "keep_rate": 0.9367
+    },
+    {
+      "table": "dwd_telemetry_detail",
+      "rows_before": 100662,
+      "rows_after": 97758,
+      "removed": 2904,
+      "keep_rate": 0.9712
+    },
+    {
+      "table": "dwd_station_hourly",
+      "rows_before": 17280,
+      "rows_after": 17251,
+      "removed": 29,
+      "keep_rate": 0.9983
+    }
+  ]
+}

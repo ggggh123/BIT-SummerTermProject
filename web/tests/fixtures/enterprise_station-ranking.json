@@ -1,0 +1,79 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "stationId": 1,
+      "name": "朝阳国贸中心充电站",
+      "utilizationRate": 46.7,
+      "revenueFen": 3247256,
+      "idleCount": 12,
+      "chargerCount": 48,
+      "orderCount": 21164
+    },
+    {
+      "stationId": 2,
+      "name": "海淀中关村科技园充电站",
+      "utilizationRate": 60.6,
+      "revenueFen": 4977007,
+      "idleCount": 6,
+      "chargerCount": 28,
+      "orderCount": 9982
+    },
+    {
+      "stationId": 3,
+      "name": "丰台丽泽商务区充电站",
+      "utilizationRate": 42.2,
+      "revenueFen": 7856582,
+      "idleCount": 13,
+      "chargerCount": 47,
+      "orderCount": 18294
+    },
+    {
+      "stationId": 4,
+      "name": "通州运河商务区充电站",
+      "utilizationRate": 71.8,
+      "revenueFen": 8712759,
+      "idleCount": 5,
+      "chargerCount": 24,
+      "orderCount": 19775
+    },
+    {
+      "stationId": 5,
+      "name": "大兴亦庄经开区充电站",
+      "utilizationRate": 35.7,
+      "revenueFen": 8785296,
+      "idleCount": 7,
+      "chargerCount": 32,
+      "orderCount": 22660
+    },
+    {
+      "stationId": 6,
+      "name": "朝阳望京SOHO充电站",
+      "utilizationRate": 45.7,
+      "revenueFen": 3047937,
+      "idleCount": 8,
+      "chargerCount": 26,
+      "orderCount": 12304
+    },
+    {
+      "stationId": 7,
+      "name": "海淀西二旗软件园充电站",
+      "utilizationRate": 38.6,
+      "revenueFen": 3281471,
+      "idleCount": 7,
+      "chargerCount": 38,
+      "orderCount": 17260
+    },
+    {
+      "stationId": 8,
+      "name": "丰台科技园东区充电站",
+      "utilizationRate": 49.2,
+      "revenueFen": 6491211,
+      "idleCount": 4,
+      "chargerCount": 36,
+      "orderCount": 12909
+    }
+  ],
+  "generatedAt": "2026-09-14T10:05:00+08:00"
+}
