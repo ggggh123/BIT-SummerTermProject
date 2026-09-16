@@ -79,7 +79,6 @@ const rankingOption = computed(() => {
 })
 const stations = computed(() => view.value?.stations ?? [])
 const forecastSource = computed(() => formatForecastSource(slow.value?.forecast24h))
-const unlocated = computed(() => stations.value.filter(s => !hasCoordinates(s)).length)
 const stationOption = computed(() => {
   if (!view.value) return {}
   return mapReady.value ? buildBeijingStationOption(view.value) : buildStationOption({ ...view.value, stations: stations.value.filter(hasCoordinates) })
@@ -106,7 +105,7 @@ const eventBoard = computed(() => ({
 
 <template>
   <p v-if="fastError || slowError" class="error-banner" role="status">数据加载异常：{{ fastError || slowError }}。保留上一次成功数据。</p>
-  <ScaleFrame>
+  <ScaleFrame :zoom="1.06">
     <div class="command-heading"><h2><span>01 / OVERVIEW</span>全域能源态势</h2><span class="brief">从城市分布到站点负荷 · 一屏掌握充电网络</span></div>
     <section class="grid kpi" aria-label="核心指标">
       <div class="panel kpi-card"><span class="kpi-index">REVENUE / CNY</span><h2 class="kpi-label">累计营收</h2><p class="kpi-value">{{ money(kpis.totalRevenueFen) }}<span class="unit">元</span></p><p class="kpi-hint">全部站点 · 累计完成订单</p><MiniTrend :values="recent.map(r => r.revenueFen)" /></div>
@@ -124,7 +123,7 @@ const eventBoard = computed(() => ({
         <div class="map-heading"><div><h2>北京 · 城市充电网络</h2><small>BEIJING / CHARGING NETWORK</small></div><div class="map-count"><span><strong>{{ number(stations.length) }}</strong>站点</span><span><strong>{{ number(kpis.chargerCount) }}</strong>充电设备</span></div></div>
         <span class="map-coordinates" aria-hidden="true">GEOGRAPHIC VIEW / BEIJING</span>
         <EChart v-if="view" :option="stationOption" class="map-chart" @chart-click="onStationClick" />
-        <p v-if="unlocated || mapFailed" class="map-missing">{{ unlocated ? `${unlocated} 个站点缺少坐标，保留统计但不落图。` : '' }}{{ mapFailed ? '离线底图不可用，已切换坐标散点。' : '' }}</p>
+        <p v-if="mapFailed" class="map-missing">离线底图不可用，已切换坐标散点。</p>
         <div class="map-legend"><span><i />站点 · 点大小表示设备容量</span><span class="map-instruction">拖动 / 缩放 · 点击站点进入详情 ↗</span></div>
       </section>
       <div class="dv-col">

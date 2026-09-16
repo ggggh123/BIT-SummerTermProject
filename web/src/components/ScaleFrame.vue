@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { computeScale } from '@/lib/scale'
 
 // 固定设计尺寸，按可用区域等比缩放（不拉伸）
@@ -9,13 +9,20 @@ import { computeScale } from '@/lib/scale'
 const props = defineProps({
   baseWidth: { type: Number, default: 1840 },
   baseHeight: { type: Number, default: 920 },
+  // 整体放大倍数：设计基准等比缩小，等效于把内容放大。
+  // 宽度仍然按可用宽度自适应（不出现横向滚动），代价是纵向变高、可滚动。
+  zoom: { type: Number, default: 1 },
   reservedHeight: { type: Number, default: 120 }, // 顶栏 + 页脚占位
 })
+
+// 设计基准（zoom 生效后）：zoom=1.06 即按 1840/1.06 × 920/1.06 排版再等比放大
+const designWidth = computed(() => props.baseWidth / props.zoom)
+const designHeight = computed(() => props.baseHeight / props.zoom)
 
 const host = ref(null)
 const inner = ref(null)
 const scale = ref(1)
-const contentHeight = ref(props.baseHeight)
+const contentHeight = ref(designHeight.value)
 
 function update() {
   const width = host.value?.clientWidth ?? window.innerWidth
@@ -25,8 +32,8 @@ function update() {
   const footer = document.querySelector('.footnote')?.offsetHeight ?? 0
   const reserved = Math.max(props.reservedHeight, Math.ceil(top + footer + 12))
   const height = Math.max(320, window.innerHeight - reserved)
-  scale.value = computeScale(width, height, props.baseWidth, props.baseHeight)
-  contentHeight.value = Math.max(props.baseHeight, inner.value?.scrollHeight ?? props.baseHeight)
+  scale.value = computeScale(width, height, designWidth.value, designHeight.value)
+  contentHeight.value = Math.max(designHeight.value, inner.value?.scrollHeight ?? designHeight.value)
 }
 
 let observer = null
@@ -49,7 +56,7 @@ onBeforeUnmount(() => {
     <div
       ref="inner"
       class="scale-inner"
-      :style="{ width: `${baseWidth}px`, minHeight: `${baseHeight}px`, transform: `scale(${scale})`, marginLeft: `max(0px, calc((100% - ${baseWidth * scale}px) / 2))` }"
+      :style="{ width: `${designWidth}px`, minHeight: `${designHeight}px`, transform: `scale(${scale})`, marginLeft: `max(0px, calc((100% - ${designWidth * scale}px) / 2))` }"
     >
       <slot />
     </div>
