@@ -46,7 +46,7 @@ export function buildHealthOption(health) {
       },
     },
     xAxis: { type: 'value', name: '次' },
-    yAxis: { type: 'category', data: rows.map((r) => r.code), name: '充电桩' },
+    yAxis: { type: 'category', data: rows.map((r) => r.code), inverse: true },
     series: [{ name: '累计充电次数', type: 'bar', data: rows.map((r) => r.chargeCount) }],
     meta: { faultRate: health.faultRate, faultCount: health.faultCount, chargers: rows.length },
   }

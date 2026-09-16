@@ -19,7 +19,7 @@ test('主页：5 个图表渲染 + KPI 有值 + 控制台零报错', async ({ pa
   await page.goto('/')
   await expect(page.locator('.kpi-card')).toHaveCount(4)
   await waitCharts(page, 5)
-  await expect(page.locator(KPI('累计营收'))).toContainText('¥')
+  await expect(page.locator(KPI('累计营收'))).toContainText('元')
   await expect(page.locator(KPI('累计订单'))).not.toHaveText('0')
   await expect(page.locator('text=数据加载失败')).toHaveCount(0)
   expect(errors).toEqual([])
@@ -68,7 +68,7 @@ test('点击地图站点 → 跳转充电站视角且选中同一站点', async 
   await waitCharts(page, 5)
 
   // 主页在 1920×1080 下一屏放下，这里只是把地图面板滚进视口，避免点击坐标落在视口外
-  await page.locator('.panel', { hasText: '北京市站点分布' }).scrollIntoViewIfNeeded()
+  await page.locator('.map-panel[aria-label="北京市站点分布"]').scrollIntoViewIfNeeded()
 
   // 底图是异步加载的：geo 到位前 mapReady=false，图表先退化成经纬度散点（没有 geo）。
   // 不在这一步等，取实例就会拿到"没有 geo 的图表"——那是**硬失败**（evaluate 里 throw，
@@ -136,7 +136,7 @@ test('5s 轮询确实重绘：接口第二次返回不同订单数，页面随�
   const initialOrders = (await page.locator(KPI('累计订单')).textContent())?.trim()
   expect(initialOrders).toBeTruthy()
   expect(initialOrders).not.toBe('999,999')
-  await expect(page.locator(KPI('累计订单'))).toHaveText('999,999', { timeout: 20_000 })
+  await expect(page.locator(KPI('累计订单'))).toHaveText(/999,999\s*笔/, { timeout: 20_000 })
   expect(calls).toBeGreaterThan(1)
 })
 
@@ -148,7 +148,7 @@ test('接口失败：保留上次成功数据并提示，不白屏', async ({ pa
   await page.route('**/api/**', (route) => route.abort())
   // 顶部状态胶囊标「数据已过期」，页面内提示「数据加载失败…（保留上一次成功数据）」
   await expect(page.locator('.pill-error')).toBeVisible({ timeout: 20_000 })
-  await expect(page.getByText('页面保留上一次成功数据').first()).toBeVisible()
+  await expect(page.locator('.error-banner')).toContainText('保留上一次成功数据')
   // 旧数据仍在
   await expect(page.locator(KPI('累计订单'))).toHaveText(before)
   await expect(page.locator('.kpi-card')).toHaveCount(4)
@@ -253,5 +253,5 @@ test('两处容易误读的口径在页面上写清楚了', async ({ page }) => 
   expect(growth.names).toContain('日活充电用户')
   expect(growth.legend).toContain('窗口内首单新客')
   expect(growth.points).toBeGreaterThan(0)
-  await expect(page.locator('.chart-note')).toContainText('不是注册数')
+  await expect(page.locator('.chart-note').filter({ hasText: '不是注册数' })).toBeVisible()
 })

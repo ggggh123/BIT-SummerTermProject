@@ -105,3 +105,15 @@ INSERT INTO ads_meta VALUES('runId','ads-1'); INSERT INTO ads_meta VALUES('sourc
         with self.assertRaisesRegex(ValueError, "备份已存在"):
             publish(self.q, self.c, self.db, self.backup, True)
         self.assertEqual(self.backup.read_text(encoding="utf-8"), "keep")
+
+    def test_cascade_metadata_preserves_missing_vs_zero(self):
+        data = json.loads(self.c.read_text(encoding="utf-8"))
+        data["tables"]["orders"]["cascade_affected_rows"] = 3
+        data["tables"]["users"]["cascade_affected_rows"] = 0
+        self.c.write_text(json.dumps(data))
+        publish(self.q, self.c, self.db, self.backup, True)
+        with sqlite3.connect(self.db) as con:
+            details = json.loads(con.execute("SELECT value FROM ads_quality_meta WHERE key='tableDetails'").fetchone()[0])
+        self.assertEqual(details["ods_orders"]["cascadeAffectedRows"], 3)
+        self.assertEqual(details["ods_users"]["cascadeAffectedRows"], 0)
+        self.assertIsNone(details["ods_stations"]["cascadeAffectedRows"])

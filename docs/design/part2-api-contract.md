@@ -29,7 +29,19 @@
 | `/api/overview/events` | `limit?` | `[{ eventType, message, createdAt }]`（倒序） |
 | `/api/quality/summary` | — | `{ runId, tables: [{ name, rowsBefore, rowsAfter }], issues: [{ rule, type, injected, detected, handled, recall }] }` |
 
+质量明细兼容扩展（2026-09-16，大屏接管精修）：保留上表字段，额外返回 `source`、
+`qualityRunId`、`sourceRunId`、`policyVersion`、`readyForTeamDelivery`（boolean 或 null）、
+`pendingPolicyNotes` 和 `metricSemantics`。每条规则可带 `truePositive/falsePositive/falseNegative/precision`；
+每张表可带 `cascadeAffectedRows`。值来自 `ads_quality_meta.exactMetrics/tableDetails`，
+旧批次未发布则返回 null，不得从“检出－注入”或“清洗前－清洗后”推算 FP/FN/级联。
+PRL 精确对账中召回率分母为零时返回 null；旧版独立复算报告继续保留原 recall，并明确其覆盖度参考口径。
+
+
 主页营收趋势取 `/api/enterprise/revenue-trend?days=30` 的**最近 30 个点**。
+
+坐标兼容约定（Q9 字段修复）：`overview/stations`、`station/coverage` 中经纬度可为 null。
+`user/price-distance` 沿用 #2 已合入的处理：跳过无法计算距离的站点，其他站点仍按距离升序返回；
+价格、空闲与经营统计仍包含该站。前端同时防御距离 null 的旧/扩展响应，不将其画为零距离。
 
 ## 3. 企业视角 `/api/enterprise`
 

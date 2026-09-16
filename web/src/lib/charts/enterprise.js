@@ -59,7 +59,7 @@ export function buildStationRevenueRankingOption(rows) {
   return {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     xAxis: { type: 'value', name: '元' },
-    yAxis: { type: 'category', data: sorted.map((r) => r.name), name: '站点' },
+    yAxis: { type: 'category', data: sorted.map((r) => r.name), inverse: true },
     series: [
       {
         name: '营收',

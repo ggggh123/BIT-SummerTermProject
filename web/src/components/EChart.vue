@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
+import { withEnergyTheme } from '@/lib/chartTheme'
 
 const props = defineProps({
   option: { type: Object, required: true },
@@ -16,7 +17,9 @@ let observer = null
 function draw() {
   if (!chart) return
   // notMerge=true：每次全量替换，避免残影与残留 series
-  chart.setOption(props.option, true)
+  chart.setOption(withEnergyTheme(props.option, {
+    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  }), true)
 }
 
 onMounted(() => {
@@ -40,5 +43,5 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="el" class="chart" :class="{ tall }" />
+  <div ref="el" class="chart" :class="{ tall }" role="img" :aria-label="option.series?.map(s => s.name).join('、') || '正在加载图表'" />
 </template>

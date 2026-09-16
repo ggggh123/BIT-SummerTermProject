@@ -7,8 +7,8 @@ import { computeScale } from '@/lib/scale'
 // 早期实现（高度固定 1080×scale + overflow:hidden）会把下半部分静默裁掉
 // （地图下半部、数据质量面板、事件流在 1920×1080 投屏上不可见）。
 const props = defineProps({
-  baseWidth: { type: Number, default: 1920 },
-  baseHeight: { type: Number, default: 1080 },
+  baseWidth: { type: Number, default: 1840 },
+  baseHeight: { type: Number, default: 920 },
   reservedHeight: { type: Number, default: 120 }, // 顶栏 + 页脚占位
 })
 
@@ -49,7 +49,7 @@ onBeforeUnmount(() => {
     <div
       ref="inner"
       class="scale-inner"
-      :style="{ width: `${baseWidth}px`, height: `${baseHeight}px`, transform: `scale(${scale})` }"
+      :style="{ width: `${baseWidth}px`, minHeight: `${baseHeight}px`, transform: `scale(${scale})`, marginLeft: `max(0px, calc((100% - ${baseWidth * scale}px) / 2))` }"
     >
       <slot />
     </div>

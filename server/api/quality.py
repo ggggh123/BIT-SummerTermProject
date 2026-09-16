@@ -1,60 +1,79 @@
-"""数据质量对账端点（契约 §2 `/api/quality/summary`）。
-
-数据源：`ads_quality_table` / `ads_quality_issue` / `ads_quality_meta`，
-由 `part2/scml/warehouse/jobs/build_local.py` 按《03-PRL》§3.2 规则对 ODS 独立复算后落库
-（质量复算逻辑只在 #4 侧一处实现，见 `part2/scml/warehouse/README.md` 的职责边界）。
-
-`injected` 来自生成器 `handoff/ods/injection_log.json`（Q1–Q10），
-`detected` 是 ADS 侧实际命中数，`recall = detected / injected`。
-两层是**独立**统计的，因此 recall < 1 是真实结论而非笔误 —— 生成器注入与
-清洗规则不可能逐条对齐（例如 Q4 时间格式注入的行可能同时触发 R01 被更早命中）。
-"""
-
+"""只读质量摘要与明细：兼容 SCML 独立复算、PRL 逐行精确对账两种来源。"""
 from __future__ import annotations
 
-from flask import Blueprint
+import json
+import math
 
+from flask import Blueprint
 from services import ads_reader as ads
 from services.envelope import ok
 
 bp = Blueprint("quality", __name__)
 
 
+def _json(meta, key, expected, default):
+    try:
+        value = json.loads(meta.get(key, "null"))
+    except (ValueError, TypeError):
+        return default
+    return value if isinstance(value, expected) else default
+
+
+def _number(value, integer=False):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    if integer and (value < 0 or int(value) != value):
+        return None
+    return int(value) if integer else value
+
+
 @bp.get("/quality/summary")
 def summary():
     meta = ads.meta_map()
-    tables = [
-        {
-            "name": row["name"],
-            "rowsBefore": int(row["rows_before"]),
+    quality_meta = {r["key"]: r["value"] for r in ads.query("SELECT key, value FROM ads_quality_meta")}
+    exact = _json(quality_meta, "exactMetrics", dict, {})
+    details = _json(quality_meta, "tableDetails", dict, {})
+    tables = []
+    for row in ads.query("SELECT name, rows_before, rows_after FROM ads_quality_table ORDER BY name"):
+        detail = details.get(row["name"])
+        detail = detail if isinstance(detail, dict) else {}
+        tables.append({
+            "name": row["name"], "rowsBefore": int(row["rows_before"]),
             "rowsAfter": int(row["rows_after"]),
-        }
-        for row in ads.query(
-            "SELECT name, rows_before, rows_after FROM ads_quality_table ORDER BY name"
-        )
-    ]
-    issues = [
-        {
-            "rule": row["rule"],
-            "type": row["type"],
-            "injected": int(row["injected"]),
-            "detected": int(row["detected"]),
-            "handled": int(row["handled"]),
-            "recall": float(row["recall"]),
-        }
-        for row in ads.query(
-            "SELECT rule, type, injected, detected, handled, recall "
-            "FROM ads_quality_issue ORDER BY rule"
-        )
-    ]
+            "cascadeAffectedRows": _number(detail.get("cascadeAffectedRows"), integer=True),
+        })
+    issues = []
+    for row in ads.query(
+        "SELECT rule, type, injected, detected, handled, recall FROM ads_quality_issue ORDER BY rule"
+    ):
+        metric = exact.get(row["rule"])
+        metric = metric if isinstance(metric, dict) else {}
+        issues.append({
+            "rule": row["rule"], "type": row["type"],
+            "injected": int(row["injected"]), "detected": int(row["detected"]), "handled": int(row["handled"]),
+            "recall": _number(metric["recall"]) if "recall" in metric else _number(row["recall"]),
+            "truePositive": _number(metric.get("truePositive"), integer=True),
+            "falsePositive": _number(metric.get("falsePositive"), integer=True),
+            "falseNegative": _number(metric.get("falseNegative"), integer=True),
+            "precision": _number(metric.get("precision")),
+        })
+    source = quality_meta.get("source", "")
+    exact_source = source == "prl-quality-report"
     return ok({
         "runId": meta.get("runId", ""),
-        "tables": tables,
-        "issues": issues,
-        "injectedTotal": sum(item["injected"] for item in issues),
-        "detectedTotal": sum(item["detected"] for item in issues),
+        "source": source,
+        "qualityRunId": quality_meta.get("qualityRunId"),
+        "sourceRunId": quality_meta.get("sourceRunId"),
+        "policyVersion": quality_meta.get("policyVersion"),
+        "readyForTeamDelivery": _json(quality_meta, "readyForTeamDelivery", bool, None),
+        "pendingPolicyNotes": _json(quality_meta, "pendingPolicyNotes", list, []),
+        "metricSemantics": quality_meta.get("metricSemantics", ""),
+        "tables": tables, "issues": issues,
+        "injectedTotal": sum(i["injected"] for i in issues),
+        "detectedTotal": sum(i["detected"] for i in issues),
         "note": (
-            "injected 取自生成器 injection_log（Q1–Q10），detected 为 ADS 侧独立复算结果；"
-            "两者统计口径不完全等价，recall 仅作覆盖度参考。"
+            "来自 PRL 逐行对账；injected=TP+FN，detected=handled=TP+FP；同一记录可命中多条规则。"
+            if exact_source else
+            "来自 ADS 独立复算；注入与检出统计口径不完全等价，原 recall 仅作覆盖度参考；缺少精确对账项显示未发布。"
         ),
     })
