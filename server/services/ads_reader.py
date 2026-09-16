@@ -191,6 +191,15 @@ def ensure_iso(value: Any) -> str:
     return dt.astimezone(CN_TZ).replace(microsecond=0).isoformat(timespec="seconds")
 
 
+def ensure_date(value: Any) -> str:
+    """纯日期 `YYYY-MM-DD`（ads_daily.dt 这类按天字段用，前端不必再截字符串）。"""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    return str(value).strip()[:10]
+
+
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """两点球面距离（km），保留 2 位小数。
 
@@ -254,6 +263,22 @@ def window_totals(days: int | None = None) -> dict:
         "revenueFen": sum(int(row["revenue_fen"]) for row in rows),
         "energyKwh": round(sum(round(float(row["energy_kwh"]), 1) for row in rows), 1),
         "orderCnt": sum(int(row["order_cnt"]) for row in rows),
+    }
+
+
+def window_bounds(days: int | None = None) -> dict[str, object]:
+    """窗口起止日期 —— 供前端标注「这些累计值从哪天开始算」。
+
+    与 `window_totals` 共用 `daily_window`，因此「起止日期」与「KPI/碳减排的合计」
+    永远出自同一批日行，不会出现「标注 06-17 起、数值却含更早数据」的口径漂移。
+    """
+    rows = daily_window(days)
+    if not rows:
+        return {"start": "", "end": "", "days": 0}
+    return {
+        "start": ensure_date(rows[0]["dt"]),
+        "end": ensure_date(rows[-1]["dt"]),
+        "days": len(rows),
     }
 
 

@@ -17,6 +17,7 @@ bp = Blueprint("overview", __name__)
 @bp.get("/overview/kpis")
 def kpis():
     totals = ads.window_totals(ads.WINDOW_DAYS)
+    bounds = ads.window_bounds(ads.WINDOW_DAYS)
     counts = ads.charger_counts()
     total = counts["total"]
     return ok({
@@ -27,6 +28,9 @@ def kpis():
         "idleCount": counts["idle"],
         "onlineRate": ads.pct(total - counts["fault"], total),
         "windowDays": totals["days"],
+        # 起止日期：前端要在「累计营收/充电量/订单」旁标注这些数从哪天算起（2026-09-16 增补）
+        "windowStart": bounds["start"],
+        "windowEnd": bounds["end"],
         "generatedFrom": "ADS（ads_station / ads_daily / ads_charger）",
     })
 

@@ -22,12 +22,18 @@
 
 | 端点 | 查询 | data 结构 |
 |---|---|---|
-| `/api/overview/kpis` | — | `{ totalRevenueFen, totalEnergyKwh, totalOrders, chargerCount, idleCount, onlineRate, windowDays }` |
+| `/api/overview/kpis` | — | `{ totalRevenueFen, totalEnergyKwh, totalOrders, chargerCount, idleCount, onlineRate, windowDays, windowStart, windowEnd }` |
 | `/api/overview/stations` | — | `[{ stationId, name, district, longitude, latitude, chargerCount, idleCount, utilizationRate, revenueFen, priceFenPerKwh, orderCount, forecastEnabled }]` |
 | `/api/overview/charger-status` | — | `{ idle, reserved, charging, fault, restarting }`（五者之和 = 总桩数） |
 | `/api/overview/load-24h` | `stationId?` | `{ points: [{ stationId, observedAt, loadKw }] }`（**站点数 × 24 点**；当前官方批 7 站 = 168 点） |
 | `/api/overview/events` | `limit?` | `[{ eventType, message, createdAt }]`（倒序） |
 | `/api/quality/summary` | — | `{ runId, tables: [{ name, rowsBefore, rowsAfter }], issues: [{ rule, type, injected, detected, handled, recall }] }` |
+
+累计口径窗口扩展（2026-09-16）：`/api/overview/kpis` 与 `/api/gov/carbon` 在原有字段外
+新增 `windowStart`、`windowEnd`（`YYYY-MM-DD`；`kpis` 原已有 `windowDays`，`carbon` 一并补上），
+取自 `ads_daily` 的窗口首末行 —— 与 `window_totals` 同一窗口，供前端在「累计营收 / 累计充电量 /
+累计订单 / 等效碳减排 / 等效植树」旁标注累计起点，避免答辩时被问「这些数从哪天算起」。
+旧批次缺字段时前端不标注、不回退估算。
 
 质量明细兼容扩展（2026-09-16，大屏接管精修）：保留上表字段，额外返回 `source`、
 `qualityRunId`、`sourceRunId`、`policyVersion`、`readyForTeamDelivery`（boolean 或 null）、
@@ -82,7 +88,7 @@ PRL 精确对账中召回率分母为零时返回 null；旧版独立复算报�
 |---|---|
 | `/api/gov/coverage` | `[{ district, stationCount, chargerCount, population, chargersPer10k }]` |
 | `/api/gov/service-stats` | `[{ district, orderCount, servedUserCnt, avgWaitMin }]` |
-| `/api/gov/carbon` | `{ totalEnergyKwh, co2SavedTon, factorTonPerMwh, factorNote, equivalentTrees }`（要求 `co2SavedTon = 电量/1000 × factorTonPerMwh`，前端会自校验） |
+| `/api/gov/carbon` | `{ totalEnergyKwh, co2SavedTon, factorTonPerMwh, factorNote, equivalentTrees, windowStart, windowEnd, windowDays }`（要求 `co2SavedTon = 电量/1000 × factorTonPerMwh`，前端会自校验） |
 | `/api/gov/peak-load` | `{ points: [{ hour: "08:00", loadKw }] }`（24 点） |
 | `/api/gov/utilization` | `[{ district, chargerCount, stationCount, utilizationRate }]` |
 
