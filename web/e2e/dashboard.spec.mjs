@@ -190,6 +190,9 @@ test('主页版面：1920×1080 一屏放下，地图占据主视区', async ({ 
       kpiWidth: kpi?.clientWidth ?? 0,
       pageScrollHeight: document.documentElement.scrollHeight,
       viewportHeight: window.innerHeight,
+      // 放大 6% 后宽度仍自适应：不能出现横向滚动（横向滚动会藏掉右列面板）
+      scrollWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
     }
   })
 
@@ -197,8 +200,10 @@ test('主页版面：1920×1080 一屏放下，地图占据主视区', async ({ 
   expect(layout.contentHeight).toBeLessThanOrEqual(layout.designHeight)
   // 地图是主视区：图高 ≥380 设计 px（修复前只有 300，且底图仅约 260px 宽）
   expect(layout.mapHeight).toBeGreaterThanOrEqual(380)
-  // 整页在 1080 高度内放下（留 32px 容差给顶栏/页脚）
-  expect(layout.pageScrollHeight).toBeLessThanOrEqual(layout.viewportHeight + 32)
+  // 主页按产品要求整体放大 6%（ScaleFrame zoom=1.06）：宽度仍自适应、无横向滚动，
+  // 代价是纵向比一屏高出约 100px，底部事件流需要往下滚一点（原为「一屏放下 + 32px 容差」）。
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth)
+  expect(layout.pageScrollHeight).toBeLessThanOrEqual(layout.viewportHeight + 150)
 })
 
 test('四个视角子页统一使用 DataV 大屏件，且渲染无报错', async ({ page }) => {
@@ -206,12 +211,12 @@ test('四个视角子页统一使用 DataV 大屏件，且渲染无报错', asyn
   page.on('pageerror', (err) => errors.push(String(err)))
   page.on('console', (msg) => msg.type() === 'error' && errors.push(msg.text()))
 
-  // [路由, 该页图表数]
+  // [路由, 该页图表数]（新 UI 交付后：充电站视角 +预测占用桩、社会视角 +全城预测负荷）
   const pages = [
     ['/#/user', 4],
-    ['/#/station', 4],
+    ['/#/station', 5],
     ['/#/enterprise', 4],
-    ['/#/gov', 3],
+    ['/#/gov', 4],
   ]
   for (const [hash, charts] of pages) {
     await page.goto(hash)
@@ -226,7 +231,7 @@ test('两处容易误读的口径在页面上写清楚了', async ({ page }) => 
   // ① 政府页「全城峰值负荷」是**当日**口径：接口 /gov/peak-load 只返回单日 24 点，
   //    窗口内最大要更高（约 10%）。标题与提示必须能自证是哪一天，否则一定被问住。
   await page.goto('/#/gov')
-  await expect(page.locator('.chart canvas')).toHaveCount(3)
+  await expect(page.locator('.chart canvas')).toHaveCount(4)
   await expect(page.locator('.kpi-label:has-text("全城峰值负荷")')).toContainText('当日')
   const hint = await page.locator('.kpi-card:has-text("全城峰值负荷") .kpi-hint').innerText()
   expect(hint).toMatch(/\d{4}-\d{2}-\d{2}/)
@@ -236,6 +241,14 @@ test('两处容易误读的口径在页面上写清楚了', async ({ page }) => 
   //    名字与说明都要写对，否则那条零线看着像数据坏了。
   await page.goto('/#/enterprise')
   await expect(page.locator('.chart canvas')).toHaveCount(4)
+  // canvas 出现 ≠ option 就绪：接口数据回来前 series 还是空的（曾偶发取到 null）
+  await expect
+    .poll(
+      () => page.evaluate(() => [...document.querySelectorAll('.chart')]
+        .some((c) => c.__echarts?.getOption()?.series?.some((s) => s.name === '窗口内首单新客'))),
+      { timeout: 15_000, message: '企业页「窗口内首单新客」系列未出现' },
+    )
+    .toBe(true)
   const growth = await page.evaluate(() => {
     const chart = [...document.querySelectorAll('.chart')].find((c) =>
       c.__echarts?.getOption()?.series?.some((s) => s.name === '窗口内首单新客'),
