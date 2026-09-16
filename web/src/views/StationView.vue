@@ -9,7 +9,7 @@ import { ENDPOINTS } from '@/api/endpoints'
 import { loadBeijingMap } from '@/lib/beijingMap'
 import { hasCoordinates } from '@/lib/coordinates'
 import { buildBeijingStationOption } from '@/lib/charts/beijingStation'
-import { buildCoverageOption, buildHealthOption, buildMixOption, buildStationForecastOption, buildUtilizationOption } from '@/lib/charts/station'
+import { buildCoverageOption, buildHealthOption, buildMixOption, buildStationOccupancyOption, buildUtilizationOption } from '@/lib/charts/station'
 import { createLatestRequest } from '@/lib/latestRequest'
 
 const data = ref(null), detail = ref(null), stationId = ref(null), error = ref('')
@@ -84,13 +84,18 @@ const utilOption = computed(() => detail.value ? buildUtilizationOption(detail.v
 const mixOption = computed(() => detail.value ? buildMixOption(detail.value.mix) : {})
 const healthOption = computed(() => detail.value ? buildHealthOption(detail.value.health) : {})
 const stationForecast = computed(() => forecastPoints.value.filter(p => Number(p.stationId) === stationId.value))
-const forecastOption = computed(() => buildStationForecastOption(stationForecast.value, detail.value?.mix ?? null))
-const forecastMissing = computed(() => Boolean(forecastOption.value.meta?.noForecast))
+const occupancyOption = computed(() => buildStationOccupancyOption(stationForecast.value, station.value?.chargerCount ?? null))
+const forecastMissing = computed(() => Boolean(occupancyOption.value.meta?.noForecast))
 const forecastSummary = computed(() => {
-  const meta = forecastOption.value.meta ?? {}
+  const meta = occupancyOption.value.meta ?? {}
   if (meta.noForecast) return forecastNote.value || '该站点暂无预测，仅展示本批实际数据。'
-  const rated = meta.ratedPowerKw ? `｜额定容量 ${Math.round(meta.ratedPowerKw)} kW` : ''
-  return `${stationName.value}｜预测峰值 ${Math.round(meta.peakLoadKw)} kW（${meta.peakHour}）${rated}｜点色为预测拥堵等级`
+  const rate = meta.busiestUtilization != null ? `，利用率 ${meta.busiestUtilization}%` : ''
+  const risk = meta.fullLoadHours.length
+    ? `满载风险时段（利用率 ≥90%）${meta.fullLoadHours.join('、')}`
+    : '无利用率 ≥90% 的时段'
+  return `${stationName.value}｜最忙 ${meta.busiestHour}（占用 ${meta.busiestOccupied}/${meta.chargerCount} 桩${rate}）` +
+    `｜最空闲 ${meta.idlestHour}（空闲 ${meta.idlestIdle} 桩）｜${risk}` +
+    `｜当日预测电量约 ${Math.round(meta.predictedEnergyKwh).toLocaleString('zh-CN')} kWh`
 })
 const coverageOption = computed(() => {
   if (!data.value) return {}
@@ -115,6 +120,6 @@ function selectMapStation(p) {
       <section class="panel panel--dv"><DvFrame title="快慢充结构（个）" code="02"><EChart v-if="detail" :option="mixOption" /><p v-if="detail" class="note">快充订单占比 {{ (detail.mix.fastOrderShare * 100).toFixed(0) }}% · 功率见图例</p></DvFrame></section>
       <section class="panel panel--dv"><DvFrame title="设备健康：Top 桩累计充电次数" code="03"><EChart v-if="detail" :option="healthOption" /><p v-if="detail" class="note">存在故障记录 {{ detail.health.faultCount }} 桩 · 运维巡检参考</p></DvFrame></section>
     </div>
-    <section class="panel panel--dv forecast-panel"><DvFrame title="未来 24h 负荷预测与满载风险（kW）" code="05"><EChart v-if="!forecastMissing" :option="forecastOption" /><p v-else class="empty-state">{{ forecastSummary }}</p><p class="note">{{ forecastSummary }}<br>预测来自本批 Spark MLlib 批次（`GET /api/forecast/24h` 按站点过滤），非实时遥测。</p></DvFrame></section>
+    <section class="panel panel--dv forecast-panel"><DvFrame title="未来 24h 桩位占用与忙碌时段预测（个 · 颜色=预测拥堵等级）" code="05"><EChart v-if="!forecastMissing" :option="occupancyOption" /><p v-else class="empty-state">{{ forecastSummary }}</p><p class="note">{{ forecastSummary }}<br>占用 + 空闲 = 本站桩数；颜色为模型给出的拥堵等级。本站视角看「什么时候会排队」，城市级负荷见政府视角。</p></DvFrame></section>
   </section>
 </template>

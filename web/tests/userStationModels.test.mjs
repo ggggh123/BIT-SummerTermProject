@@ -11,7 +11,7 @@ import {
   buildCoverageOption,
   buildHealthOption,
   buildMixOption,
-  buildStationForecastOption,
+  buildStationOccupancyOption,
   buildUtilizationOption,
 } from '../src/lib/charts/station.js'
 
@@ -101,23 +101,33 @@ test('区域覆盖：8 个站点且经纬度在北京范围内', () => {
   }
 })
 
-test('单站预测：按站点过滤出 24 点，额定容量参考线由快慢充结构推出', () => {
+test('单站占用预测：占用+空闲=本站桩数，并给出最忙/最空闲与满载风险时段', () => {
   const points = forecast24h.data.points.filter((p) => p.stationId === 1)
-  const mix = stationDetail.data['1'].mix
-  const opt = buildStationForecastOption(points, mix)
+  const chargerCount = stationDetail.data['1'].chargerCount
+  const opt = buildStationOccupancyOption(points, chargerCount)
   assertClean(opt)
   assert.equal(opt.series[0].data.length, 24)
   assert.equal(opt.meta.points, 24)
-  const rated = mix.fastCount * mix.fastPowerKw + mix.slowCount * mix.slowPowerKw
-  assert.equal(opt.meta.ratedPowerKw, rated)
-  assert.equal(opt.series[0].markLine.data[0].yAxis, rated)
-  assert.equal(opt.meta.peakLoadKw, Math.max(...opt.series[0].data.map((d) => d.value)))
+  assert.equal(opt.meta.chargerCount, chargerCount)
+  for (let i = 0; i < 24; i += 1) {
+    assert.equal(
+      opt.series[0].data[i].value + opt.series[1].data[i],
+      chargerCount,
+      `第 ${i + 1} 小时「占用 + 空闲」应等于本站桩数`,
+    )
+  }
+  assert.ok(opt.meta.busiestHour && opt.meta.idlestHour, '应给出最忙与最空闲时段')
+  assert.ok(opt.meta.busiestOccupied > 0 && opt.meta.idlestIdle > 0)
+  assert.ok(opt.meta.busiestUtilization > 0 && opt.meta.busiestUtilization <= 100)
+  assert.ok(opt.meta.predictedEnergyKwh > 0)
+  assert.ok(Array.isArray(opt.meta.fullLoadHours))
   assert.ok(opt.series[0].data.every((d) => d.itemStyle.color), '每个点都应有预测拥堵等级配色')
 })
 
-test('单站预测：无该站点预测点时返回 noForecast（界面显示「暂无预测」而非空图）', () => {
-  const opt = buildStationForecastOption([], null)
+test('单站占用预测：无该站点预测点时返回 noForecast（界面显示「暂无预测」而非空图）', () => {
+  const opt = buildStationOccupancyOption([], null)
   assert.equal(opt.meta.noForecast, true)
-  assert.equal(opt.meta.ratedPowerKw, null)
+  assert.equal(opt.meta.chargerCount, null)
   assert.deepEqual(opt.series[0].data, [])
+  assert.deepEqual(opt.meta.fullLoadHours, [])
 })

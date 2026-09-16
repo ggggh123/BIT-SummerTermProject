@@ -55,67 +55,90 @@ export function buildHealthOption(health) {
 // 拥堵等级色标：等级取自接口 ads_forecast_24h.congestion_level，前端只着色、不重算
 const CONGESTION_COLOR = { low: '#65dec0', medium: '#d8b27a', high: '#e78d76' }
 const CONGESTION_LABEL = { low: '低拥堵', medium: '中拥堵', high: '高拥堵' }
+const FULL_LOAD_RATIO = 0.9
 
 /**
- * 单站未来 1–24h 预测负荷曲线（点色=预测拥堵等级），
- * 并叠加由快慢充结构推出的站点额定容量参考线：接近容量即为预测满载风险。
+ * 单站未来 1–24h **桩位占用**预测：占用/空闲堆叠柱（占用按预测拥堵等级着色），
+ * 并给出最忙 / 最空闲时段、利用率 ≥90% 的满载风险小时与折算预测电量。
+ *
+ * 与政府视角「全城负荷曲线（kW）」刻意不同口径：这里回答运营者的问题——
+ * 「本站什么时候会排队、什么时候有富余」，不重复展示城市级负荷。
  */
-export function buildStationForecastOption(points = [], mix = null) {
+export function buildStationOccupancyOption(points = [], chargerCount = null) {
   const rows = [...points].sort((a, b) => a.horizonH - b.horizonH)
+  const hour = (row) => row.forecastAt.slice(11, 16)
   if (!rows.length) {
     return {
       xAxis: { type: 'category', data: [], name: '时刻' },
-      yAxis: { type: 'value', name: 'kW' },
-      series: [{ name: '未来预测负荷', type: 'line', data: [] }],
-      meta: { points: 0, peakHorizon: null, peakHour: null, peakLoadKw: null, ratedPowerKw: null, noForecast: true },
+      yAxis: { type: 'value', name: '桩（个）' },
+      series: [{ name: '预测占用桩', type: 'bar', data: [] }],
+      meta: {
+        points: 0, noForecast: true, chargerCount: chargerCount ?? null,
+        busiestHour: null, busiestOccupied: null, busiestUtilization: null,
+        idlestHour: null, idlestIdle: null, fullLoadHours: [], predictedEnergyKwh: null,
+      },
     }
   }
-  const peak = rows.reduce((acc, r, i) => (r.predictedLoadKw > rows[acc].predictedLoadKw ? i : acc), 0)
-  const rated = mix ? mix.fastCount * mix.fastPowerKw + mix.slowCount * mix.slowPowerKw : null
+  const occupied = (row) => Number(row.predictedBusyCount) || 0
+  const idleCount = (row) => Number(row.predictedIdleCount) || 0
+  const utilization = (row) =>
+    chargerCount ? Number(((occupied(row) / chargerCount) * 100).toFixed(1)) : null
+  const busiest = rows.reduce((acc, row, i) => (occupied(row) > occupied(rows[acc]) ? i : acc), 0)
+  const idlest = rows.reduce((acc, row, i) => (idleCount(row) > idleCount(rows[acc]) ? i : acc), 0)
+  const fullLoad = rows.filter((row) => chargerCount && occupied(row) / chargerCount >= FULL_LOAD_RATIO)
   return {
     tooltip: {
       trigger: 'axis',
+      axisPointer: { type: 'shadow' },
       formatter: (params) => {
         const row = rows[params?.[0]?.dataIndex]
         if (!row) return ''
         const level = CONGESTION_LABEL[row.congestionLevel] ?? row.congestionLevel
-        return `${row.forecastAt.slice(11, 16)}（第 ${row.horizonH} 小时）<br/>预测负荷 ${row.predictedLoadKw} kW` +
-          `<br/>预测空闲 ${row.predictedIdleCount} 桩 · ${level}`
+        const rate = utilization(row)
+        return `${hour(row)}（第 ${row.horizonH} 小时）<br/>预测占用 ${occupied(row)} 桩 · 空闲 ${idleCount(row)} 桩` +
+          `<br/>拥堵等级 ${level}${rate != null ? ` · 利用率 ${rate}%` : ''}`
       },
     },
-    xAxis: { type: 'category', data: rows.map((r) => r.forecastAt.slice(11, 16)), name: '时刻' },
-    yAxis: { type: 'value', name: 'kW' },
+    legend: { data: ['预测占用桩', '预测空闲桩'], right: 0, top: 0 },
+    grid: { left: 48, right: 20, top: 34, bottom: 26 },
+    xAxis: { type: 'category', data: rows.map(hour), name: '时刻' },
+    yAxis: { type: 'value', name: '桩（个）' },
     series: [
       {
-        name: '未来预测负荷',
-        type: 'line',
-        smooth: true,
-        areaStyle: {},
-        data: rows.map((r) => ({
-          value: r.predictedLoadKw,
-          itemStyle: { color: CONGESTION_COLOR[r.congestionLevel] ?? '#78acd5' },
+        name: '预测占用桩',
+        type: 'bar',
+        stack: 'stalls',
+        barMaxWidth: 14,
+        data: rows.map((row) => ({
+          value: occupied(row),
+          itemStyle: { color: CONGESTION_COLOR[row.congestionLevel] ?? '#78acd5' },
         })),
         markPoint: {
-          symbolSize: 46,
-          data: [{ coord: [peak, rows[peak].predictedLoadKw], name: '峰值', value: Math.round(rows[peak].predictedLoadKw) }],
+          symbolSize: 42,
+          data: [{ coord: [busiest, occupied(rows[busiest])], name: '最忙', value: occupied(rows[busiest]) }],
         },
-        ...(rated
-          ? {
-              markLine: {
-                symbol: 'none',
-                data: [{ yAxis: rated, label: { formatter: `额定容量 ${Math.round(rated)} kW` } }],
-              },
-            }
-          : {}),
+      },
+      {
+        name: '预测空闲桩',
+        type: 'bar',
+        stack: 'stalls',
+        barMaxWidth: 14,
+        itemStyle: { color: '#2f4f5c' },
+        data: rows.map(idleCount),
       },
     ],
     meta: {
       points: rows.length,
-      peakHorizon: rows[peak].horizonH,
-      peakHour: rows[peak].forecastAt.slice(11, 16),
-      peakLoadKw: rows[peak].predictedLoadKw,
-      ratedPowerKw: rated,
       noForecast: false,
+      chargerCount: chargerCount ?? null,
+      busiestHour: hour(rows[busiest]),
+      busiestOccupied: occupied(rows[busiest]),
+      busiestUtilization: utilization(rows[busiest]),
+      idlestHour: hour(rows[idlest]),
+      idlestIdle: idleCount(rows[idlest]),
+      fullLoadHours: fullLoad.map(hour),
+      // 每个点是以小时为单位的平均负荷（kW），× 1h 即为该小时电量（kWh）
+      predictedEnergyKwh: Number(rows.reduce((sum, row) => sum + (Number(row.predictedLoadKw) || 0), 0).toFixed(1)),
     },
   }
 }
