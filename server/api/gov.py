@@ -62,7 +62,9 @@ def service_stats():
 
 @bp.get("/gov/carbon")
 def carbon():
-    total_energy = ads.window_totals(ads.WINDOW_DAYS)["energyKwh"]
+    totals = ads.window_totals(ads.WINDOW_DAYS)
+    bounds = ads.window_bounds(ads.WINDOW_DAYS)
+    total_energy = totals["energyKwh"]
     factor = float(ads.meta("carbonFactorTonPerMwh", "") or 0.581)
     co2_ton = round(total_energy / 1000.0 * factor, 1)
     # 等效植树：1 棵树年均固碳 18 kg（口径见 ads_meta.carbonFactorNote）
@@ -73,6 +75,10 @@ def carbon():
         "factorTonPerMwh": factor,
         "factorNote": ads.meta("carbonFactorNote", "按全国电网平均排放因子 0.581 tCO₂/MWh 折算"),
         "equivalentTrees": trees,
+        # 累计口径窗口：电量/减排/植树三个指标必须能自证累计起点（2026-09-16 增补）
+        "windowStart": bounds["start"],
+        "windowEnd": bounds["end"],
+        "windowDays": totals["days"],
     })
 
 

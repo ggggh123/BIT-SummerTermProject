@@ -1,0 +1,364 @@
+{
+  "contract_version": "0.1.0-draft",
+  "policy_version": "0.2.2-draft",
+  "contract_status": "DRAFT_PENDING_TL_SCML_PE_REVIEW",
+  "run_id": "prl-clean-20260915T133614Z-56524",
+  "source_run_id": "scml-20260914",
+  "source_kind": "ods-handoff",
+  "data_cutoff": "2026-09-15T00:00:00+08:00",
+  "generated_at": "2026-09-15T21:53:28.745560+08:00",
+  "application_id": "application_1789457728162_0004",
+  "master": "yarn",
+  "spark": "3.5.7",
+  "driver_python": "3.10.12",
+  "worker_python": [
+    "3.10.12",
+    "3.10.12"
+  ],
+  "money_reference": {
+    "reference": "constant_station_price",
+    "relative_tolerance": "0.01",
+    "absolute_tolerance_fen": "1",
+    "repair_exact_yuan_factor": true,
+    "note": "仅为当前模拟数据提案：批次内站点单价恒定。真实变价订单须补充价格快照，不能用当前价回算历史账单。"
+  },
+  "output": "hdfs://localhost:8020/ev-charging/quality/batches/prl-clean-20260915T133614Z-56524",
+  "ubuntu22_verified": false,
+  "input_profile": "scml-ods-v0.1",
+  "source_contract_version": "ods-dwd-v0.1",
+  "source_manifest_sha256": "c2faa4c2049d000f627df3c5a04ff41446b30112bd5478ccf813ce88d0fb42a6",
+  "dwd_profile": "scml-dwd-v0.1",
+  "ready_for_team_delivery": false,
+  "pending_policy_notes": [
+    "Q2：上游订单注入保留不同 id，与文档所写按主键检出不一致；不读取标签指导去重。",
+    "Q6：上游整数除以 100 已丢失分位；仅精确可证明的单位错误允许修正，其余隔离。",
+    "Q9：越界坐标仅置空该字段（latitude/longitude 已列为 optional，允许为空）并保留站点记录，不隔离、不填造坐标；coord_imputed 恒为 0。口径由 #2 TL 于 2026-09-15 拍板（contracts/README §7 第 4 条），与 quality-policy 的 bbox_note 一致。",
+    "Q5：本实现隔离超占用小时，不裁剪为满载；小时缺口必须在 ML 使用前核验。",
+    "合法未开工订单保留空 started_at/hour/dt，使用 Hive NULL 分区；不擅自改取预约日期。",
+    "可选 nickname/avatar_path 的展示默认值不计入 Q1；#4 dim_users 仅输出 nickname，不输出 avatar_path。dim_date 仍由 #4 生成。",
+    "业务表匹配下游精确字段；原始行与批次追踪在 audit/dwd_lineage，不作为额外业务列。"
+  ],
+  "hourly_coverage": {
+    "expected_station_hours": 17280,
+    "retained_station_hours": 17228,
+    "missing_station_hours": 52,
+    "row_offset_ml_safe": false,
+    "note": "缺失小时不插值；#5 不可把第 h 行当作第 h 小时。"
+  },
+  "report_type": "cleaning_report",
+  "tables": {
+    "users": {
+      "before": 5000,
+      "quarantined": 15,
+      "repaired_retained_rows": 25,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 40,
+      "after": 4985,
+      "retention_rate": 0.997,
+      "dwd_table": "dim_users"
+    },
+    "stations": {
+      "before": 8,
+      "quarantined": 0,
+      "repaired_retained_rows": 2,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 2,
+      "after": 8,
+      "retention_rate": 1.0,
+      "dwd_table": "dim_stations"
+    },
+    "chargers": {
+      "before": 288,
+      "quarantined": 1,
+      "repaired_retained_rows": 0,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 1,
+      "after": 287,
+      "retention_rate": 0.9965277777777778,
+      "dwd_table": "dim_chargers"
+    },
+    "orders": {
+      "before": 120000,
+      "quarantined": 4204,
+      "repaired_retained_rows": 1188,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 780,
+      "affected_rows": 5392,
+      "after": 115796,
+      "retention_rate": 0.9649666666666666,
+      "dwd_table": "dwd_order_detail"
+    },
+    "telemetry": {
+      "before": 1000000,
+      "quarantined": 140273,
+      "repaired_retained_rows": 8727,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 3599,
+      "affected_rows": 149000,
+      "after": 859727,
+      "retention_rate": 0.859727,
+      "dwd_table": "dwd_telemetry_detail"
+    },
+    "station_hourly": {
+      "before": 17280,
+      "quarantined": 52,
+      "repaired_retained_rows": 0,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 0,
+      "affected_rows": 52,
+      "after": 17228,
+      "retention_rate": 0.9969907407407408,
+      "dwd_table": "dwd_station_hourly"
+    },
+    "events": {
+      "before": 20000,
+      "quarantined": 612,
+      "repaired_retained_rows": 0,
+      "filled_retained_rows": 0,
+      "cascade_affected_rows": 435,
+      "affected_rows": 612,
+      "after": 19388,
+      "retention_rate": 0.9694,
+      "dwd_table": "dwd_event"
+    }
+  },
+  "dwd_assertions": [
+    {
+      "table": "dwd_order_detail",
+      "ok": true,
+      "rows": 115796,
+      "keys": 115796,
+      "violations": 0
+    },
+    {
+      "table": "dwd_telemetry_detail",
+      "ok": true,
+      "rows": 859727,
+      "keys": 859727,
+      "violations": 0
+    },
+    {
+      "table": "dwd_station_hourly",
+      "ok": true,
+      "rows": 17228,
+      "keys": 17228,
+      "violations": 0
+    },
+    {
+      "table": "dwd_event",
+      "ok": true,
+      "rows": 19388,
+      "keys": 19388,
+      "violations": 0
+    },
+    {
+      "table": "dim_stations",
+      "ok": true,
+      "rows": 8,
+      "keys": 8,
+      "violations": 0
+    },
+    {
+      "table": "dim_chargers",
+      "ok": true,
+      "rows": 287,
+      "keys": 287,
+      "violations": 0
+    },
+    {
+      "table": "dim_users",
+      "ok": true,
+      "rows": 4985,
+      "keys": 4985,
+      "violations": 0
+    }
+  ],
+  "rule_action_hits": [
+    {
+      "table": "telemetry",
+      "rule": "Q7",
+      "origin": "cascade",
+      "action": "reject",
+      "rows": 3599
+    },
+    {
+      "table": "orders",
+      "rule": "Q5",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 360
+    },
+    {
+      "table": "chargers",
+      "rule": "Q8",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 1
+    },
+    {
+      "table": "orders",
+      "rule": "Q2",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 40
+    },
+    {
+      "table": "events",
+      "rule": "Q7",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 177
+    },
+    {
+      "table": "orders",
+      "rule": "Q6",
+      "origin": "direct",
+      "action": "repair",
+      "rows": 5
+    },
+    {
+      "table": "orders",
+      "rule": "Q3",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 360
+    },
+    {
+      "table": "orders",
+      "rule": "Q7",
+      "origin": "cascade",
+      "action": "reject",
+      "rows": 780
+    },
+    {
+      "table": "events",
+      "rule": "Q7",
+      "origin": "cascade",
+      "action": "reject",
+      "rows": 435
+    },
+    {
+      "table": "station_hourly",
+      "rule": "Q5",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 52
+    },
+    {
+      "table": "users",
+      "rule": "Q10",
+      "origin": "direct",
+      "action": "repair",
+      "rows": 25
+    },
+    {
+      "table": "stations",
+      "rule": "Q9",
+      "origin": "direct",
+      "action": "repair",
+      "rows": 1
+    },
+    {
+      "table": "orders",
+      "rule": "Q4",
+      "origin": "direct",
+      "action": "repair",
+      "rows": 1200
+    },
+    {
+      "table": "orders",
+      "rule": "Q2",
+      "origin": "direct",
+      "action": "deduplicate",
+      "rows": 1174
+    },
+    {
+      "table": "telemetry",
+      "rule": "Q1",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 5049
+    },
+    {
+      "table": "orders",
+      "rule": "Q6",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 915
+    },
+    {
+      "table": "orders",
+      "rule": "Q1",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 603
+    },
+    {
+      "table": "orders",
+      "rule": "Q7",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 360
+    },
+    {
+      "table": "users",
+      "rule": "Q8",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 15
+    },
+    {
+      "table": "telemetry",
+      "rule": "Q3",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 2986
+    },
+    {
+      "table": "stations",
+      "rule": "Q10",
+      "origin": "direct",
+      "action": "repair",
+      "rows": 1
+    },
+    {
+      "table": "telemetry",
+      "rule": "Q2",
+      "origin": "direct",
+      "action": "deduplicate",
+      "rows": 8647
+    },
+    {
+      "table": "telemetry",
+      "rule": "Q4",
+      "origin": "direct",
+      "action": "repair",
+      "rows": 10000
+    },
+    {
+      "table": "telemetry",
+      "rule": "Q2",
+      "origin": "direct",
+      "action": "reject",
+      "rows": 121568
+    }
+  ],
+  "order_amount_reconciliation": {
+    "raw_declared_fen_numeric_sum": "482738094.000000",
+    "quarantined_raw_numeric_sum": "15628886.000000",
+    "retained_repair_delta_fen": "29205.000000",
+    "output_amount_fen": "467138413.000000",
+    "unparseable_or_missing_amount_rows": 0,
+    "balanced": true,
+    "note": "原始合计按原列声明的分口径统计，不代表真实营收；无法解析的金额不参与数值合计并单独计数。修正差额、隔离量均显式保留。"
+  },
+  "notes": [
+    "before = after + quarantined，按唯一原始行计算，不能将规则命中量直接相加。",
+    "修正／填充保留行可相互重叠，不能相加得保留数；隔离行的修正建议不算实际保留修正。",
+    "events 输出 dwd_event，charger_fault 映射为 fault；原始行追踪位于 audit/dwd_lineage。",
+    "当前缺少 #4 的 dim_date，因此没有宣称日期维度已验收。"
+  ]
+}

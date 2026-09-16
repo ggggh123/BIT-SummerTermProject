@@ -12,7 +12,7 @@ const navs = [
   { name: 'user', path: '/user', label: '用户视角', caption: '充电决策' },
   { name: 'station', path: '/station', label: '充电站视角', caption: '设施运营' },
   { name: 'enterprise', path: '/enterprise', label: '企业视角', caption: '经营洞察' },
-  { name: 'gov', path: '/gov', label: '政府视角', caption: '城市效能' },
+  { name: 'gov', path: '/gov', label: '社会视角', caption: '城市效能' },
 ]
 const badge = computed(() => {
   if (connectionState.value === 'error') return { cls: 'pill-error', text: '接口异常 · 保留上次数据' }

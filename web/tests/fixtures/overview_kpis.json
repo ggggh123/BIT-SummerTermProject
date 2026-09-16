@@ -9,6 +9,8 @@
     "idleCount": 127,
     "onlineRate": 97.8,
     "windowDays": 90,
+    "windowStart": "2026-06-17",
+    "windowEnd": "2026-09-14",
     "generatedFrom": "ADS（ads_revenue_overview / ads_charger_health）"
   },
   "generatedAt": "2026-09-14T10:05:00+08:00"

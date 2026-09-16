@@ -1,0 +1,106 @@
+{
+  "contract_version": "0.1.0-draft",
+  "policy_version": "0.2.2-draft",
+  "contract_status": "DRAFT_PENDING_TL_SCML_PE_REVIEW",
+  "run_id": "prl-clean-20260915T133614Z-56524",
+  "source_run_id": "scml-20260914",
+  "source_kind": "ods-handoff",
+  "data_cutoff": "2026-09-15T00:00:00+08:00",
+  "generated_at": "2026-09-15T21:53:28.745560+08:00",
+  "application_id": "application_1789457728162_0004",
+  "master": "yarn",
+  "spark": "3.5.7",
+  "driver_python": "3.10.12",
+  "worker_python": [
+    "3.10.12",
+    "3.10.12"
+  ],
+  "money_reference": {
+    "reference": "constant_station_price",
+    "relative_tolerance": "0.01",
+    "absolute_tolerance_fen": "1",
+    "repair_exact_yuan_factor": true,
+    "note": "仅为当前模拟数据提案：批次内站点单价恒定。真实变价订单须补充价格快照，不能用当前价回算历史账单。"
+  },
+  "output": "hdfs://localhost:8020/ev-charging/quality/batches/prl-clean-20260915T133614Z-56524",
+  "ubuntu22_verified": false,
+  "input_profile": "scml-ods-v0.1",
+  "source_contract_version": "ods-dwd-v0.1",
+  "source_manifest_sha256": "c2faa4c2049d000f627df3c5a04ff41446b30112bd5478ccf813ce88d0fb42a6",
+  "dwd_profile": "scml-dwd-v0.1",
+  "ready_for_team_delivery": false,
+  "pending_policy_notes": [
+    "Q2：上游订单注入保留不同 id，与文档所写按主键检出不一致；不读取标签指导去重。",
+    "Q6：上游整数除以 100 已丢失分位；仅精确可证明的单位错误允许修正，其余隔离。",
+    "Q9：越界坐标仅置空该字段（latitude/longitude 已列为 optional，允许为空）并保留站点记录，不隔离、不填造坐标；coord_imputed 恒为 0。口径由 #2 TL 于 2026-09-15 拍板（contracts/README §7 第 4 条），与 quality-policy 的 bbox_note 一致。",
+    "Q5：本实现隔离超占用小时，不裁剪为满载；小时缺口必须在 ML 使用前核验。",
+    "合法未开工订单保留空 started_at/hour/dt，使用 Hive NULL 分区；不擅自改取预约日期。",
+    "可选 nickname/avatar_path 的展示默认值不计入 Q1；#4 dim_users 仅输出 nickname，不输出 avatar_path。dim_date 仍由 #4 生成。",
+    "业务表匹配下游精确字段；原始行与批次追踪在 audit/dwd_lineage，不作为额外业务列。"
+  ],
+  "hourly_coverage": {
+    "expected_station_hours": 17280,
+    "retained_station_hours": 17228,
+    "missing_station_hours": 52,
+    "row_offset_ml_safe": false,
+    "note": "缺失小时不插值；#5 不可把第 h 行当作第 h 小时。"
+  },
+  "ok": true,
+  "scope": "draft-quality-clean-handoff",
+  "elapsed_seconds": 963.64,
+  "dwd_tables": 7,
+  "dwd_rows": 1017419,
+  "input_rows": 1162576,
+  "quarantined_rows": 145157,
+  "assertions": [
+    {
+      "table": "dwd_order_detail",
+      "ok": true,
+      "rows": 115796,
+      "keys": 115796,
+      "violations": 0
+    },
+    {
+      "table": "dwd_telemetry_detail",
+      "ok": true,
+      "rows": 859727,
+      "keys": 859727,
+      "violations": 0
+    },
+    {
+      "table": "dwd_station_hourly",
+      "ok": true,
+      "rows": 17228,
+      "keys": 17228,
+      "violations": 0
+    },
+    {
+      "table": "dwd_event",
+      "ok": true,
+      "rows": 19388,
+      "keys": 19388,
+      "violations": 0
+    },
+    {
+      "table": "dim_stations",
+      "ok": true,
+      "rows": 8,
+      "keys": 8,
+      "violations": 0
+    },
+    {
+      "table": "dim_chargers",
+      "ok": true,
+      "rows": 287,
+      "keys": 287,
+      "violations": 0
+    },
+    {
+      "table": "dim_users",
+      "ok": true,
+      "rows": 4985,
+      "keys": 4985,
+      "violations": 0
+    }
+  ]
+}

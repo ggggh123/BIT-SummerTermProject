@@ -95,6 +95,9 @@ const kpis = {
   idleCount: chargerStatus.idle,
   onlineRate: Number((((totalChargers - fault) / totalChargers) * 100).toFixed(1)),
   windowDays: revenueTrend.length,
+  // 累计口径起止：前端在「累计营收/充电量/订单」旁标注从哪天开始累计
+  windowStart: revenueTrend[0].date,
+  windowEnd: revenueTrend[revenueTrend.length - 1].date,
   generatedFrom: 'ADS（ads_revenue_overview / ads_charger_health）',
 }
 
@@ -334,6 +337,10 @@ const govCarbon = {
   factorTonPerMwh: 0.581,
   factorNote: '按全国电网平均排放因子 0.581 tCO₂/MWh 折算（项目假设，答辩需注明来源）',
   equivalentTrees: Math.round(((kpis.totalEnergyKwh / 1000) * 0.581 * 1000) / 18),
+  // 与 /api/gov/carbon 契约一致：累计口径窗口
+  windowStart: revenueTrend[0].date,
+  windowEnd: revenueTrend[revenueTrend.length - 1].date,
+  windowDays: revenueTrend.length,
 }
 
 const govPeakLoad = {

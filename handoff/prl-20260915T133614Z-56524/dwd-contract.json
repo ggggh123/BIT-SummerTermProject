@@ -1,0 +1,178 @@
+{
+  "profile": "scml-dwd-v0.1",
+  "status": "SCHEMA_ADAPTED_POLICY_PENDING_TEAM_REVIEW",
+  "upstream_commit": "e519d8d72129415af583e00ecbb1debbc93393d6",
+  "upstream_latest_reviewed_commit": "13b18f0dff21b6988074cac65d7389057bcbce01",
+  "upstream_file": "part2/scml/warehouse/sql/dwd_contract.sql",
+  "time_zone": "Asia/Shanghai",
+  "timestamp_format": "ISO8601 +08:00 string",
+  "tables": {
+    "dwd_order_detail": {
+      "source": "orders",
+      "key": [
+        "order_id"
+      ],
+      "partition": [
+        "dt"
+      ],
+      "time": "started_at",
+      "optional": [
+        "started_at",
+        "ended_at",
+        "wait_min",
+        "hour",
+        "dt"
+      ],
+      "columns": {
+        "order_id": "integer",
+        "user_id": "integer",
+        "charger_id": "integer",
+        "station_id": "integer",
+        "status": "string",
+        "reserved_at": "string",
+        "started_at": "string",
+        "ended_at": "string",
+        "energy_kwh": "double",
+        "amount_fen": "long",
+        "wait_min": "double",
+        "hour": "integer",
+        "dt": "string"
+      }
+    },
+    "dwd_telemetry_detail": {
+      "source": "telemetry",
+      "key": [
+        "telemetry_id"
+      ],
+      "partition": [
+        "dt"
+      ],
+      "time": "recorded_at",
+      "optional": [],
+      "columns": {
+        "telemetry_id": "integer",
+        "charger_id": "integer",
+        "station_id": "integer",
+        "recorded_at": "string",
+        "hour": "integer",
+        "power_kw": "double",
+        "energy_increment_kwh": "double",
+        "event_type": "string",
+        "dt": "string"
+      }
+    },
+    "dwd_station_hourly": {
+      "source": "station_hourly",
+      "key": [
+        "station_id",
+        "observed_at"
+      ],
+      "partition": [
+        "dt"
+      ],
+      "time": "observed_at",
+      "optional": [],
+      "columns": {
+        "station_id": "integer",
+        "observed_at": "string",
+        "hour": "integer",
+        "pile_count": "integer",
+        "rated_power_kw": "double",
+        "busy_count": "integer",
+        "load_kw": "double",
+        "utilization": "double",
+        "temperature_c": "double",
+        "is_holiday": "integer",
+        "dt": "string"
+      }
+    },
+    "dwd_event": {
+      "source": "events",
+      "key": [
+        "event_id"
+      ],
+      "partition": [
+        "dt"
+      ],
+      "time": "created_at",
+      "optional": [],
+      "columns": {
+        "event_id": "integer",
+        "event_type": "string",
+        "entity_type": "string",
+        "entity_id": "integer",
+        "message": "string",
+        "created_at": "string",
+        "hour": "integer",
+        "dt": "string"
+      }
+    },
+    "dim_stations": {
+      "source": "stations",
+      "key": [
+        "station_id"
+      ],
+      "partition": [],
+      "optional": [
+        "latitude",
+        "longitude"
+      ],
+      "columns": {
+        "station_id": "integer",
+        "name": "string",
+        "name_raw": "string",
+        "address": "string",
+        "district": "string",
+        "district_raw": "string",
+        "latitude": "double",
+        "longitude": "double",
+        "price_fen_per_kwh": "integer",
+        "forecast_enabled": "integer",
+        "coord_imputed": "integer"
+      }
+    },
+    "dim_chargers": {
+      "source": "chargers",
+      "key": [
+        "charger_id"
+      ],
+      "partition": [],
+      "optional": [],
+      "columns": {
+        "charger_id": "integer",
+        "station_id": "integer",
+        "code": "string",
+        "type": "string",
+        "power_kw": "integer",
+        "status": "string",
+        "charge_count": "integer",
+        "total_duration_sec": "long"
+      }
+    },
+    "dim_users": {
+      "source": "users",
+      "key": [
+        "user_id"
+      ],
+      "partition": [],
+      "optional": [],
+      "columns": {
+        "user_id": "integer",
+        "mobile": "string",
+        "nickname": "string",
+        "balance_fen": "long",
+        "status": "string",
+        "registered_at": "string"
+      }
+    }
+  },
+  "unresolved_policy_notes": [
+    "Q2：上游订单注入保留不同 id，与文档所写按主键检出不一致；不读取标签指导去重。",
+    "Q6：上游整数除以 100 已丢失分位；仅精确可证明的单位错误允许修正，其余隔离。",
+    "Q9：越界坐标仅置空该字段（latitude/longitude 已列为 optional，允许为空）并保留站点记录，不隔离、不填造坐标；coord_imputed 恒为 0。口径由 #2 TL 于 2026-09-15 拍板（contracts/README §7 第 4 条），与 quality-policy 的 bbox_note 一致。",
+    "Q5：本实现隔离超占用小时，不裁剪为满载；小时缺口必须在 ML 使用前核验。",
+    "合法未开工订单保留空 started_at/hour/dt，使用 Hive NULL 分区；不擅自改取预约日期。",
+    "可选 nickname/avatar_path 的展示默认值不计入 Q1；#4 dim_users 仅输出 nickname，不输出 avatar_path。dim_date 仍由 #4 生成。",
+    "业务表匹配下游精确字段；原始行与批次追踪在 audit/dwd_lineage，不作为额外业务列。"
+  ]
+}

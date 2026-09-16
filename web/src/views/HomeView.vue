@@ -78,8 +78,16 @@ const rankingOption = computed(() => {
   return result
 })
 const stations = computed(() => view.value?.stations ?? [])
+/** 累计口径窗口：接口给了就标（windowStart/End/Days），旧批次或 mock 缺字段时返回空串、页面保持原样 */
+const windowFull = computed(() => {
+  const k = view.value?.kpis ?? {}
+  if (!k.windowStart || !k.windowEnd) return ''
+  return `${k.windowStart} ~ ${k.windowEnd}${k.windowDays ? `（${k.windowDays} 天）` : ''}`
+})
+const windowSince = computed(() => (view.value?.kpis?.windowStart ? `自 ${String(view.value.kpis.windowStart).slice(5)} 累计` : ''))
+const windowSinceText = computed(() => (windowSince.value ? ` · ${windowSince.value}` : ''))
+const windowFullText = computed(() => (windowFull.value ? ` · 累计类指标窗口 ${windowFull.value}` : ''))
 const forecastSource = computed(() => formatForecastSource(slow.value?.forecast24h))
-const unlocated = computed(() => stations.value.filter(s => !hasCoordinates(s)).length)
 const stationOption = computed(() => {
   if (!view.value) return {}
   return mapReady.value ? buildBeijingStationOption(view.value) : buildStationOption({ ...view.value, stations: stations.value.filter(hasCoordinates) })
@@ -91,9 +99,41 @@ const loadOption = computed(() => {
   if (!view.value || selectedStation.value == null) return {}
   const result = buildLoadForecastOption(view.value, selectedStation.value)
   result.color = ['#78acd5', '#65dec0']
-  result.legend = { data: result.series.map(s => s.name), right: 0 }
+  // 「预测高峰」：构造器给的是无名 markPoint 点（主题又隐藏了标签），图上表现为两颗
+  // 悬停没有详情的黄点。这里换成同名散点序列 —— 点位与数值一字不改，
+  // 换来图例、点位标签与 item 悬停详情。
+  const labels = result.xAxis?.data ?? []
+  const peaks = result.series.find(s => s.name === '预测负荷')?.markPoint?.data ?? []
+  const series = result.series.map((s, i) => {
+    const clone = { ...s, areaStyle: {}, lineStyle: { type: i === 1 ? 'dashed' : 'solid' } }
+    delete clone.markPoint
+    return clone
+  })
+  if (peaks.length) {
+    const peakLabels = new Set(peaks.map(p => labels[p.coord[0]]))
+    const valueOf = p => (Array.isArray(p.value) ? p.value[p.value.length - 1] : p.value)
+    series.push({
+      name: '预测高峰', type: 'scatter', z: 3, symbolSize: 9,
+      itemStyle: { color: '#d8b27a', borderColor: '#f2dcae', borderWidth: 1 },
+      label: { show: true, position: 'top', distance: 6, formatter: '高峰', color: '#d8b27a', fontSize: 10 },
+      labelLayout: { hideOverlap: true },
+      data: peaks.map(p => ({ name: '预测高峰', value: [labels[p.coord[0]] ?? p.coord[0], p.coord[1]] })),
+    })
+    // 悬停详情统一由坐标轴提示给出（散点自带的 item 提示会被轴提示盖掉）：
+    // 该小时是模型标注的高峰时，直接在这一条提示里写明，避免又出现「点了没反应」。
+    result.tooltip = {
+      trigger: 'axis',
+      formatter: (params) => {
+        const list = Array.isArray(params) ? params : [params]
+        const label = list[0]?.axisValueLabel ?? ''
+        const rows = list.map(p => `${p.marker}${p.seriesName} ${valueOf(p) == null ? '—' : `${valueOf(p)} kW`}`)
+        return [`<b>${label}</b>`, ...rows, ...(peakLabels.has(label) ? ['<span style="color:#d8b27a">该小时为模型标注的预测高峰</span>'] : [])].join('<br/>')
+      },
+    }
+  }
+  result.legend = { data: series.map(s => s.name), right: 0 }
   result.grid = { top: 32 }
-  result.series = result.series.map((s, i) => ({ ...s, areaStyle: {}, lineStyle: { type: i === 1 ? 'dashed' : 'solid' } }))
+  result.series = series
   return result
 })
 const eventBoard = computed(() => ({
@@ -106,12 +146,12 @@ const eventBoard = computed(() => ({
 
 <template>
   <p v-if="fastError || slowError" class="error-banner" role="status">数据加载异常：{{ fastError || slowError }}。保留上一次成功数据。</p>
-  <ScaleFrame>
-    <div class="command-heading"><h2><span>01 / OVERVIEW</span>全域能源态势</h2><span class="brief">从城市分布到站点负荷 · 一屏掌握充电网络</span></div>
+  <ScaleFrame :zoom="1.06">
+    <div class="command-heading"><h2><span>01 / OVERVIEW</span>全域能源态势</h2><span class="brief">从城市分布到站点负荷 · 一屏掌握充电网络{{ windowFullText }}</span></div>
     <section class="grid kpi" aria-label="核心指标">
-      <div class="panel kpi-card"><span class="kpi-index">REVENUE / CNY</span><h2 class="kpi-label">累计营收</h2><p class="kpi-value">{{ money(kpis.totalRevenueFen) }}<span class="unit">元</span></p><p class="kpi-hint">全部站点 · 累计完成订单</p><MiniTrend :values="recent.map(r => r.revenueFen)" /></div>
-      <div class="panel kpi-card"><span class="kpi-index">ENERGY / KWH</span><h2 class="kpi-label">累计充电量</h2><p class="kpi-value">{{ number(kpis.totalEnergyKwh, 1) }}<span class="unit">kWh</span></p><p class="kpi-hint">充电网络累计输出</p><MiniTrend :values="recent.map(r => r.energyKwh)" /></div>
-      <div class="panel kpi-card"><span class="kpi-index">ORDERS / TOTAL</span><h2 class="kpi-label">累计订单</h2><p class="kpi-value">{{ number(kpis.totalOrders) }}<span class="unit">笔</span></p><p class="kpi-hint">已完成充电订单</p><MiniTrend :values="recent.map(r => r.orderCount)" /></div>
+      <div class="panel kpi-card"><span class="kpi-index">REVENUE / CNY</span><h2 class="kpi-label">累计营收</h2><p class="kpi-value">{{ money(kpis.totalRevenueFen) }}<span class="unit">元</span></p><p class="kpi-hint">全部站点 · 累计完成订单{{ windowSinceText }}</p><MiniTrend :values="recent.map(r => r.revenueFen)" /></div>
+      <div class="panel kpi-card"><span class="kpi-index">ENERGY / KWH</span><h2 class="kpi-label">累计充电量</h2><p class="kpi-value">{{ number(kpis.totalEnergyKwh, 1) }}<span class="unit">kWh</span></p><p class="kpi-hint">充电网络累计输出{{ windowSinceText }}</p><MiniTrend :values="recent.map(r => r.energyKwh)" /></div>
+      <div class="panel kpi-card"><span class="kpi-index">ORDERS / TOTAL</span><h2 class="kpi-label">累计订单</h2><p class="kpi-value">{{ number(kpis.totalOrders) }}<span class="unit">笔</span></p><p class="kpi-hint">已完成充电订单{{ windowSinceText }}</p><MiniTrend :values="recent.map(r => r.orderCount)" /></div>
       <div class="panel kpi-card"><span class="kpi-index">NETWORK / HEALTH</span><h2 class="kpi-label">桩在线率</h2><p class="kpi-value">{{ kpis.onlineRate ?? '—' }}<span class="unit">%</span></p><p class="kpi-hint">空闲 {{ number(kpis.idleCount) }} / 总桩 {{ number(kpis.chargerCount) }}</p><svg class="online-gauge" viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="30" r="25" /><circle cx="30" cy="30" r="25" :stroke-dasharray="`${Math.max(0, Math.min(100, kpis.onlineRate ?? 0)) / 100 * 157} 157`" /></svg></div>
     </section>
 
@@ -124,7 +164,7 @@ const eventBoard = computed(() => ({
         <div class="map-heading"><div><h2>北京 · 城市充电网络</h2><small>BEIJING / CHARGING NETWORK</small></div><div class="map-count"><span><strong>{{ number(stations.length) }}</strong>站点</span><span><strong>{{ number(kpis.chargerCount) }}</strong>充电设备</span></div></div>
         <span class="map-coordinates" aria-hidden="true">GEOGRAPHIC VIEW / BEIJING</span>
         <EChart v-if="view" :option="stationOption" class="map-chart" @chart-click="onStationClick" />
-        <p v-if="unlocated || mapFailed" class="map-missing">{{ unlocated ? `${unlocated} 个站点缺少坐标，保留统计但不落图。` : '' }}{{ mapFailed ? '离线底图不可用，已切换坐标散点。' : '' }}</p>
+        <p v-if="mapFailed" class="map-missing">离线底图不可用，已切换坐标散点。</p>
         <div class="map-legend"><span><i />站点 · 点大小表示设备容量</span><span class="map-instruction">拖动 / 缩放 · 点击站点进入详情 ↗</span></div>
       </section>
       <div class="dv-col">
@@ -137,7 +177,7 @@ const eventBoard = computed(() => ({
       <section class="panel panel--dv"><DvFrame>
         <h2 class="panel-heading"><span class="frame-index">05</span>24 小时实际负荷与未来 24 小时预测（kW）<label class="panel-heading-extra">站点<select v-model.number="selectedStation" aria-label="负荷预测站点"><option v-for="s in stations" :key="s.stationId" :value="s.stationId">{{ s.name }}</option></select></label></h2>
         <EChart v-if="view" :option="loadOption" />
-        <p class="note">{{ loadOption.noForecast ? '该站点暂无预测，仅展示实际负荷。' : `实线为历史负荷 · 虚线为${forecastSource} · 本批次结果，非实时电网遥测。` }}</p>
+        <p class="note">{{ loadOption.noForecast ? '该站点暂无预测，仅展示实际负荷。' : `实线为历史负荷 · 虚线为${forecastSource} · 本批次结果，非实时电网遥测${loadOption.series?.some(s => s.name === '预测高峰') ? '；金色点为该站模型标注的预测高峰小时' : ''}。` }}</p>
       </DvFrame></section>
       <section class="panel panel--dv"><DvFrame title="网络事件记录" code="06"><div v-if="view?.events?.length" class="event-board"><ScrollBoard :config="eventBoard" /></div><p v-else class="empty-state">本批暂无事件记录</p></DvFrame></section>
     </section>

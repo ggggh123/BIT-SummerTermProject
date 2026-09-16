@@ -65,6 +65,14 @@ const peakOption = computed(() => (data.value ? buildPeakLoadOption(data.value.p
 const utilOption = computed(() => (data.value ? buildUtilizationFairnessOption(data.value.utilization) : {}))
 const cityForecastOption = computed(() => buildCityForecastOption(forecastPoints.value))
 const cityForecastMissing = computed(() => Boolean(cityForecastOption.value.meta?.noForecast) || !forecastPoints.value.length)
+/** 累计口径窗口（/api/gov/carbon 的 windowStart/End/Days）：缺字段时返回空串，页面不硬编码日期 */
+const windowFull = computed(() => {
+  const c = data.value?.carbon ?? {}
+  if (!c.windowStart || !c.windowEnd) return ''
+  return `${c.windowStart} ~ ${c.windowEnd}${c.windowDays ? `（${c.windowDays} 天）` : ''}`
+})
+const windowSinceText = computed(() => (data.value?.carbon?.windowStart ? ` · 自 ${String(data.value.carbon.windowStart).slice(5)} 累计` : ''))
+
 const cityForecastSummary = computed(() => {
   const meta = cityForecastOption.value.meta ?? {}
   if (!meta.hours) return forecastNote.value || '暂无预测：当前 ADS 没有激活的预测批次。'
@@ -76,11 +84,11 @@ const cityForecastSummary = computed(() => {
 
 <template>
   <p v-if="error" class="error-banner" role="status">数据加载失败：{{ error }}。保留上一次成功数据。</p>
-  <div class="view-intro"><div><p class="eyebrow">05 / URBAN IMPACT</p><h2>城市效能 · 让每一度电更有价值</h2><p>观察公共服务覆盖、设施利用差异与等效碳减排。</p></div><div class="intro-aside">公共服务 / 能源调度<br>按行政区汇总 · 减排为模型折算</div></div>
+  <div class="view-intro"><div><p class="eyebrow">05 / URBAN IMPACT</p><h2>城市效能 · 让每一度电更有价值</h2><p>观察公共服务覆盖、设施利用差异与等效碳减排。</p></div><div class="intro-aside">公共服务 / 能源调度<br>按行政区汇总 · 减排为模型折算<template v-if="windowFull"><br>累计窗口 {{ windowFull }}</template></div></div>
   <section class="grid kpi" aria-label="民生与减排概览">
-    <div class="panel kpi-card"><span class="kpi-index">ENERGY / TOTAL</span><h2 class="kpi-label">累计充电量</h2><p class="kpi-value">{{ carbon ? formatKwh(carbon.totalEnergyKwh) : '—' }}</p><p class="kpi-hint">全区县累计，用于减排折算</p></div>
-    <div class="panel kpi-card"><span class="kpi-index">CARBON / EQUIVALENT</span><h2 class="kpi-label">等效碳减排</h2><p class="kpi-value">{{ carbon ? carbon.co2SavedTon.toLocaleString('zh-CN') : '—' }}<span class="unit">tCO₂</span></p><p class="kpi-hint">折算因子 {{ carbon?.factorTonPerMwh ?? '—' }} tCO₂/MWh</p></div>
-    <div class="panel kpi-card"><span class="kpi-index">TREES / EQUIVALENT</span><h2 class="kpi-label">等效植树</h2><p class="kpi-value">{{ carbon ? carbon.equivalentTrees.toLocaleString('zh-CN') : '—' }}<span class="unit">棵</span></p><p class="kpi-hint">按单棵树年固碳 18kg 估算，非实际植树量</p></div>
+    <div class="panel kpi-card"><span class="kpi-index">ENERGY / TOTAL</span><h2 class="kpi-label">累计充电量</h2><p class="kpi-value">{{ carbon ? formatKwh(carbon.totalEnergyKwh) : '—' }}</p><p class="kpi-hint">全区县累计，用于减排折算{{ windowSinceText }}</p></div>
+    <div class="panel kpi-card"><span class="kpi-index">CARBON / EQUIVALENT</span><h2 class="kpi-label">等效碳减排</h2><p class="kpi-value">{{ carbon ? carbon.co2SavedTon.toLocaleString('zh-CN') : '—' }}<span class="unit">tCO₂</span></p><p class="kpi-hint">折算因子 {{ carbon?.factorTonPerMwh ?? '—' }} tCO₂/MWh{{ windowSinceText }}</p></div>
+    <div class="panel kpi-card"><span class="kpi-index">TREES / EQUIVALENT</span><h2 class="kpi-label">等效植树</h2><p class="kpi-value">{{ carbon ? carbon.equivalentTrees.toLocaleString('zh-CN') : '—' }}<span class="unit">棵</span></p><p class="kpi-hint">按单棵树年固碳 18kg 估算，非实际植树量{{ windowSinceText }}</p></div>
     <div class="panel kpi-card"><span class="kpi-index">LOAD / DAILY PEAK</span><h2 class="kpi-label">全城峰值负荷（当日）</h2><p class="kpi-value">{{ peakOption.meta?.peakLoadKw != null ? Math.round(peakOption.meta.peakLoadKw).toLocaleString('zh-CN') : '—' }}<span class="unit">kW</span></p><p class="kpi-hint">出现在 {{ peakOption.meta?.date ?? '—' }} {{ peakOption.meta?.peakHour ?? '—' }}（当日，非窗口峰值）</p></div>
   </section>
   <section class="analysis-grid gov-grid">

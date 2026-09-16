@@ -83,7 +83,7 @@ export function withEnergyTheme(source, { reducedMotion = false } = {}) {
       ...result, radius: ['43%', '68%'], center: [...DONUT_CENTER], label: { show: false }, labelLine: { show: false },
       itemStyle: { borderColor: '#0d2028', borderWidth: 3 }, emphasis: { scaleSize: 4, label: { show: false } },
     }
-    if (s.markLine) result.markLine = { ...s.markLine, lineStyle: { color: '#d8b27a', type: 'dashed', opacity: .7 }, label: { color: '#d8b27a', fontSize: 10, rotate: 0, position: horizontal ? 'end' : 'insideEndTop' } }
+    if (s.markLine) result.markLine = { ...s.markLine, lineStyle: { color: '#d8b27a', type: 'dashed', opacity: .7 }, label: { color: '#d8b27a', fontSize: 10, rotate: 0, position: horizontal ? 'end' : 'insideEndTop', ...s.markLine.label } }
     if (s.markPoint) result.markPoint = { ...s.markPoint, symbol: 'circle', symbolSize: 7, itemStyle: { color: '#d8b27a' }, label: { show: false } }
     return result
   })

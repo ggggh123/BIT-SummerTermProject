@@ -15,6 +15,8 @@ export function buildPriceCompareOption(data) {
         data: rows.map((r) => ({ value: r.priceFenPerKwh / 100, stationId: r.stationId })),
         markLine: {
           symbol: 'none',
+          // 图层与绘图区尺寸保持原样，只把「全市均价」标签水平右移，避开最高的柱子
+          label: { offset: [34, 0] },
           data: [{ yAxis: avg, label: { formatter: `全市均价 ${avg.toFixed(2)}` } }],
         },
       },
@@ -27,15 +29,22 @@ export function buildPriceCompareOption(data) {
 export function buildPriceDistanceOption(rows) {
   const sorted = rows.filter(r => r.distanceKm != null && Number.isFinite(Number(r.distanceKm))).sort((a, b) => a.distanceKm - b.distanceKm)
   return {
+    // 双数值轴散点必须用 item 触发：主题默认给非 geo/heat/pie 图表 axis 触发，
+    // 在 value×value 坐标上悬停不会命中任何点，注释里承诺的「悬停查看站点」会失效。
     tooltip: {
+      trigger: 'item',
       formatter: (p) =>
         `${p.data.name}<br/>距离 ${p.data.distanceKm} km<br/>电价 ${(p.data.value[1]).toFixed(2)} 元/度<br/>空闲桩 ${p.data.idleCount}`,
     },
-    xAxis: { type: 'value', name: '距市中心 (km)' },
+    // 图例标明圆点含义：1 个点 = 1 个充电站（点大小口径见面板标题）
+    legend: { data: ['充电站'], right: 0, top: 0 },
+    // 轴名居中，避免「距市中心 (km)」贴在右端被画布裁掉（原先只剩「距市」且丢单位）
+    grid: { bottom: 24 },
+    xAxis: { type: 'value', name: '距市中心 (km)', nameLocation: 'middle', nameGap: 26 },
     yAxis: { type: 'value', name: '元/度' },
     series: [
       {
-        name: '站点',
+        name: '充电站',
         type: 'scatter',
         data: sorted.map((r) => ({
           name: r.name,

@@ -1,0 +1,108 @@
+26/09/15 21:38:13 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+26/09/15 21:38:16 INFO SparkContext: Running Spark version 3.5.7
+26/09/15 21:38:16 INFO SparkContext: OS info Linux, 6.8.0-138-generic, amd64
+26/09/15 21:38:16 INFO SparkContext: Java version 17.0.20.1
+26/09/15 21:38:16 INFO ResourceUtils: ==============================================================
+26/09/15 21:38:16 INFO ResourceUtils: No custom resources configured for spark.driver.
+26/09/15 21:38:16 INFO ResourceUtils: ==============================================================
+26/09/15 21:38:16 INFO SparkContext: Submitted application: EV-Part2-PRL-Quality-Clean
+26/09/15 21:38:16 INFO ResourceProfile: Default ResourceProfile created, executor resources: Map(cores -> name: cores, amount: 1, script: , vendor: , memory -> name: memory, amount: 1024, script: , vendor: , offHeap -> name: offHeap, amount: 0, script: , vendor: ), task resources: Map(cpus -> name: cpus, amount: 1.0)
+26/09/15 21:38:16 INFO ResourceProfile: Limiting resource is cpus at 1 tasks per executor
+26/09/15 21:38:16 INFO ResourceProfileManager: Added ResourceProfile id: 0
+26/09/15 21:38:16 INFO SecurityManager: Changing view acls to: bit,hadoop
+26/09/15 21:38:16 INFO SecurityManager: Changing modify acls to: bit,hadoop
+26/09/15 21:38:16 INFO SecurityManager: Changing view acls groups to: 
+26/09/15 21:38:16 INFO SecurityManager: Changing modify acls groups to: 
+26/09/15 21:38:16 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: bit, hadoop; groups with view permissions: EMPTY; users with modify permissions: bit, hadoop; groups with modify permissions: EMPTY
+26/09/15 21:38:17 INFO Utils: Successfully started service 'sparkDriver' on port 40713.
+26/09/15 21:38:17 INFO SparkEnv: Registering MapOutputTracker
+26/09/15 21:38:17 INFO SparkEnv: Registering BlockManagerMaster
+26/09/15 21:38:17 INFO BlockManagerMasterEndpoint: Using org.apache.spark.storage.DefaultTopologyMapper for getting topology information
+26/09/15 21:38:17 INFO BlockManagerMasterEndpoint: BlockManagerMasterEndpoint up
+26/09/15 21:38:17 INFO SparkEnv: Registering BlockManagerMasterHeartbeat
+26/09/15 21:38:17 INFO DiskBlockManager: Created local directory at /home/bit/ev-part2/runtime/spark-local/blockmgr-83d85aa4-df7f-4bcf-9b9e-d23183f539fe
+26/09/15 21:38:17 INFO MemoryStore: MemoryStore started with capacity 434.4 MiB
+26/09/15 21:38:17 INFO SparkEnv: Registering OutputCommitCoordinator
+26/09/15 21:38:18 INFO JettyUtils: Start Jetty 127.0.0.1:4040 for SparkUI
+26/09/15 21:38:18 INFO Utils: Successfully started service 'SparkUI' on port 4040.
+26/09/15 21:38:19 INFO DefaultNoHARMFailoverProxyProvider: Connecting to ResourceManager at niyujun01/127.0.0.1:8032
+26/09/15 21:38:21 INFO Configuration: resource-types.xml not found
+26/09/15 21:38:21 INFO ResourceUtils: Unable to find 'resource-types.xml'.
+26/09/15 21:38:21 INFO Client: Verifying our application has not requested more than the maximum memory capability of the cluster (4096 MB per container)
+26/09/15 21:38:21 INFO Client: Will allocate AM container, with 896 MB memory including 384 MB overhead
+26/09/15 21:38:21 INFO Client: Setting up container launch context for our AM
+26/09/15 21:38:21 INFO Client: Setting up the launch environment for our AM container
+26/09/15 21:38:21 INFO Client: Preparing resources for our AM container
+26/09/15 21:38:21 WARN Client: Neither spark.yarn.jars nor spark.yarn.archive is set, falling back to uploading libraries under SPARK_HOME.
+26/09/15 21:38:39 INFO Client: Uploading resource file:/home/bit/ev-part2/runtime/spark-local/spark-87dfd884-90e9-47fb-a0f7-18f007246fce/__spark_libs__15171315019115788581.zip -> hdfs://niyujun01:8020/user/hadoop/.sparkStaging/application_1789457728162_0004/__spark_libs__15171315019115788581.zip
+26/09/15 21:38:44 INFO Client: Uploading resource file:/usr/local/spark/python/lib/pyspark.zip -> hdfs://niyujun01:8020/user/hadoop/.sparkStaging/application_1789457728162_0004/pyspark.zip
+26/09/15 21:38:44 INFO Client: Uploading resource file:/usr/local/spark/python/lib/py4j-0.10.9.7-src.zip -> hdfs://niyujun01:8020/user/hadoop/.sparkStaging/application_1789457728162_0004/py4j-0.10.9.7-src.zip
+26/09/15 21:38:44 INFO Client: Uploading resource file:/home/bit/ev-part2/evidence/prl-clean-20260915T133614Z-56524/part2-code.zip -> hdfs://niyujun01:8020/user/hadoop/.sparkStaging/application_1789457728162_0004/part2-code.zip
+26/09/15 21:38:45 INFO Client: Uploading resource file:/home/bit/ev-part2/runtime/spark-local/spark-87dfd884-90e9-47fb-a0f7-18f007246fce/__spark_conf__1067990708471913062.zip -> hdfs://niyujun01:8020/user/hadoop/.sparkStaging/application_1789457728162_0004/__spark_conf__.zip
+26/09/15 21:38:45 INFO SecurityManager: Changing view acls to: bit,hadoop
+26/09/15 21:38:45 INFO SecurityManager: Changing modify acls to: bit,hadoop
+26/09/15 21:38:45 INFO SecurityManager: Changing view acls groups to: 
+26/09/15 21:38:45 INFO SecurityManager: Changing modify acls groups to: 
+26/09/15 21:38:45 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: bit, hadoop; groups with view permissions: EMPTY; users with modify permissions: bit, hadoop; groups with modify permissions: EMPTY
+26/09/15 21:38:45 INFO Client: Submitting application application_1789457728162_0004 to ResourceManager
+26/09/15 21:38:46 INFO YarnClientImpl: Submitted application application_1789457728162_0004
+26/09/15 21:38:47 INFO Client: Application report for application_1789457728162_0004 (state: ACCEPTED)
+26/09/15 21:38:47 INFO Client: 
+	 client token: N/A
+	 diagnostics: [Tue Sep 15 21:38:47 +0800 2026] Scheduler has assigned a container for AM, waiting for AM container to be launched
+	 ApplicationMaster host: N/A
+	 ApplicationMaster RPC port: -1
+	 queue: root.default
+	 start time: 1789479525948
+	 final status: UNDEFINED
+	 tracking URL: http://localhost:8088/proxy/application_1789457728162_0004/
+	 user: hadoop
+26/09/15 21:39:01 INFO Client: Application report for application_1789457728162_0004 (state: RUNNING)
+26/09/15 21:39:01 INFO Client: 
+	 client token: N/A
+	 diagnostics: N/A
+	 ApplicationMaster host: 192.168.59.128
+	 ApplicationMaster RPC port: -1
+	 queue: root.default
+	 start time: 1789479525948
+	 final status: UNDEFINED
+	 tracking URL: http://localhost:8088/proxy/application_1789457728162_0004/
+	 user: hadoop
+26/09/15 21:39:01 INFO YarnClientSchedulerBackend: Application application_1789457728162_0004 has started running.
+26/09/15 21:39:01 INFO Utils: Successfully started service 'org.apache.spark.network.netty.NettyBlockTransferService' on port 36409.
+26/09/15 21:39:01 INFO NettyBlockTransferService: Server created on localhost:36409
+26/09/15 21:39:01 INFO BlockManager: Using org.apache.spark.storage.RandomBlockReplicationPolicy for block replication policy
+26/09/15 21:39:01 INFO BlockManagerMaster: Registering BlockManager BlockManagerId(driver, localhost, 36409, None)
+26/09/15 21:39:01 INFO BlockManagerMasterEndpoint: Registering block manager localhost:36409 with 434.4 MiB RAM, BlockManagerId(driver, localhost, 36409, None)
+26/09/15 21:39:01 INFO BlockManagerMaster: Registered BlockManager BlockManagerId(driver, localhost, 36409, None)
+26/09/15 21:39:01 INFO BlockManager: Initialized BlockManager: BlockManagerId(driver, localhost, 36409, None)
+26/09/15 21:39:01 INFO YarnClientSchedulerBackend: Add WebUI Filter. org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter, Map(PROXY_HOSTS -> localhost, PROXY_URI_BASES -> http://localhost:8088/proxy/application_1789457728162_0004), /proxy/application_1789457728162_0004
+26/09/15 21:39:01 INFO ServerInfo: Adding filter to /executors/threadDump: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /executors/threadDump/json: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /executors/heapHistogram: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /executors/heapHistogram/json: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /static: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /api: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /jobs/job/kill: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /stages/stage/kill: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /metrics/json: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO YarnClientSchedulerBackend: SchedulerBackend is ready for scheduling beginning after waiting maxRegisteredResourcesWaitingTime: 30000000000(ns)
+26/09/15 21:39:02 INFO SharedState: Setting hive.metastore.warehouse.dir ('null') to the value of spark.sql.warehouse.dir.
+26/09/15 21:39:02 INFO SharedState: Warehouse path is 'file:/home/bit/part2/spark-warehouse'.
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /SQL: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /SQL/json: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /SQL/execution: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /SQL/execution/json: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO ServerInfo: Adding filter to /static/sql: org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter
+26/09/15 21:39:02 INFO YarnSchedulerBackend$YarnSchedulerEndpoint: ApplicationMaster registered as NettyRpcEndpointRef(spark-client://YarnAM)
+PRL_PROGRESS=rules:users
+PRL_PROGRESS=rules:stations
+PRL_PROGRESS=rules:chargers
+PRL_PROGRESS=rules:orders
+PRL_PROGRESS=rules:telemetry
+PRL_PROGRESS=rules:station_hourly
+PRL_PROGRESS=rules:events
+PRL_PROGRESS=dwd_readback_passed
+26/09/15 21:53:29 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+EV_PART2_PIPELINE_RESULT={"contract_version": "0.1.0-draft", "policy_version": "0.2.2-draft", "contract_status": "DRAFT_PENDING_TL_SCML_PE_REVIEW", "run_id": "prl-clean-20260915T133614Z-56524", "source_run_id": "scml-20260914", "source_kind": "ods-handoff", "data_cutoff": "2026-09-15T00:00:00+08:00", "generated_at": "2026-09-15T21:53:28.745560+08:00", "application_id": "application_1789457728162_0004", "master": "yarn", "spark": "3.5.7", "driver_python": "3.10.12", "worker_python": ["3.10.12", "3.10.12"], "money_reference": {"reference": "constant_station_price", "relative_tolerance": "0.01", "absolute_tolerance_fen": "1", "repair_exact_yuan_factor": true, "note": "仅为当前模拟数据提案：批次内站点单价恒定。真实变价订单须补充价格快照，不能用当前价回算历史账单。"}, "output": "hdfs://localhost:8020/ev-charging/quality/batches/prl-clean-20260915T133614Z-56524", "ubuntu22_verified": false, "input_profile": "scml-ods-v0.1", "source_contract_version": "ods-dwd-v0.1", "source_manifest_sha256": "c2faa4c2049d000f627df3c5a04ff41446b30112bd5478ccf813ce88d0fb42a6", "dwd_profile": "scml-dwd-v0.1", "ready_for_team_delivery": false, "pending_policy_notes": ["Q2：上游订单注入保留不同 id，与文档所写按主键检出不一致；不读取标签指导去重。", "Q6：上游整数除以 100 已丢失分位；仅精确可证明的单位错误允许修正，其余隔离。", "Q9：越界坐标仅置空该字段（latitude/longitude 已列为 optional，允许为空）并保留站点记录，不隔离、不填造坐标；coord_imputed 恒为 0。口径由 #2 TL 于 2026-09-15 拍板（contracts/README §7 第 4 条），与 quality-policy 的 bbox_note 一致。", "Q5：本实现隔离超占用小时，不裁剪为满载；小时缺口必须在 ML 使用前核验。", "合法未开工订单保留空 started_at/hour/dt，使用 Hive NULL 分区；不擅自改取预约日期。", "可选 nickname/avatar_path 的展示默认值不计入 Q1；#4 dim_users 仅输出 nickname，不输出 avatar_path。dim_date 仍由 #4 生成。", "业务表匹配下游精确字段；原始行与批次追踪在 audit/dwd_lineage，不作为额外业务列。"], "hourly_coverage": {"expected_station_hours": 17280, "retained_station_hours": 17228, "missing_station_hours": 52, "row_offset_ml_safe": false, "note": "缺失小时不插值；#5 不可把第 h 行当作第 h 小时。"}, "ok": true, "scope": "draft-quality-clean-handoff", "elapsed_seconds": 963.64, "dwd_tables": 7, "dwd_rows": 1017419, "input_rows": 1162576, "quarantined_rows": 145157, "assertions": [{"table": "dwd_order_detail", "ok": true, "rows": 115796, "keys": 115796, "violations": 0}, {"table": "dwd_telemetry_detail", "ok": true, "rows": 859727, "keys": 859727, "violations": 0}, {"table": "dwd_station_hourly", "ok": true, "rows": 17228, "keys": 17228, "violations": 0}, {"table": "dwd_event", "ok": true, "rows": 19388, "keys": 19388, "violations": 0}, {"table": "dim_stations", "ok": true, "rows": 8, "keys": 8, "violations": 0}, {"table": "dim_chargers", "ok": true, "rows": 287, "keys": 287, "violations": 0}, {"table": "dim_users", "ok": true, "rows": 4985, "keys": 4985, "violations": 0}]}

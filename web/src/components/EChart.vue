@@ -16,10 +16,20 @@ let observer = null
 
 function draw() {
   if (!chart) return
-  // notMerge=true：每次全量替换，避免残影与残留 series
-  chart.setOption(withEnergyTheme(props.option, {
+  const next = withEnergyTheme(props.option, {
     reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  }), true)
+  })
+  // notMerge=true 全量替换会把用户手动缩放/拖拽的 geo 视角重置回默认，
+  // 轮询场景下表现为「放大后过几秒自己缩回去」；这里把当前 roam 状态带回新 option。
+  const prevGeo = chart.getOption()?.geo
+  if (next.geo && prevGeo?.length) {
+    const carry = (g, p) => ({ ...g, zoom: p?.zoom ?? g.zoom, center: p?.center ?? g.center })
+    next.geo = Array.isArray(next.geo)
+      ? next.geo.map((g, i) => carry(g, prevGeo[i]))
+      : carry(next.geo, prevGeo[0])
+  }
+  // notMerge=true：每次全量替换，避免残影与残留 series
+  chart.setOption(next, true)
 }
 
 onMounted(() => {

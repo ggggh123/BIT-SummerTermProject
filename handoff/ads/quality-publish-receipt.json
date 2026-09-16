@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "database": "/home/bit/part2/part2/scml/handoff/ads/ads.db",
+  "backup": "/home/bit/part2/part2/scml/handoff/ads/ads.db.pre-quality-publish",
+  "manifest": "/home/bit/part2/part2/scml/handoff/ads/ads_manifest.json",
+  "source_run_id": "scml-20260914",
+  "quality_run_id": "prl-clean-20260915T133614Z-56524",
+  "quality_report_sha256": "669acf60f67e1e41a2bff0f196f8c2da3fb74f3d0906d8f93728c7ed861b4646",
+  "database_sha256": "7b9ba3d776fdf1110cc6414122679e725e8dbfc1eec985ac41bb0b5f891d4148",
+  "tables": 7,
+  "rules": 10,
+  "ready_for_team_delivery": false,
+  "accepted_pending_policy": true
+}

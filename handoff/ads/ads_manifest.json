@@ -1,0 +1,46 @@
+{
+  "contractVersion": "ads-flask-v1",
+  "runId": "ads-20260915235603",
+  "generatedAt": "2026-09-15T23:56:03+08:00",
+  "source": "ods-handoff",
+  "sourceRunId": "scml-20260914",
+  "dataWindow": {
+    "start": "2026-06-17",
+    "end": "2026-09-14",
+    "days": 90
+  },
+  "database": "ads.db",
+  "databaseSha256": "7baf7772482aed1780166568a985f33ff910689993444991e148f306125895ff",
+  "tables": {
+    "ads_charger": 287,
+    "ads_daily": 90,
+    "ads_district": 5,
+    "ads_event": 20000,
+    "ads_forecast_24h": 144,
+    "ads_forecast_batch": 1,
+    "ads_forecast_metric": 24,
+    "ads_meta": 29,
+    "ads_quality_issue": 10,
+    "ads_quality_meta": 17,
+    "ads_quality_table": 7,
+    "ads_station": 8,
+    "ads_station_day": 720,
+    "ads_station_hourly": 17228,
+    "ads_user_rfm": 8
+  },
+  "quality": {
+    "source": "prl-quality-report",
+    "runId": "prl-clean-20260915T133614Z-56524",
+    "injected": 32775,
+    "detected": 153539,
+    "readyForTeamDelivery": true,
+    "acceptedPendingPolicy": true,
+    "policyVersion": "0.2.2",
+    "policyFrozenAt": "2026-09-16",
+    "policyFreezeRef": "part2/contracts/README.md §7 第 7 条"
+  },
+  "forecast": {
+    "source": "gbt-3.5.7",
+    "isBaseline": false
+  }
+}

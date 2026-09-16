@@ -120,6 +120,6 @@ function selectMapStation(p) {
       <section class="panel panel--dv"><DvFrame title="快慢充结构（个）" code="02"><EChart v-if="detail" :option="mixOption" /><p v-if="detail" class="note">快充订单占比 {{ (detail.mix.fastOrderShare * 100).toFixed(0) }}% · 功率见图例</p></DvFrame></section>
       <section class="panel panel--dv"><DvFrame title="设备健康：Top 桩累计充电次数" code="03"><EChart v-if="detail" :option="healthOption" /><p v-if="detail" class="note">存在故障记录 {{ detail.health.faultCount }} 桩 · 运维巡检参考</p></DvFrame></section>
     </div>
-    <section class="panel panel--dv forecast-panel"><DvFrame title="未来 24h 桩位占用与忙碌时段预测（个 · 颜色=预测拥堵等级）" code="05"><EChart v-if="!forecastMissing" :option="occupancyOption" /><p v-else class="empty-state">{{ forecastSummary }}</p><p class="note">{{ forecastSummary }}<br>占用 + 空闲 = 本站桩数；颜色为模型给出的拥堵等级。本站视角看「什么时候会排队」，城市级负荷见政府视角。</p></DvFrame></section>
+    <section class="panel panel--dv forecast-panel"><DvFrame title="未来 24h 桩位占用与忙碌时段预测（个 · 颜色=预测拥堵等级）" code="05"><EChart v-if="!forecastMissing" :option="occupancyOption" /><p v-else class="empty-state">{{ forecastSummary }}</p><p class="note">{{ forecastSummary }}<br>占用 + 空闲 = 本站桩数；颜色为模型给出的拥堵等级。本站视角看「什么时候会排队」，城市级负荷见社会视角。</p></DvFrame></section>
   </section>
 </template>

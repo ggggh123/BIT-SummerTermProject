@@ -6,7 +6,7 @@ const routes = [
   { path: '/user', name: 'user', component: () => import('@/views/UserView.vue'), meta: { title: '用户视角' } },
   { path: '/station', name: 'station', component: () => import('@/views/StationView.vue'), meta: { title: '充电站视角' } },
   { path: '/enterprise', name: 'enterprise', component: () => import('@/views/EnterpriseView.vue'), meta: { title: '企业视角' } },
-  { path: '/gov', name: 'gov', component: () => import('@/views/GovView.vue'), meta: { title: '政府视角' } },
+  { path: '/gov', name: 'gov', component: () => import('@/views/GovView.vue'), meta: { title: '社会视角' } },
 ]
 
 export default createRouter({ history: createWebHashHistory(), routes })
