@@ -49,6 +49,11 @@ export function buildCarbonSummary(carbon) {
 /** 全城高峰负荷曲线（辅助电网调度），标注峰值时段 */
 export function buildPeakLoadOption(data) {
   const points = [...data.points]
+  if (!points.length) return {
+    xAxis: { type: 'category', data: [], name: '时刻' }, yAxis: { type: 'value', name: 'kW' },
+    series: [{ name: '全城负荷', type: 'line', data: [] }],
+    meta: { date: data.dt ?? null, peakHour: null, peakLoadKw: null },
+  }
   const peak = points.reduce((acc, p, i) => (p.loadKw > points[acc].loadKw ? i : acc), 0)
   return {
     tooltip: { trigger: 'axis' },

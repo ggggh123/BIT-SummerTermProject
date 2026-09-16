@@ -25,7 +25,7 @@ export function buildPriceCompareOption(data) {
 
 /** 距离-价格散点：以天安门为参考点，找「近且便宜」的站（点大小=空闲桩数） */
 export function buildPriceDistanceOption(rows) {
-  const sorted = [...rows].sort((a, b) => a.distanceKm - b.distanceKm)
+  const sorted = rows.filter(r => r.distanceKm != null && Number.isFinite(Number(r.distanceKm))).sort((a, b) => a.distanceKm - b.distanceKm)
   return {
     tooltip: {
       formatter: (p) =>
@@ -47,7 +47,7 @@ export function buildPriceDistanceOption(rows) {
         })),
       },
     ],
-    meta: { stationCount: sorted.length },
+    meta: { stationCount: sorted.length, unlocatedCount: rows.length - sorted.length },
   }
 }
 
@@ -76,7 +76,7 @@ export function buildPeakHeatmapOption(data) {
     grid: { left: 90, bottom: 40, top: 12 },
     xAxis: { type: 'category', data: data.hours, splitArea: { show: true } },
     yAxis: { type: 'category', data: data.names, splitArea: { show: true } },
-    visualMap: { min: 0, max: Math.max(...data.values.map((v) => v[2])), calculable: true, orient: 'vertical', right: 0, top: 'center' },
+    visualMap: { min: 0, max: Math.max(1, ...data.values.map((v) => v[2])), calculable: true, orient: 'vertical', right: 0, top: 'center' },
     series: [{ name: '占用桩数', type: 'heatmap', data: data.values, label: { show: false } }],
     meta: { cells: data.values.length },
   }

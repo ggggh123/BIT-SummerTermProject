@@ -2,6 +2,7 @@
 // 这样 5 个图表构造器一行都不用改，是本阶段"零重复"复用的关键一层。
 // 后端（CSV → Spark → SQLite → JSON）常把数字/布尔返回成字符串，
 // 这里统一转型：契约要求金额是整数分、比例是 0–100 数值、开关是布尔。
+import { coordinate } from './coordinates.js'
 const num = (v, fallback = 0) => {
   const n = Number(v)
   return Number.isFinite(n) ? n : fallback
@@ -27,8 +28,8 @@ export function buildHomeViewModel(payload) {
       // 站点 id 若为字符串，选择器与图表按站点过滤会静默失配，故强制转数字
       stationId: num(s.stationId),
       name: s.name,
-      longitude: num(s.longitude),
-      latitude: num(s.latitude),
+      longitude: coordinate(s.longitude, 180),
+      latitude: coordinate(s.latitude, 90),
       chargerCount: num(s.chargerCount),
       idleCount: num(s.idleCount),
       utilizationRate: num(s.utilizationRate),

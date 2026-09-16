@@ -52,6 +52,12 @@ const TABLE = {
 export const MOCK_ENDPOINTS = Object.keys(TABLE)
 
 export async function mockFetch(path) {
+  if (path === 'forecast/recommend') {
+    return { code: 0, generatedAt: forecast24h.generatedAt, data: (forecast24h.data.points ?? [])
+      .filter(p => p.horizonH === 1)
+      .map(p => ({ stationId: p.stationId, name: overviewStations.data.find(s => s.stationId === p.stationId)?.name ?? `站点 ${p.stationId}`, predictedIdleCount: p.predictedIdleCount, congestionLevel: p.congestionLevel }))
+      .sort((a, b) => b.predictedIdleCount - a.predictedIdleCount) }
+  }
   // station/{id}/utilization|mix|health 由 station_detail.json 按站点切片
   const m = path.match(/^station\/(\d+)\/(utilization|mix|health)$/)
   if (m) {

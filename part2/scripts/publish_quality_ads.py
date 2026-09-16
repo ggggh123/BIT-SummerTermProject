@@ -60,6 +60,10 @@ def quality_payload(quality, cleaning, quality_path):
         "qualityReportSha256": sha256_file(quality_path),
         "readyForTeamDelivery": json.dumps(bool(quality.get("ready_for_team_delivery"))),
         "exactMetrics": json.dumps(exact, ensure_ascii=False, separators=(",", ":")),
+        "tableDetails": json.dumps({
+            "ods_" + name: {"cascadeAffectedRows": item.get("cascade_affected_rows")}
+            for name, item in cleaning["tables"].items()
+        }, ensure_ascii=False, separators=(",", ":")),
         "pendingPolicyNotes": json.dumps(quality.get("pending_policy_notes", []), ensure_ascii=False, separators=(",", ":")),
         "metricSemantics": "injected=TP+FN; detected=handled=TP+FP; recall=TP/(TP+FN); precision/FP/FN 见 exactMetrics",
         "publishedAt": datetime.now(SHANGHAI).isoformat(),
