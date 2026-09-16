@@ -83,19 +83,19 @@ a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid
 .online-gauge { position: absolute; right: 20px; top: 46px; width: 56px; height: 56px; transform: rotate(-90deg); }
 .online-gauge circle { fill: none; stroke: #25434a; stroke-width: 3; }
 .online-gauge circle:last-child { stroke: var(--accent); stroke-linecap: round; }
-.grid.home-main { grid-template-columns: 380px 1fr 400px; gap: 16px; margin-top: 16px; height: 446px; }
+.grid.home-main { grid-template-columns: 396px 1fr 416px; gap: 16px; margin-top: 16px; height: 472px; }
 .dv-col { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; }
-.home-main .chart.side-chart { height: 147px; }
+.home-main .chart.side-chart { height: 160px; }
 .home-main .panel h2 { font-size: 13px; }
-.grid.home-bottom { grid-template-columns: 1fr 520px; margin-top: 16px; height: 255px; }
-.home-bottom .chart { height: 172px; }
+.grid.home-bottom { grid-template-columns: 1fr 520px; margin-top: 16px; height: 274px; }
+.home-bottom .chart { height: 186px; }
 .home-bottom .panel-heading { margin-bottom: 4px; }
-.event-board { height: 175px; font-size: 12px; color: #aec6c6; }
+.event-board { height: 188px; font-size: 12px; color: #aec6c6; }
 .event-board .dv-scroll-board .header { color: #6f9999; font-size: 10px; letter-spacing: 1px; }
 .event-board .dv-scroll-board .rows .ceil { font-size: 12px; }
 .map-panel { position: relative; overflow: hidden; border: 1px solid #315653; background: radial-gradient(ellipse at 50% 48%, #17393855, #0b1c24 67%); }
 .map-panel::before { pointer-events: none; position: absolute; inset: 0; content: ""; background-image: linear-gradient(#7ddcc006 1px, transparent 1px), linear-gradient(90deg, #7ddcc006 1px, transparent 1px); background-size: 24px 24px; }
-.map-panel .map-chart { height: 380px; width: 100%; }
+.map-panel .map-chart { height: 400px; width: 100%; }
 .map-heading { display: flex; align-items: flex-start; justify-content: space-between; position: relative; z-index: 1; padding: 20px 22px 0; }
 .map-heading h2 { font-size: 18px; letter-spacing: 3px; margin: 0; font-weight: 500; }
 .map-heading small { display: block; font: 9px monospace; letter-spacing: 2px; color: #658f8b; margin-top: 6px; }
@@ -152,7 +152,6 @@ a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid
 .station-grid .forecast-panel { grid-column: span 2; }
 .station-grid .forecast-panel .chart { height: 180px; }
 .gov-grid .city-forecast-panel { grid-column: span 2; }
-.roster-flag { margin-left: auto; font-style: normal; font-size: 9px; color: #d8b27a; border: 1px solid #d8b27a55; border-radius: 2px; padding: 0 4px; }
 .station-selector { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-dim); }
 .station-selector select { min-width: 210px; }
 .station-facts { display: flex; align-items: center; gap: 26px; font-size: 11px; color: var(--text-dim); }
