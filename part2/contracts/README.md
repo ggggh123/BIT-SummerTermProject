@@ -2,7 +2,7 @@
 
 当前状态分为两层：
 
-- **#4 结构已适配**：已按 SCML 提交 `e519d8d72129415af583e00ecbb1debbc93393d6` 中的 manifest、ODS 字段和 `dwd_contract.sql` 实现原生接收及七表 DWD 投影。2026-09-15 又复核到该分支最新 `13b18f0dff21b6988074cac65d7389057bcbce01`；新提交只增加正式规模交付闸门，没有改变生成器、ODS/DWD 字段或数仓 SQL。对应机器文件是 [scml-dwd-v0.1.json](scml-dwd-v0.1.json)。
+- **#4 结构已适配**：已按 SCML 提交 `e519d8d72129415af583e00ecbb1debbc93393d6` 中的 manifest、ODS 字段和 `dwd_contract.sql` 实现原生接收及七表 DWD 投影。2026-09-15 又复核到该分支最新 `13b18f0dff21b6988074cac65d7389057bcbce01`；新提交只增加正式规模交付闸门，没有改变生成器、ODS/DWD 字段或数仓 SQL。对应机器文件是 [scml-dwd-v0.1.json](scml-dwd-v0.1.json) 与 [ods-dwd-v0.1.json](ods-dwd-v0.1.json)（**两者已于 2026-09-16 冻结**，见 §7 第 7 条）。
 - **质量策略已冻结（2026-09-16）**：Q2/Q3/Q5/Q6/Q9、动态价格、可选展示字段和小时缺口处理已由 #2 TL 逐条评审并定稿，`quality-policy-v0.1.json` 状态为 `0.2.2 / FROZEN_TEAM_REVIEWED`，`scml-dwd-v0.1.json` 状态为 `SCHEMA_ADAPTED_POLICY_FROZEN`；逐条结论与两条遗留说明见 §7 第 7 条。对应文件是 [quality-policy-v0.1.json](quality-policy-v0.1.json)。
 
 [ods-dwd-v0.1.json](ods-dwd-v0.1.json) 是 PRL 内部严格读入／规则契约，保留了第一阶段 `database/schema.sql` 的字段语义。SCML 适配层只转换清单元数据、表名和输出 schema，不改写 #4 的原始 CSV/JSONL。

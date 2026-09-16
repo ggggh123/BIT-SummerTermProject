@@ -21,8 +21,12 @@ class ContractTests(unittest.TestCase):
         self.assertIs(first, second)
         self.assertEqual((info.misses, info.hits), (1, 1))
 
-    def test_draft_is_not_team_approval(self):
-        self.assertEqual(load_contract()["status"], "DRAFT_PENDING_TL_SCML_PE_REVIEW")
+    def test_contract_is_frozen_with_review_record(self):
+        """契约必须写明状态与评审记录：既防止把草稿当成已批准，也防止「冻结了但说不清谁批的」。"""
+        contract = load_contract()
+        self.assertEqual(contract["status"], "FROZEN_TEAM_REVIEWED")
+        self.assertEqual(contract["frozen_at"], "2026-09-16")
+        self.assertTrue(contract["frozen_by"])
 
     def test_coverage_and_row_identity(self):
         tables, expected = fixture_records()

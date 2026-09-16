@@ -1,6 +1,9 @@
 {
   "contract_version": "0.1.0-draft",
-  "status": "DRAFT_PENDING_TL_SCML_PE_REVIEW",
+  "status": "FROZEN_TEAM_REVIEWED",
+  "frozen_at": "2026-09-16",
+  "frozen_by": "#2 TL（集成负责人），评审记录见 part2/contracts/README.md §7 第 7 条",
+  "frozen_note": "本输入契约（ODS/DWD 读入口径）已于 2026-09-16 冻结。contract_version 仍保留 0.1.0-draft：它是与既有 ODS 交接包 manifest.contract_version 做版本校验的标识（spark_quality_clean.py 会精确比对），重新生成 ODS 时再随交接包统一升版。",
   "source_schema": "database/schema.sql @ 1bd4b89",
   "raw_read_type": "string",
   "encoding": "UTF-8",

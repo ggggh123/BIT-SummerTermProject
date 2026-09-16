@@ -1,20 +1,20 @@
 # 第二阶段 · 数据链路与运营大屏交付说明
 
-分支：`feat/part2-prl`。本目录承载第二阶段从 ODS、PRL 清洗、SCML 数仓、Spark ML 预测到 Flask/运营大屏的可运行链路；第一阶段 Qt 客户端、管理端和发行包不在这里修改。
+分支：`feat/part2-02`（第二阶段集成分支）。本目录承载第二阶段从 ODS、PRL 清洗、SCML 数仓、Spark ML 预测到 Flask/运营大屏的可运行链路；第一阶段 Qt 客户端、管理端和发行包不在这里修改。
 
 ## 当前交付结论
 
-2026-09-15 已在本机真实 YARN 环境完成一轮**正式规模模拟数据**的端到端批次，且将最终 ADS 以只读 SQLite 形式交给 Flask 和生产构建后的运营大屏。不是把静态 mock 数据当作验收数据：前端生产配置固定为访问 `/api`，后端从最终 `ads.db` 读取指标、质量摘要和 Spark ML 预测结果。
+2026-09-15 / 09-16 已在演示机 `niyujun01`（Ubuntu 22.04.3）完成一轮**正式规模模拟数据**的端到端批次，且将最终 ADS 以只读 SQLite 形式交给 Flask 和生产构建后的运营大屏。不是把静态 mock 数据当作验收数据：前端生产配置固定为访问 `/api`，后端从最终 `ads.db` 读取指标、质量摘要和 Spark ML 预测结果。该批次为团队冻结的数据基线（后续改动都在其上做，不重跑）。
 
-本次正式批次的闭环如下：
+本次批次的闭环如下：
 
 ```text
-ODS（#4 交接包，1,162,576 行）
-  → PRL（Spark on YARN，Q1–Q10 检测/清洗/隔离）
-  → DWD（7 表，883,731 行）
-  → DWS（4 表）/ ADS（运营汇总）
-  → Spark ML（24 个 horizon 的 GBT 选择与预测）
-  → ads.db（120 个预测点 + 24 条指标）
+ODS（#4 交接包 scml-20260914，1,162,576 行）
+  → PRL（Spark on YARN application_1789457728162_0004，963.64 秒，Q1–Q10 检测/清洗/隔离）
+  → DWD（7 表，1,017,419 行；7/7 写后读回断言通过）
+  → DWS（4 表）/ ADS（运营汇总，本地 Spark SQL 物化）
+  → Spark ML（YARN _0008/_0009/_0010：24 个 horizon 的 GBT 选择与预测）
+  → ads.db（144 个预测点 + 24 条指标）
   → Flask /api/* + web/dist（真实库展示）
 ```
 
@@ -45,13 +45,13 @@ PART2_SKIP_HADOOP=1 ADS_DB=/absolute/path/ads.db PART2_PORT=5051 \
 | 环节 | 实际结果 |
 |---|---|
 | ODS 来源 | `scml-20260914`，8 站、288 桩、5,000 用户、120,000 订单、1,000,000 遥测，共 1,162,576 行 |
-| PRL | `prl-clean-20260915T024010Z-55661`；YARN `application_1789439983572_0001`；351.23 秒 |
-| DWD | 7 张表、883,731 行；7 项写后读回断言全部通过 |
-| DWS | `station=630`、`charger=22,320`、`user=86,889`、`region=450` |
-| ADS | 7 站、251 桩、97,804 有效订单；最终库 SHA-256 为 `ab281d6d…c99585eaef` |
+| PRL | `prl-clean-20260915T133614Z-56524`；YARN `application_1789457728162_0004`；963.64 秒；隔离 145,157 行 |
+| DWD | 7 张表、1,017,419 行；7 项写后读回断言全部通过；小时覆盖 17,228 / 17,280（缺 52） |
+| DWS | `station=720`、`charger=25,514`、`user=97,893`、`region=450`（本地 Spark SQL 物化） |
+| ADS | `ads-20260915235603`；8 站、287 桩、110,696 有效订单；`ads.db` SHA-256 为 `7b9ba3d7…891d4148`（补发质量元数据后为 `cfb0b15e…`，业务数值不变） |
 | 训练 | Spark MLlib 在 YARN 上完成 24 个预测 horizon，24 个负荷模型均选择 GBT |
-| 预测 | `ml-20260915-111604`；5 个启用站 × 24 小时 = 120 点，24 条评估指标，`isBaseline=false` |
-| 展示 | Flask 契约自测 55/55、前端形状自测 43/43、静态产物自测通过；生产前端不再内嵌 mock 结果 |
+| 预测 | `f-20260915-232113`；6 个启用站 × 24 小时 = 144 点，24 条评估指标，`modelVersion=gbt-3.5.7`，`isBaseline=false` |
+| 展示 | Flask 契约自测 57/57、前端形状自测 47/47、Node 回归 55/55、静态产物自测通过；生产前端不再内嵌 mock 结果 |
 
 ## 代码和责任边界
 
@@ -100,19 +100,20 @@ bash part2/scripts/run_pipeline.sh /absolute/path/to/ods-handoff \
 ev-part2 stop
 ```
 
-`--require-full-input` 只校验输入规模，`--accept-draft` 只承认当前质量策略尚未由团队冻结，二者互不替代。
+`--require-full-input` 只校验输入规模，`--accept-draft` 只承认当前质量策略尚未由团队冻结（质量策略已于 2026-09-16 冻结，见 `contracts/README.md` §7 第 7 条；该参数保留以兼容历史批次），二者互不替代。
 
 ## 已知边界（如实保留）
 
 - 本项目的数据是按业务规则构造的正式规模**模拟数据**，不是外部生产充电站的实时数据；演示时应表述为“基于模拟运营数据的分析与预测”。
-- 正式 PRL 报告仍为 `ready_for_team_delivery=false`，原因是 Q2/Q5/Q6/Q9 等清洗策略尚待团队签字冻结；这不影响本轮演示链路的已物化数据，但不能伪称为已完成治理制度审批。
-- 清洗后 7 站 × 90 天 × 24 小时应有 15,120 个小时观测，保留 15,073 个，缺 47 个；ML 特征按 `observed_at` 对齐，**不会**把“第 n 行”误认为“第 n 小时”。
-- 本机为 Ubuntu 25.04 开发环境。Java 8、Hadoop 3.2.1、Spark 3.5.7、Python 3.10.21 的链路已实测；Ubuntu 22.04 的最终复验需要在目标机按同一份交接包执行。
-- `web/package.json` 声明 Node ≥23；本机 Node 20.18 已通过本轮构建和测试但会产生 engine 警告。验收机建议使用声明版本，避免将当前兼容性结果误解为完整的平台认证。
+- 质量策略已于 **2026-09-16 由 #2 TL 逐条评审并冻结**（`quality-policy-v0.1.json` = `0.2.2 / FROZEN_TEAM_REVIEWED`，`scml-dwd-v0.1.json` / `ods-dwd-v0.1.json` = `FROZEN_TEAM_REVIEWED`，见 `contracts/README.md` §7 第 7 条）。已物化批次早于口径修正：其 Q2 的 FP/FN 与报告中 `pending_policy_notes` 属冻结前的运行记录，**不作为成果口径**（演示库的质量面板已按冻结状态标注）。
+- 清洗后 8 站 × 90 天 × 24 小时应有 17,280 个小时观测，保留 17,228 个，缺 52 个；ML 特征按 `observed_at` 对齐，**不会**把“第 n 行”误认为“第 n 小时”。
+- 演示机 `niyujun01` 为 Ubuntu 22.04.3（Java 17 / Hadoop 3.2.1 / Spark 3.5.7 / Python 3.10.12），本批 PRL 清洗与 ML 已在该机 YARN 上完成；DWS/ADS 由同一套 Spark SQL 在本机 local 模式物化（日志中无 application id），**不冒称为集群作业**。
+- `web/package.json` 声明 Node ≥23；演示机 Node 为 23.11.1，满足声明；开发机 Node 24.19 亦通过构建与回归。
 
 ## 演示建议
 
-1. 先在服务器/大屏机执行 `PART2_SKIP_HADOOP=1 bash part2/scripts/start_part2.sh`，进入运营总览。
-2. 用 `/api/health` 展示当前 `runId` 与读取的 ADS 绝对路径，再切换到企业、用户、站点、政府和预测页面，说明它们都来自同一份最终 ADS。
-3. 在预测页强调本批次 `isBaseline=false`、5 站 × 24 小时、并说明训练/预测运行在 Spark on YARN。
-4. 如被追问数据治理，展示质量页并如实说明已完成全量检测/隔离/对账，但策略审批仍是团队管理项。
+1. 先在演示机执行 `PART2_SKIP_HADOOP=1 bash part2/scripts/start_part2.sh`，浏览器打开 `http://<演示机IP>:5000/`，进入运营总览。
+2. 用 `/api/health` 展示当前 `runId`（`ads-20260915235603`）与读取的 ADS 绝对路径，再逐页切换：主页（24h 实际/预测负荷）、用户视角（未来 1h 空闲推荐）、充电站视角（单站未来 24h 预测与满载风险）、企业视角、政府视角（全城未来 24h 预测与高峰预警）——强调所有页面来自同一份最终 ADS。
+3. 预测统一口径：`f-20260915-232113`、`gbt-3.5.7`、`isBaseline=false`、6 站 × 24 小时 = 144 点；页面已区分显示“ML 模型预测 / 降级基线”。
+4. 本组答辩**不现场启动 Hadoop**：若被追问平台，直接用 `part2/docs/evidence/2026-09-15-formal-full.json` 里的 YARN application id（PRL `_0004`、ML `_0008/_0009/_0010`）与 `run_result.json` 佐证；注意 YARN 重启会清空应用列表、且未开启日志聚合，不要现场敲 `yarn logs`。
+5. 如被追问数据治理，打开质量面板：策略状态为「已确认」（0.2.2），TP/FP/FN 与级联明细均来自 #3 PRL 逐行对账；并如实说明本批数据由冻结前的注入端产出、Q2 的 FP/FN 不作成果口径。
