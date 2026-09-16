@@ -69,7 +69,7 @@ const heatOption = computed(() => (data.value ? buildPeakHeatmapOption(data.valu
     <section class="panel panel--dv"><DvFrame title="各站电价对比（元/度，含全市均价）" code="01"><EChart v-if="data" :option="priceOption" /><p class="chart-note">按电价从低到高排列 · 金色虚线为全市均价。</p></DvFrame></section>
     <section class="panel panel--dv"><DvFrame title="充电时段热力图（站点 × 24h 占用桩数）" code="02"><EChart v-if="data" :option="heatOption" /><p class="chart-note">颜色越亮，时段内占用桩数越多；用于识别错峰机会。</p></DvFrame></section>
     <section class="panel panel--dv"><DvFrame title="各站当前空闲桩排行（个）" code="03"><EChart v-if="data" :option="idleOption" /><p class="chart-note">数据为本批站点状态快照，不代表实际到站时保证有空位。</p></DvFrame></section>
-    <section class="panel panel--dv"><DvFrame title="距离-价格散点（找「近且便宜」，点大小=空闲桩）" code="04"><EChart v-if="data" :option="distanceOption" /><p class="chart-note">越靠左下方，参考点距离越近、电价越低；悬停查看站点。</p></DvFrame></section>
+    <section class="panel panel--dv"><DvFrame title="距离-价格散点（点大小=空闲桩数）" code="04"><EChart v-if="data" :option="distanceOption" /><p class="chart-note">越靠左下方，参考点距离越近、电价越低；悬停查看站点。</p></DvFrame></section>
   </section>
   <section class="panel panel--dv recommendation-panel"><DvFrame title="本批未来 1h · 空闲推荐" code="05">
     <p v-if="recommendError || !recommendations.length" class="note">{{ recommendError || '暂无预测，等待有效模型结果。' }}</p>
