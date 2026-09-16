@@ -19,6 +19,8 @@ export const ENDPOINTS = {
     priceDistance: ['user/price-distance'],
     idleRanking: ['user/idle-ranking'],
     peakHeatmap: ['user/peak-heatmap'],
+    // 《01》§3.2 低拥堵推荐榜：未来 1h 预测空闲桩与拥堵等级（#5 预测 → ADS → 本接口）
+    recommend: ['forecast/recommend'],
   },
   station: {
     coverage: ['station/coverage'],
