@@ -15,8 +15,9 @@ CMakeUserPresets.json
 dashboard/.vendor-cache/
 dashboard/runtime/
 
-# 第二阶段：数据交接包与大体积产物（永不提交，走共享文件夹/网盘）
-handoff/
+# 第二阶段：数据交接包与大体积产物（默认不入库，走共享文件夹/网盘；封存批次的演示包见文件末尾例外）
+# 用 handoff/* 而非 handoff/ —— 目录整体排除时无法再放行子文件
+handoff/*
 *.parquet
 spark-*-bin-hadoop3.tgz
 _artifact_env.trash-*/
@@ -56,3 +57,18 @@ __pycache__/
 /part2/scml/handoff/dwd/
 /part2/scml/handoff/dws/
 /part2/scml/handoff/ads/
+
+# 例外：2026-09-15 封存批次的演示交接包随仓库分发（约 5.7MB，克隆仓库即可复现大屏）
+# —— ADS 只读库（与 ads_manifest 哈希一致）+ ML 预测交付包 + 清洗质量报告。
+# 注意：这些规则必须排在 `*.db` / `*.log` 之后才生效；其余 handoff 产物仍按上面的策略排除，
+# 历史快照（ads.db.pre-policy-freeze、sealed-original-20260915235603/）依旧不入库，走共享文件夹。
+handoff/*
+!handoff/ads/
+!handoff/forecast/
+!handoff/prl-20260915T133614Z-56524/
+handoff/ads/*
+!handoff/ads/ads.db
+!handoff/ads/ads_manifest.json
+!handoff/ads/quality-publish-receipt.json
+!handoff/forecast/*
+!handoff/prl-20260915T133614Z-56524/*

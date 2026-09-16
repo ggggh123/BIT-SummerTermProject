@@ -1,0 +1,164 @@
+{
+  "policy_version": "0.2.2-draft",
+  "status": "DRAFT_PENDING_TEAM_REVIEW",
+  "sample_limit": 5,
+  "timestamp_year_range": [
+    1900,
+    2100
+  ],
+  "money": {
+    "reference": "constant_station_price",
+    "relative_tolerance": "0.01",
+    "absolute_tolerance_fen": "1",
+    "repair_exact_yuan_factor": true,
+    "note": "仅为当前模拟数据提案：批次内站点单价恒定。真实变价订单须补充价格快照，不能用当前价回算历史账单。"
+  },
+  "optional": {
+    "users": [
+      "nickname",
+      "avatar_path"
+    ],
+    "orders": [
+      "started_at",
+      "ended_at"
+    ],
+    "stations": [
+      "latitude",
+      "longitude"
+    ]
+  },
+  "defaults": {
+    "users": {
+      "nickname": "未命名用户",
+      "avatar_path": ""
+    }
+  },
+  "enums": {
+    "users": {
+      "status": [
+        "active",
+        "frozen"
+      ]
+    },
+    "stations": {
+      "forecast_enabled": [
+        0,
+        1
+      ]
+    },
+    "chargers": {
+      "type": [
+        "fast",
+        "slow"
+      ],
+      "status": [
+        "idle",
+        "reserved",
+        "charging",
+        "fault",
+        "restarting"
+      ]
+    },
+    "orders": {
+      "status": [
+        "reserved",
+        "charging",
+        "completed",
+        "cancelled"
+      ]
+    },
+    "station_hourly": {
+      "is_holiday": [
+        0,
+        1
+      ]
+    },
+    "events": {
+      "entity_type": [
+        "order",
+        "charger",
+        "station",
+        "user"
+      ]
+    }
+  },
+  "ranges": {
+    "users": {
+      "balance_fen": [
+        0,
+        9223372036854775807
+      ]
+    },
+    "stations": {
+      "price_fen_per_kwh": [
+        0,
+        10000
+      ]
+    },
+    "chargers": {
+      "power_kw": [
+        0.001,
+        1000
+      ],
+      "charge_count": [
+        0,
+        9223372036854775807
+      ],
+      "total_duration_sec": [
+        0,
+        9223372036854775807
+      ]
+    },
+    "orders": {
+      "energy_kwh": [
+        0,
+        1000
+      ]
+    },
+    "telemetry": {
+      "power_kw": [
+        0,
+        1000
+      ],
+      "energy_increment_kwh": [
+        0,
+        1000
+      ]
+    },
+    "station_hourly": {
+      "pile_count": [
+        1,
+        10000
+      ],
+      "rated_power_kw": [
+        0.001,
+        1000000
+      ],
+      "temperature_c": [
+        -50,
+        60
+      ],
+      "busy_count": [
+        0,
+        10000
+      ],
+      "load_kw": [
+        0,
+        1000000
+      ]
+    }
+  },
+  "beijing_bbox": {
+    "latitude": [
+      39.4,
+      41.1
+    ],
+    "longitude": [
+      115.4,
+      117.5
+    ]
+  },
+  "bbox_note": "项目近似包围框，不是真实行政边界。越界坐标**仅置空该字段并保留站点记录**（repair），不整行隔离、不猜测坐标。理由：stations 是维度表，整行剔除会使该站的订单/充电桩/遥测变成孤儿引用并触发 Q7 级联（实测站点由 8 降至 7、订单由 12 万降至 102,332）。口径由 #2 TL 于 2026-09-15 决定，见 contracts/README.md §7 第 4 条。**因此 latitude / longitude 为可空字段**（列入 optional）：DWD 断言的必填检查与 Q1 缺失判定均不对已置空坐标报违规；非空时仍必须落在本包围框内（越界即 Q9）。",
+  "duplicate_policy": "按业务主键判重（契约 primary_key：orders 为 [id]，telemetry 为 [charger_id, recorded_at]）。同一业务主键、内容相同者按 _row_id 字典序保留最早一条（deduplicate）；同一业务主键但内容冲突者本组全部隔离（reject），等待上游确认。口径由 #2 TL 于 2026-09-15 拍板，证据与三方案对比见 contracts/Q2-duplicate-policy-decision.md。",
+  "time_format_policy": "Q4「时间格式混杂」按契约 policy「统一时区；区分可解析的非标准格式与不可解析时间」，两类都计入检出：① 不可解析；② 可解析但原文非标准 ISO 8601 形式（如 yyyy/MM/dd HH:mm:ss、Unix 秒）。清洗解析保持宽容（三种写法统一解析），计数口径不改变剔除行为——仅「不可解析」剔除，可解析的非标准行只计数、不丢数据。PRL 侧 quality/record_rules.py 自 2026-09-15 起即按此口径；ADS 侧独立复算体（scml/warehouse/jobs 的 _lib/build_local/_ads_extras）于 2026-09-15 对齐（此前仅统计不可解析，致大屏 ads_quality_table 的 R04 恒为 0）。判定函数：scml/warehouse/jobs/_lib.py 的 is_nonstandard_time()。"
+}

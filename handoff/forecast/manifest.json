@@ -1,0 +1,42 @@
+{
+  "package": "forecast",
+  "contract": "ads-flask-v1 / ads_forecast_batch + ads_forecast_24h + ads_forecast_metric",
+  "run_id": "f-20260915-232113",
+  "run_ids": [
+    "f-20260915-232113"
+  ],
+  "model_version": "gbt-3.5.7",
+  "is_baseline": 0,
+  "horizon_h_max": 24,
+  "generated_at": "2026-09-15T23:35:54",
+  "hostname": "niyujun01",
+  "source": "hdfs://niyujun01:8020/ev-charging/ads/ads_forecast_24h",
+  "rows": 144,
+  "metric_rows": 24,
+  "files": {
+    "forecast_result.json": {
+      "sha256": "16f82b59292dc49beb4b6d88a71b1d9801a6678a9d189191c04f9c11b446c1df",
+      "bytes": 39119
+    },
+    "forecast_result.csv": {
+      "sha256": "74c34a9ba1cc970d1da3e082a9b486618086c35f507a9f3a9d85ae0d43516c70",
+      "bytes": 10154
+    },
+    "metrics.json": {
+      "sha256": "a0f7c35a8770189f33782d6c99e0af16b531fe7da25ef5b997576ecbb7986f72",
+      "bytes": 53914
+    },
+    "forecast_metric.json": {
+      "sha256": "6221f908fcb46464aa63cf6bc3b63134c4fbf691d348e74265dbe752c2f8eed8",
+      "bytes": 2860
+    },
+    "forecast_batch.json": {
+      "sha256": "c8ece9081f3426b3fd476f252185761f20f6c346ebe8337c380fef062ce1221d",
+      "bytes": 346
+    },
+    "forecast.db": {
+      "sha256": "3089af37a4ecc29c74ec4115df366612802189e1f4db0d4023916d620aed31fc",
+      "bytes": 28672
+    }
+  }
+}

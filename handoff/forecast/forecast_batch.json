@@ -1,0 +1,9 @@
+{
+  "run_id": "f-20260915-232113",
+  "model_version": "gbt-3.5.7",
+  "activated_at": "2026-09-15T23:35:54+08:00",
+  "source": "spark-mllib",
+  "horizon_h_max": 24,
+  "is_baseline": 0,
+  "note": "Spark MLlib GBT 直接式多步长（1-24h）；特征含滞后/滚动项，训练/验证/测试按时间序 70/15/15 切分，无未来数据泄漏"
+}

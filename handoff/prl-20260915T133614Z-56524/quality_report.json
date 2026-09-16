@@ -1,0 +1,1869 @@
+{
+  "contract_version": "0.1.0-draft",
+  "policy_version": "0.2.2-draft",
+  "contract_status": "DRAFT_PENDING_TL_SCML_PE_REVIEW",
+  "run_id": "prl-clean-20260915T133614Z-56524",
+  "source_run_id": "scml-20260914",
+  "source_kind": "ods-handoff",
+  "data_cutoff": "2026-09-15T00:00:00+08:00",
+  "generated_at": "2026-09-15T21:53:28.745560+08:00",
+  "application_id": "application_1789457728162_0004",
+  "master": "yarn",
+  "spark": "3.5.7",
+  "driver_python": "3.10.12",
+  "worker_python": [
+    "3.10.12",
+    "3.10.12"
+  ],
+  "money_reference": {
+    "reference": "constant_station_price",
+    "relative_tolerance": "0.01",
+    "absolute_tolerance_fen": "1",
+    "repair_exact_yuan_factor": true,
+    "note": "仅为当前模拟数据提案：批次内站点单价恒定。真实变价订单须补充价格快照，不能用当前价回算历史账单。"
+  },
+  "output": "hdfs://localhost:8020/ev-charging/quality/batches/prl-clean-20260915T133614Z-56524",
+  "ubuntu22_verified": false,
+  "input_profile": "scml-ods-v0.1",
+  "source_contract_version": "ods-dwd-v0.1",
+  "source_manifest_sha256": "c2faa4c2049d000f627df3c5a04ff41446b30112bd5478ccf813ce88d0fb42a6",
+  "dwd_profile": "scml-dwd-v0.1",
+  "ready_for_team_delivery": false,
+  "pending_policy_notes": [
+    "Q2：上游订单注入保留不同 id，与文档所写按主键检出不一致；不读取标签指导去重。",
+    "Q6：上游整数除以 100 已丢失分位；仅精确可证明的单位错误允许修正，其余隔离。",
+    "Q9：越界坐标仅置空该字段（latitude/longitude 已列为 optional，允许为空）并保留站点记录，不隔离、不填造坐标；coord_imputed 恒为 0。口径由 #2 TL 于 2026-09-15 拍板（contracts/README §7 第 4 条），与 quality-policy 的 bbox_note 一致。",
+    "Q5：本实现隔离超占用小时，不裁剪为满载；小时缺口必须在 ML 使用前核验。",
+    "合法未开工订单保留空 started_at/hour/dt，使用 Hive NULL 分区；不擅自改取预约日期。",
+    "可选 nickname/avatar_path 的展示默认值不计入 Q1；#4 dim_users 仅输出 nickname，不输出 avatar_path。dim_date 仍由 #4 生成。",
+    "业务表匹配下游精确字段；原始行与批次追踪在 audit/dwd_lineage，不作为额外业务列。"
+  ],
+  "hourly_coverage": {
+    "expected_station_hours": 17280,
+    "retained_station_hours": 17228,
+    "missing_station_hours": 52,
+    "row_offset_ml_safe": false,
+    "note": "缺失小时不插值；#5 不可把第 h 行当作第 h 小时。"
+  },
+  "report_type": "quality_report",
+  "profile": {
+    "users": {
+      "rows": 5000,
+      "raw_columns": {
+        "id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 4632
+        },
+        "mobile": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 4930
+        },
+        "nickname": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 4801
+        },
+        "avatar_path": {
+          "null": 5000,
+          "empty_string": 0,
+          "distinct_approx": 0
+        },
+        "balance_fen": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 5000
+        },
+        "status": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 2
+        },
+        "registered_at": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 4852
+        }
+      },
+      "parsed_ranges_including_rejected": {
+        "id__min": 1,
+        "id__max": 5000,
+        "balance_fen__min": 43,
+        "balance_fen__max": 199958,
+        "registered_at__min": "2026-03-19T00:00:53+08:00",
+        "registered_at__max": "2026-06-16T01:23:04+08:00"
+      },
+      "distinct_rsd": 0.05
+    },
+    "stations": {
+      "rows": 8,
+      "raw_columns": {
+        "id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 8
+        },
+        "name": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 8
+        },
+        "address": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 8
+        },
+        "latitude": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 8
+        },
+        "longitude": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 8
+        },
+        "price_fen_per_kwh": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 5
+        },
+        "forecast_enabled": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 2
+        },
+        "created_at": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 8
+        },
+        "district": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 5
+        }
+      },
+      "parsed_ranges_including_rejected": {
+        "id__min": 1,
+        "id__max": 8,
+        "latitude__min": 39.771511,
+        "latitude__max": 39.988997,
+        "longitude__min": 116.158089,
+        "longitude__max": 116.5694,
+        "price_fen_per_kwh__min": 80,
+        "price_fen_per_kwh__max": 160,
+        "forecast_enabled__min": 0,
+        "forecast_enabled__max": 1,
+        "created_at__min": "2026-03-01T00:00:00+08:00",
+        "created_at__max": "2026-05-24T00:00:00+08:00"
+      },
+      "distinct_rsd": 0.05
+    },
+    "chargers": {
+      "rows": 288,
+      "raw_columns": {
+        "id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 282
+        },
+        "station_id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 8
+        },
+        "code": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 288
+        },
+        "type": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 2
+        },
+        "power_kw": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 4
+        },
+        "status": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 5
+        },
+        "charge_count": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 172
+        },
+        "total_duration_sec": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 302
+        },
+        "updated_at": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 286
+        }
+      },
+      "parsed_ranges_including_rejected": {
+        "id__min": 1,
+        "id__max": 288,
+        "station_id__min": 1,
+        "station_id__max": 8,
+        "power_kw__min": 7.0,
+        "power_kw__max": 120.0,
+        "charge_count__min": 2,
+        "charge_count__max": 250,
+        "total_duration_sec__min": 18970,
+        "total_duration_sec__max": 1799870,
+        "updated_at__min": "2026-06-17T02:00:00+08:00",
+        "updated_at__max": "2026-09-14T03:00:00+08:00"
+      },
+      "distinct_rsd": 0.05
+    },
+    "orders": {
+      "rows": 120000,
+      "raw_columns": {
+        "id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 119274
+        },
+        "user_id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 4632
+        },
+        "charger_id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 282
+        },
+        "status": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 2
+        },
+        "reserved_at": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 73004
+        },
+        "started_at": {
+          "null": 5218,
+          "empty_string": 0,
+          "distinct_approx": 70478
+        },
+        "ended_at": {
+          "null": 5821,
+          "empty_string": 0,
+          "distinct_approx": 76273
+        },
+        "energy_kwh": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 57728
+        },
+        "amount_fen": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 17350
+        }
+      },
+      "parsed_ranges_including_rejected": {
+        "id__min": 1,
+        "id__max": 120000,
+        "user_id__min": 1,
+        "user_id__max": 99999999,
+        "charger_id__min": 1,
+        "charger_id__max": 288,
+        "reserved_at__min": "2026-06-17T00:01:00+08:00",
+        "reserved_at__max": "2026-09-14T23:58:00+08:00",
+        "started_at__min": "2026-06-17T00:01:00+08:00",
+        "started_at__max": "2026-09-14T23:58:00+08:00",
+        "ended_at__min": "2026-06-17T01:00:00+08:00",
+        "ended_at__max": "2026-09-15T02:35:00+08:00",
+        "energy_kwh__min": "-1.000000",
+        "energy_kwh__max": "9999.000000",
+        "amount_fen__min": 0,
+        "amount_fen__max": 40083
+      },
+      "distinct_rsd": 0.05
+    },
+    "telemetry": {
+      "rows": 1000000,
+      "raw_columns": {
+        "id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 988207
+        },
+        "charger_id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 282
+        },
+        "recorded_at": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 37677
+        },
+        "power_kw": {
+          "null": 5049,
+          "empty_string": 0,
+          "distinct_approx": 103226
+        },
+        "energy_increment_kwh": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 90444
+        },
+        "event_type": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 1
+        }
+      },
+      "parsed_ranges_including_rejected": {
+        "id__min": 1,
+        "id__max": 1000000,
+        "charger_id__min": 1,
+        "charger_id__max": 288,
+        "recorded_at__min": "2026-06-17T00:00:00+08:00",
+        "recorded_at__max": "2026-09-14T23:55:00+08:00",
+        "power_kw__min": 2.45,
+        "power_kw__max": 1139.97,
+        "energy_increment_kwh__min": "0.204200",
+        "energy_increment_kwh__max": "9.500000"
+      },
+      "distinct_rsd": 0.05
+    },
+    "station_hourly": {
+      "rows": 17280,
+      "raw_columns": {
+        "station_id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 8
+        },
+        "observed_at": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 2140
+        },
+        "pile_count": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 1
+        },
+        "rated_power_kw": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 1
+        },
+        "temperature_c": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 161
+        },
+        "is_holiday": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 2
+        },
+        "busy_count": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 36
+        },
+        "load_kw": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 16621
+        }
+      },
+      "parsed_ranges_including_rejected": {
+        "station_id__min": 1,
+        "station_id__max": 8,
+        "observed_at__min": "2026-06-17T00:00:00+08:00",
+        "observed_at__max": "2026-09-14T23:00:00+08:00",
+        "pile_count__min": 36,
+        "pile_count__max": 36,
+        "rated_power_kw__min": 1512.0,
+        "rated_power_kw__max": 1512.0,
+        "temperature_c__min": 20.0,
+        "temperature_c__max": 36.1,
+        "is_holiday__min": 0,
+        "is_holiday__max": 1,
+        "busy_count__min": 2,
+        "busy_count__max": 37,
+        "load_kw__min": 65.691,
+        "load_kw__max": 1381.7
+      },
+      "distinct_rsd": 0.05
+    },
+    "events": {
+      "rows": 20000,
+      "raw_columns": {
+        "id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 18604
+        },
+        "event_type": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 2
+        },
+        "entity_type": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 2
+        },
+        "entity_id": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 16681
+        },
+        "message": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 16171
+        },
+        "created_at": {
+          "null": 0,
+          "empty_string": 0,
+          "distinct_approx": 21055
+        }
+      },
+      "parsed_ranges_including_rejected": {
+        "id__min": 1,
+        "id__max": 20000,
+        "entity_id__min": 1,
+        "entity_id__max": 119995,
+        "created_at__min": "2026-06-17T00:00:00+08:00",
+        "created_at__max": "2026-09-14T23:53:00+08:00"
+      },
+      "distinct_rsd": 0.05
+    }
+  },
+  "rules": {
+    "Q1": {
+      "name": "缺失值",
+      "by_table_and_origin": [
+        {
+          "table": "orders",
+          "rule": "Q1",
+          "origin": "direct",
+          "count": 603,
+          "rate": 0.005025
+        },
+        {
+          "table": "telemetry",
+          "rule": "Q1",
+          "origin": "direct",
+          "count": 5049,
+          "rate": 0.005049
+        }
+      ],
+      "samples": [
+        {
+          "table": "orders",
+          "row_id": "orders-000000068",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "ended_at: completed 状态要求此时间"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000095",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "ended_at: completed 状态要求此时间"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000174",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "ended_at: completed 状态要求此时间"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000180",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "ended_at: completed 状态要求此时间"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000303",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "ended_at: completed 状态要求此时间"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000217",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "power_kw: 必填值缺失"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000323",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "power_kw: 必填值缺失"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000393",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "power_kw: 必填值缺失"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000526",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "power_kw: 必填值缺失"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000832",
+          "rule": "Q1",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "power_kw: 必填值缺失"
+          ]
+        }
+      ]
+    },
+    "Q2": {
+      "name": "重复记录",
+      "by_table_and_origin": [
+        {
+          "table": "telemetry",
+          "rule": "Q2",
+          "origin": "direct",
+          "count": 130215,
+          "rate": 0.130215
+        },
+        {
+          "table": "orders",
+          "rule": "Q2",
+          "origin": "direct",
+          "count": 1214,
+          "rate": 0.010116666666666666
+        }
+      ],
+      "samples": [
+        {
+          "table": "orders",
+          "row_id": "orders-000002046",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "deduplicate"
+          ],
+          "details": [
+            "相同标准化业务内容：保留字典序最小的原始行标识"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000003192",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "deduplicate"
+          ],
+          "details": [
+            "相同标准化业务内容：保留字典序最小的原始行标识"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000005274",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "deduplicate"
+          ],
+          "details": [
+            "相同标准化业务内容：保留字典序最小的原始行标识"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000005685",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "deduplicate"
+          ],
+          "details": [
+            "相同标准化业务内容：保留字典序最小的原始行标识"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000005970",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "deduplicate"
+          ],
+          "details": [
+            "相同标准化业务内容：保留字典序最小的原始行标识"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000008",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "相同业务键但内容冲突：本组全部隔离"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000017",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "相同业务键但内容冲突：本组全部隔离"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000021",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "相同业务键但内容冲突：本组全部隔离"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000026",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "相同业务键但内容冲突：本组全部隔离"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000029",
+          "rule": "Q2",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "相同业务键但内容冲突：本组全部隔离"
+          ]
+        }
+      ]
+    },
+    "Q3": {
+      "name": "物理异常",
+      "by_table_and_origin": [
+        {
+          "table": "orders",
+          "rule": "Q3",
+          "origin": "direct",
+          "count": 360,
+          "rate": 0.003
+        },
+        {
+          "table": "telemetry",
+          "rule": "Q3",
+          "origin": "direct",
+          "count": 2986,
+          "rate": 0.002986
+        }
+      ],
+      "samples": [
+        {
+          "table": "orders",
+          "row_id": "orders-000001007",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "energy_kwh: 超出已配置范围 [0, 1000]"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000001162",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "energy_kwh: 超出已配置范围 [0, 1000]"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000002484",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "energy_kwh: 超出已配置范围 [0, 1000]"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000002553",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "energy_kwh: 超出已配置范围 [0, 1000]"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000002782",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "energy_kwh: 超出已配置范围 [0, 1000]"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000170",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "遥测功率超过关联充电桩额定功率"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000622",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "遥测功率超过关联充电桩额定功率"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000639",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "遥测功率超过关联充电桩额定功率"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000673",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "遥测功率超过关联充电桩额定功率"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000001047",
+          "rule": "Q3",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "遥测功率超过关联充电桩额定功率"
+          ]
+        }
+      ]
+    },
+    "Q4": {
+      "name": "时间格式混杂",
+      "by_table_and_origin": [
+        {
+          "table": "telemetry",
+          "rule": "Q4",
+          "origin": "direct",
+          "count": 10000,
+          "rate": 0.01
+        },
+        {
+          "table": "orders",
+          "rule": "Q4",
+          "origin": "direct",
+          "count": 1200,
+          "rate": 0.01
+        }
+      ],
+      "samples": [
+        {
+          "table": "orders",
+          "row_id": "orders-000000022",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "reserved_at: 非标准时间转为 +08:00"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000099",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "reserved_at: 非标准时间转为 +08:00"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000221",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "reserved_at: 非标准时间转为 +08:00"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000354",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "reserved_at: 非标准时间转为 +08:00"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000756",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "reserved_at: 非标准时间转为 +08:00"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000078",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "recorded_at: 非标准时间转为 +08:00"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000216",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "recorded_at: 非标准时间转为 +08:00"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000294",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "recorded_at: 非标准时间转为 +08:00"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000453",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "recorded_at: 非标准时间转为 +08:00"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000834",
+          "rule": "Q4",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "recorded_at: 非标准时间转为 +08:00"
+          ]
+        }
+      ]
+    },
+    "Q5": {
+      "name": "逻辑矛盾",
+      "by_table_and_origin": [
+        {
+          "table": "orders",
+          "rule": "Q5",
+          "origin": "direct",
+          "count": 360,
+          "rate": 0.003
+        },
+        {
+          "table": "station_hourly",
+          "rule": "Q5",
+          "origin": "direct",
+          "count": 52,
+          "rate": 0.0030092592592592593
+        }
+      ],
+      "samples": [
+        {
+          "table": "orders",
+          "row_id": "orders-000001245",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "订单时间先后矛盾"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000001299",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "订单时间先后矛盾"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000001607",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "订单时间先后矛盾"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000001988",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "订单时间先后矛盾"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000002537",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "订单时间先后矛盾"
+          ]
+        },
+        {
+          "table": "station_hourly",
+          "row_id": "station_hourly-000000560",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "busy_count 大于 pile_count"
+          ]
+        },
+        {
+          "table": "station_hourly",
+          "row_id": "station_hourly-000000619",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "busy_count 大于 pile_count"
+          ]
+        },
+        {
+          "table": "station_hourly",
+          "row_id": "station_hourly-000000687",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "busy_count 大于 pile_count"
+          ]
+        },
+        {
+          "table": "station_hourly",
+          "row_id": "station_hourly-000000731",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "busy_count 大于 pile_count"
+          ]
+        },
+        {
+          "table": "station_hourly",
+          "row_id": "station_hourly-000000859",
+          "rule": "Q5",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "busy_count 大于 pile_count"
+          ]
+        }
+      ]
+    },
+    "Q6": {
+      "name": "金额口径错误",
+      "by_table_and_origin": [
+        {
+          "table": "orders",
+          "rule": "Q6",
+          "origin": "direct",
+          "count": 920,
+          "rate": 0.007666666666666666
+        }
+      ],
+      "samples": [
+        {
+          "table": "orders",
+          "row_id": "orders-000000101",
+          "rule": "Q6",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "金额不是有效整数分，或超出参考金额容差且不能证明单位错误"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000229",
+          "rule": "Q6",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "金额不是有效整数分，或超出参考金额容差且不能证明单位错误"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000595",
+          "rule": "Q6",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "金额不是有效整数分，或超出参考金额容差且不能证明单位错误"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000608",
+          "rule": "Q6",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "金额不是有效整数分，或超出参考金额容差且不能证明单位错误"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000709",
+          "rule": "Q6",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "金额不是有效整数分，或超出参考金额容差且不能证明单位错误"
+          ]
+        }
+      ]
+    },
+    "Q7": {
+      "name": "孤儿引用",
+      "by_table_and_origin": [
+        {
+          "table": "events",
+          "rule": "Q7",
+          "origin": "direct",
+          "count": 177,
+          "rate": 0.00885
+        },
+        {
+          "table": "events",
+          "rule": "Q7",
+          "origin": "cascade",
+          "count": 435,
+          "rate": 0.02175
+        },
+        {
+          "table": "telemetry",
+          "rule": "Q7",
+          "origin": "cascade",
+          "count": 3599,
+          "rate": 0.003599
+        },
+        {
+          "table": "orders",
+          "rule": "Q7",
+          "origin": "cascade",
+          "count": 780,
+          "rate": 0.0065
+        },
+        {
+          "table": "orders",
+          "rule": "Q7",
+          "origin": "direct",
+          "count": 360,
+          "rate": 0.003
+        }
+      ],
+      "samples": [
+        {
+          "table": "events",
+          "row_id": "events-000000067",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "events",
+          "row_id": "events-000000127",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "events",
+          "row_id": "events-000000137",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "events",
+          "row_id": "events-000000187",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "events",
+          "row_id": "events-000000211",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "events",
+          "row_id": "events-000000004",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "events",
+          "row_id": "events-000000108",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "events",
+          "row_id": "events-000000208",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "events",
+          "row_id": "events-000000247",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "events",
+          "row_id": "events-000000680",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "entity_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000046",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000129",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000217",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000244",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000301",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000000048",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "user_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000001016",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "user_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000001280",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "user_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000001722",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "user_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "orders",
+          "row_id": "orders-000002054",
+          "rule": "Q7",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "user_id: 原始维度／实体中不存在引用"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000031",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000089",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000000222",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000001040",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        },
+        {
+          "table": "telemetry",
+          "row_id": "telemetry-000001103",
+          "rule": "Q7",
+          "origin": "cascade",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "charger_id: 被引用记录已被清洗隔离"
+          ]
+        }
+      ]
+    },
+    "Q8": {
+      "name": "非法字段值",
+      "by_table_and_origin": [
+        {
+          "table": "chargers",
+          "rule": "Q8",
+          "origin": "direct",
+          "count": 1,
+          "rate": 0.003472222222222222
+        },
+        {
+          "table": "users",
+          "rule": "Q8",
+          "origin": "direct",
+          "count": 15,
+          "rate": 0.003
+        }
+      ],
+      "samples": [
+        {
+          "table": "chargers",
+          "row_id": "chargers-000000258",
+          "rule": "Q8",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "status: 枚举不在白名单"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000000255",
+          "rule": "Q8",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "mobile: 手机号须为 1 开头的 11 位数字"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000000264",
+          "rule": "Q8",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "mobile: 手机号须为 1 开头的 11 位数字"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000000645",
+          "rule": "Q8",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "mobile: 手机号须为 1 开头的 11 位数字"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000000813",
+          "rule": "Q8",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "mobile: 手机号须为 1 开头的 11 位数字"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000001109",
+          "rule": "Q8",
+          "origin": "direct",
+          "actions": [
+            "reject"
+          ],
+          "details": [
+            "mobile: 手机号须为 1 开头的 11 位数字"
+          ]
+        }
+      ]
+    },
+    "Q9": {
+      "name": "经纬度越界",
+      "by_table_and_origin": [
+        {
+          "table": "stations",
+          "rule": "Q9",
+          "origin": "direct",
+          "count": 1,
+          "rate": 0.125
+        }
+      ],
+      "samples": [
+        {
+          "table": "stations",
+          "row_id": "stations-000000003",
+          "rule": "Q9",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "latitude: 超出项目北京包围框，已置空该字段并保留站点记录"
+          ]
+        }
+      ]
+    },
+    "Q10": {
+      "name": "文本脏数据",
+      "by_table_and_origin": [
+        {
+          "table": "stations",
+          "rule": "Q10",
+          "origin": "direct",
+          "count": 1,
+          "rate": 0.125
+        },
+        {
+          "table": "users",
+          "rule": "Q10",
+          "origin": "direct",
+          "count": 25,
+          "rate": 0.005
+        }
+      ],
+      "samples": [
+        {
+          "table": "stations",
+          "row_id": "stations-000000001",
+          "rule": "Q10",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "name: 全半角、空白或不可见字符标准化"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000000001",
+          "rule": "Q10",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "nickname: 全半角、空白或不可见字符标准化"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000000002",
+          "rule": "Q10",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "nickname: 全半角、空白或不可见字符标准化"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000000124",
+          "rule": "Q10",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "nickname: 全半角、空白或不可见字符标准化"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000000330",
+          "rule": "Q10",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "nickname: 全半角、空白或不可见字符标准化"
+          ]
+        },
+        {
+          "table": "users",
+          "row_id": "users-000000400",
+          "rule": "Q10",
+          "origin": "direct",
+          "actions": [
+            "repair"
+          ],
+          "details": [
+            "nickname: 全半角、空白或不可见字符标准化"
+          ]
+        }
+      ]
+    }
+  },
+  "injection_comparison": {
+    "Q1": {
+      "truePositive": 5600,
+      "falsePositive": 52,
+      "falseNegative": 0,
+      "recall": 1.0,
+      "precision": 0.9907997169143666
+    },
+    "Q2": {
+      "truePositive": 6270,
+      "falsePositive": 125159,
+      "falseNegative": 4930,
+      "recall": 0.5598214285714286,
+      "precision": 0.047706366174892906
+    },
+    "Q3": {
+      "truePositive": 3346,
+      "falsePositive": 0,
+      "falseNegative": 14,
+      "recall": 0.9958333333333333,
+      "precision": 1.0
+    },
+    "Q4": {
+      "truePositive": 11200,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "Q5": {
+      "truePositive": 412,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "Q6": {
+      "truePositive": 577,
+      "falsePositive": 343,
+      "falseNegative": 23,
+      "recall": 0.9616666666666667,
+      "precision": 0.6271739130434782
+    },
+    "Q7": {
+      "truePositive": 360,
+      "falsePositive": 177,
+      "falseNegative": 0,
+      "recall": 1.0,
+      "precision": 0.6703910614525139
+    },
+    "Q8": {
+      "truePositive": 16,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "Q9": {
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    },
+    "Q10": {
+      "truePositive": 26,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "recall": 1.0,
+      "precision": 1.0
+    }
+  },
+  "notes": [
+    "注入标签不参与检测；对账使用唯一的 (rule, table, row_id)。",
+    "falsePositive 表示未匹配注入日志的直接命中；正式数据需人工确认日志是否穷尽问题。",
+    "cascade 是维度／实体隔离导致的关联影响，单独列示，不混入直接注入 TP/FP/FN。",
+    "每表、规则、来源最多保留 5 个样本；完整问题与原始隔离行在 Parquet 审计表。",
+    "原始 distinct 为 RSD=0.05 的近似值；parsed_ranges 是可解析值的清洗前范围，包含隔离行。"
+  ]
+}

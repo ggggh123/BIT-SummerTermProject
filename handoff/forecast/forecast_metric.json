@@ -1,0 +1,170 @@
+[
+  {
+    "horizon_h": 1,
+    "mae": 48.9569,
+    "rmse": 66.1587,
+    "wape": 8.4828,
+    "baseline_wape": 13.9005
+  },
+  {
+    "horizon_h": 2,
+    "mae": 47.7467,
+    "rmse": 63.7566,
+    "wape": 8.2718,
+    "baseline_wape": 13.9053
+  },
+  {
+    "horizon_h": 3,
+    "mae": 48.131,
+    "rmse": 63.8948,
+    "wape": 8.3412,
+    "baseline_wape": 13.9244
+  },
+  {
+    "horizon_h": 4,
+    "mae": 47.5859,
+    "rmse": 63.5779,
+    "wape": 8.2476,
+    "baseline_wape": 13.9565
+  },
+  {
+    "horizon_h": 5,
+    "mae": 46.9922,
+    "rmse": 62.9406,
+    "wape": 8.1491,
+    "baseline_wape": 13.9593
+  },
+  {
+    "horizon_h": 6,
+    "mae": 47.7835,
+    "rmse": 64.1867,
+    "wape": 8.297,
+    "baseline_wape": 13.9421
+  },
+  {
+    "horizon_h": 7,
+    "mae": 46.8038,
+    "rmse": 63.2407,
+    "wape": 8.148,
+    "baseline_wape": 13.988
+  },
+  {
+    "horizon_h": 8,
+    "mae": 48.2824,
+    "rmse": 64.8126,
+    "wape": 8.4253,
+    "baseline_wape": 14.0351
+  },
+  {
+    "horizon_h": 9,
+    "mae": 53.8691,
+    "rmse": 70.7224,
+    "wape": 9.4118,
+    "baseline_wape": 13.9818
+  },
+  {
+    "horizon_h": 10,
+    "mae": 57.8107,
+    "rmse": 77.4005,
+    "wape": 10.1041,
+    "baseline_wape": 14.0097
+  },
+  {
+    "horizon_h": 11,
+    "mae": 52.268,
+    "rmse": 71.2627,
+    "wape": 9.1282,
+    "baseline_wape": 14.0267
+  },
+  {
+    "horizon_h": 12,
+    "mae": 51.1915,
+    "rmse": 69.2752,
+    "wape": 8.9279,
+    "baseline_wape": 14.0217
+  },
+  {
+    "horizon_h": 13,
+    "mae": 49.6446,
+    "rmse": 67.1307,
+    "wape": 8.6432,
+    "baseline_wape": 14.0241
+  },
+  {
+    "horizon_h": 14,
+    "mae": 49.9009,
+    "rmse": 68.2818,
+    "wape": 8.6717,
+    "baseline_wape": 14.054
+  },
+  {
+    "horizon_h": 15,
+    "mae": 48.6685,
+    "rmse": 66.2553,
+    "wape": 8.4364,
+    "baseline_wape": 14.051
+  },
+  {
+    "horizon_h": 16,
+    "mae": 49.0678,
+    "rmse": 65.5779,
+    "wape": 8.4851,
+    "baseline_wape": 14.0769
+  },
+  {
+    "horizon_h": 17,
+    "mae": 47.6437,
+    "rmse": 64.5493,
+    "wape": 8.2181,
+    "baseline_wape": 14.0503
+  },
+  {
+    "horizon_h": 18,
+    "mae": 47.973,
+    "rmse": 64.384,
+    "wape": 8.2571,
+    "baseline_wape": 14.0141
+  },
+  {
+    "horizon_h": 19,
+    "mae": 49.255,
+    "rmse": 66.5555,
+    "wape": 8.4718,
+    "baseline_wape": 14.0886
+  },
+  {
+    "horizon_h": 20,
+    "mae": 48.2045,
+    "rmse": 64.785,
+    "wape": 8.3032,
+    "baseline_wape": 14.0649
+  },
+  {
+    "horizon_h": 21,
+    "mae": 47.9358,
+    "rmse": 64.2017,
+    "wape": 8.2798,
+    "baseline_wape": 14.1131
+  },
+  {
+    "horizon_h": 22,
+    "mae": 49.5977,
+    "rmse": 66.8541,
+    "wape": 8.5894,
+    "baseline_wape": 14.0888
+  },
+  {
+    "horizon_h": 23,
+    "mae": 49.728,
+    "rmse": 67.4352,
+    "wape": 8.6249,
+    "baseline_wape": 14.1539
+  },
+  {
+    "horizon_h": 24,
+    "mae": 51.1778,
+    "rmse": 69.242,
+    "wape": 8.874,
+    "baseline_wape": 14.1568
+  }
+]
