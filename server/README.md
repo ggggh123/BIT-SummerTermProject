@@ -99,8 +99,12 @@ SCML 生成器 ──► ODS 交接包 ──► PRL Spark/YARN 检测清洗 ─
 行数和哈希见 `part2/docs/quality-verification.md`。SQLite 是演示服务的只读发布格式，
 HDFS Parquet 与交接 manifest 保留为数据真源；Flask 不承担清洗、聚合或训练。
 
-按仓库 `.gitignore`，`handoff/` 与 `*.db` **不入库**（数据走共享文件夹/网盘），
-所以 clone 之后需要自己把数据放回来：
+**封存演示包已随仓库提供**（2026-09-16 起）：`handoff/ads/ads.db`（大屏实际读取的 ADS 库）、
+`handoff/forecast/`（ML 预测交付包）与 `handoff/prl-*/`（清洗质量报告）均已入库，clone 后
+直接 `ADS_DB=handoff/ads/ads.db python server/app.py` 即可起服务，无需再找数据。
+
+**中间层仍不入库**（`part2/scml/handoff/{ods,dwd,dws}`，ODS 约 107MB，走共享文件夹/网盘）。
+需要重跑流水线或重新生成 ADS 时：
 
 ```bash
 # 从共享文件夹取 handoff/ods，或按配置重跑 SCML 生成器（见 handoff/ods_config_used.yaml）
@@ -176,8 +180,9 @@ server/
 
 ## 8. 已知限制
 
-1. **大体量产物不进 Git**：ODS、DWD/DWS Parquet、模型和 `ads.db` 由 manifest、哈希与
-   本机证据目录管理；clone 后须取得最终 `handoff/ads/ads.db` 或重跑流水线。
+1. **大体量产物不进 Git**：ODS、DWD/DWS Parquet 与模型文件由 manifest、哈希与本机证据目录管理；
+   封存批次的 `handoff/ads/ads.db` 与 `handoff/forecast/` 已入库（约 5.7MB），clone 后可直接起服务；
+   中间层与模型仍须从共享盘取得或按 §5.1 重跑流水线。
 2. **遥测表未进 ADS**：100 万行遥测只做质量计数（流式扫描），ADS 不直接消费桩级明细；
    桩级指标来自 `ods_chargers` 的快照列与 `ods_station_hourly` 的小时聚合。
 3. **逐时距允许诚实降级**：正式批次由 Spark MLlib 训练，但每个 horizon 都按验证集
