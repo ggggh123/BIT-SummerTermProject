@@ -1,6 +1,11 @@
 {
-  "evidenceVersion": "formal-full-v1",
-  "capturedAt": "2026-09-15T12:04:16+08:00",
+  "evidenceVersion": "formal-full-v2",
+  "capturedAt": "2026-09-16T12:10:00+08:00",
+  "revision": {
+    "reason": "按团队确认的『当前封存批次』重写；上一版记录的是 ads-20260915105500 / ml-20260915-111604，内容保留在 git 历史 commit 38faef2。",
+    "frozenBaseline": "ads.db（runId ads-20260915235603）与 ML 预测批次（f-20260915-232113）为本阶段唯一数据基线，团队决定不重跑，后续改动均在此之上进行。",
+    "qualityMetadataNote": "本批 ads.db 在 2026-09-16 补发 #3 PRL 逐行对账元数据（仅替换 ads_quality_table / ads_quality_issue / ads_quality_meta 三张质量表，业务数值未变），因此 databaseSha256 由 cb481d1a…574e0 变为 7b9ba3d7…4148；原件备份为 handoff/ads/sealed-original-20260915235603/ 与演示机 ads.db.pre-quality-publish。"
+  },
   "scope": "ODS→PRL→DWD→DWS→ADS→Spark ML→Flask/web 端到端正式规模模拟数据验证",
   "dataNature": "模拟运营数据；不代表真实生产充电站数据",
   "source": {
@@ -15,126 +20,155 @@
       "telemetry": 1000000,
       "stationHourly": 17280,
       "events": 20000
+    },
+    "dataWindow": {
+      "start": "2026-06-17T00:00:00+08:00",
+      "end": "2026-09-15T00:00:00+08:00",
+      "days": 90,
+      "note": "右开区间：最后一条小时数据为 2026-09-14 23:00–24:00；ADS 清单记为 end=2026-09-14。"
     }
   },
   "prl": {
-    "runId": "prl-clean-20260915T024010Z-55661",
-    "applicationId": "application_1789439983572_0001",
+    "runId": "prl-clean-20260915T133614Z-56524",
+    "applicationId": "application_1789457728162_0004",
     "master": "yarn",
     "sparkVersion": "3.5.7",
-    "pythonVersion": "3.10.21",
-    "elapsedSeconds": 351.23,
+    "driverPython": "3.10.12",
+    "workerPython": ["3.10.12", "3.10.12"],
+    "elapsedSeconds": 963.64,
     "inputRows": 1162576,
-    "quarantinedRows": 278845,
-    "dwdRows": 883731,
+    "quarantinedRows": 145157,
+    "dwdRows": 1017419,
     "dwdTables": {
-      "dwd_order_detail": 102332,
-      "dwd_telemetry_detail": 743937,
-      "dwd_station_hourly": 15073,
-      "dwd_event": 17146,
-      "dim_stations": 7,
-      "dim_chargers": 251,
+      "dwd_order_detail": 115796,
+      "dwd_telemetry_detail": 859727,
+      "dwd_station_hourly": 17228,
+      "dwd_event": 19388,
+      "dim_stations": 8,
+      "dim_chargers": 287,
       "dim_users": 4985
     },
-    "dwdAssertions": {
-      "passed": 7,
-      "failed": 0
-    },
+    "dwdAssertions": {"passed": 7, "failed": 0},
     "hourlyCoverage": {
-      "expected": 15120,
-      "retained": 15073,
-      "missing": 47,
-      "rowOffsetMlSafe": false
+      "expected": 17280,
+      "retained": 17228,
+      "missing": 52,
+      "rowOffsetMlSafe": false,
+      "note": "缺失小时不插值；ML 侧以整点网格对齐作门禁，不允许按行偏移处理。"
     },
     "qualityComparison": {
-      "Q1": { "truePositive": 5600, "falsePositive": 52, "falseNegative": 0 },
-      "Q2": { "truePositive": 9953, "falsePositive": 128817, "falseNegative": 1247 },
-      "Q3": { "truePositive": 3008, "falsePositive": 0, "falseNegative": 352 },
-      "Q4": { "truePositive": 11200, "falsePositive": 0, "falseNegative": 0 },
-      "Q5": { "truePositive": 412, "falsePositive": 0, "falseNegative": 0 },
-      "Q6": { "truePositive": 512, "falsePositive": 294, "falseNegative": 88 },
-      "Q7": { "truePositive": 360, "falsePositive": 0, "falseNegative": 0 },
-      "Q8": { "truePositive": 16, "falsePositive": 0, "falseNegative": 0 },
-      "Q9": { "truePositive": 1, "falsePositive": 0, "falseNegative": 0 },
-      "Q10": { "truePositive": 26, "falsePositive": 0, "falseNegative": 0 }
+      "Q1": {"truePositive": 5600, "falsePositive": 52, "falseNegative": 0},
+      "Q2": {"truePositive": 6270, "falsePositive": 125159, "falseNegative": 4930},
+      "Q3": {"truePositive": 3346, "falsePositive": 0, "falseNegative": 14},
+      "Q4": {"truePositive": 11200, "falsePositive": 0, "falseNegative": 0},
+      "Q5": {"truePositive": 412, "falsePositive": 0, "falseNegative": 0},
+      "Q6": {"truePositive": 577, "falsePositive": 343, "falseNegative": 23},
+      "Q7": {"truePositive": 360, "falsePositive": 177, "falseNegative": 0},
+      "Q8": {"truePositive": 16, "falsePositive": 0, "falseNegative": 0},
+      "Q9": {"truePositive": 1, "falsePositive": 0, "falseNegative": 0},
+      "Q10": {"truePositive": 26, "falsePositive": 0, "falseNegative": 0}
     },
     "readyForTeamDelivery": false,
-    "pendingPolicyNotes": [
-      "Q2 上游主键语义、Q5 超占用小时处理、Q6 单位修正边界、Q9 坐标策略尚待团队冻结。",
-      "合法未开工订单的时间分区策略与展示默认值仍须由团队确认。"
+    "policyStatus": "质量策略已于 2026-09-16 由 #2 TL 逐条评审并冻结：quality-policy-v0.1.json = 0.2.2 / FROZEN_TEAM_REVIEWED，scml-dwd-v0.1.json = SCHEMA_ADAPTED_POLICY_FROZEN，见 part2/contracts/README.md §7 第 7 条。",
+    "knownCaveats": [
+      "Q2：本批由口径修正前的注入端产出（注入行保留不同 id），且遥测键 (charger_id, recorded_at) 存在自然重复（实测单日 11.9% 的行与同桩同刻其他帧共用该键），故 R02 的 FP/FN 不代表最终口径；策略口径本身已冻结，本批不重跑。",
+      "Q6/Q7 的 FP 来自金额单位修正边界与维度级联的既有口径，已在冻结清单中逐条确认。"
+    ],
+    "pendingPolicyNotesAtRunTime": [
+      "Q2：上游订单注入保留不同 id，与文档所写按主键检出不一致；不读取标签指导去重。",
+      "Q6：上游整数除以 100 已丢失分位；仅精确可证明的单位错误允许修正，其余隔离。",
+      "Q9：越界坐标仅置空该字段并保留站点记录，不隔离、不填造坐标。",
+      "Q5：本实现隔离超占用小时，不裁剪为满载；小时缺口必须在 ML 使用前核验。",
+      "合法未开工订单保留空 started_at/hour/dt，使用 Hive NULL 分区。",
+      "可选 nickname/avatar_path 的展示默认值不计入 Q1；dim_users 仅输出 nickname。",
+      "业务表匹配下游精确字段；原始行与批次追踪在 audit/dwd_lineage。"
     ]
   },
   "warehouse": {
-    "dwsRows": {
-      "station": 630,
-      "charger": 22320,
-      "user": 86889,
-      "region": 450
-    },
+    "dwsRunId": "dws-20260915234533",
+    "dwsRows": {"station": 720, "charger": 25514, "user": 97893, "region": 450},
     "ads": {
-      "runId": "ads-20260915105500",
-      "stations": 7,
-      "chargers": 251,
-      "orders": 97804,
-      "stationHourly": 15073,
-      "deliveryReconciliation": { "passed": 31, "skipped": 0, "failed": 0 }
-    }
+      "runId": "ads-20260915235603",
+      "stations": 8,
+      "chargers": 287,
+      "completedOrders": 110696,
+      "totalRevenueFen": 467138413,
+      "totalEnergyKwh": 3902151.6,
+      "onlineRatePercent": 99.3,
+      "stationHourly": 17228,
+      "databaseSha256": "7b9ba3d776fdf1110cc6414122679e725e8dbfc1eec985ac41bb0b5f891d4148"
+    },
+    "executionNote": "PRL 清洗、ML 训练/预测/发布在 YARN 上运行（见 applicationId 字段）；DWS/ADS 物化由本地 Spark SQL（dws_schema.sql + dws_etl.sql、ads_etl.sql + ads-export）完成，日志中无 YARN application id，不冒称为 YARN 作业。"
   },
   "ml": {
-    "trainingApplicationId": "application_1789442046774_0001",
-    "predictionApplicationId": "application_1789442046774_0003",
-    "publishApplicationId": "application_1789442046774_0004",
-    "runId": "ml-20260915-111604",
-    "modelVersion": "spark-mllib-direct-20260915",
+    "trainingApplicationId": "application_1789457728162_0008",
+    "predictionApplicationId": "application_1789457728162_0009",
+    "publishApplicationId": "application_1789457728162_0010",
+    "runId": "f-20260915-232113",
+    "modelVersion": "gbt-3.5.7",
+    "activatedAt": "2026-09-15T23:35:54+08:00",
     "selectedLoadAlgorithm": "gbt",
     "loadModelHorizons": 24,
-    "forecastEnabledStationIds": [1, 2, 4, 5, 6],
-    "forecastRows": 120,
+    "forecastEnabledStationIds": [1, 2, 3, 4, 5, 6],
+    "forecastRows": 144,
     "metricRows": 24,
     "isBaseline": false,
     "horizonRange": [1, 24],
-    "materializationSafety": "逐 horizon 收集至最多 启用站点数×24 行的轻量 DataFrame，避免 24 个 PipelineModel 的联合长 lineage 导致低内存 executor OOM。"
+    "forecastWindow": {
+      "start": "2026-09-15T00:00:00+08:00",
+      "end": "2026-09-15T23:00:00+08:00",
+      "note": "紧接数据截止（09-14 23:59）之后的次日整天；预测产出时间为 09-15 23:21，展示时应说明该窗口相对当前时间已是过去 24 小时。"
+    }
   },
   "presentation": {
-    "productionEnv": {
-      "VITE_USE_MOCK": "false",
-      "VITE_API_BASE": "/api"
-    },
+    "productionEnv": {"VITE_USE_MOCK": "false", "VITE_API_BASE": "/api"},
     "oneClickVerified": {
       "mode": "PART2_SKIP_HADOOP=1",
-      "port": 5051,
-      "adsRunId": "ads-20260915105500",
-      "kpiTotalOrders": 97804,
-      "forecastRunId": "ml-20260915-111604",
-      "forecastRows": 120,
+      "port": 5000,
+      "adsRunId": "ads-20260915235603",
+      "kpiTotalOrders": 110696,
+      "forecastRunId": "f-20260915-232113",
+      "forecastRows": 144,
       "isBaseline": false
+    },
+    "qualityMetadataPublished": {
+      "tool": "part2/scripts/publish_quality_ads.py --accept-pending",
+      "qualityRunId": "prl-clean-20260915T133614Z-56524",
+      "databaseSha256After": "7b9ba3d776fdf1110cc6414122679e725e8dbfc1eec985ac41bb0b5f891d4148",
+      "note": "同日修复 ads_manifest.json 的 forecast.isBaseline（原写 bool(batch)，会误标为降级基线）。"
     }
   },
   "regression": {
-    "prlPython": { "passed": 81, "failed": 0 },
-    "prlSpark": { "passed": 19, "failed": 0 },
-    "scml": { "passed": 49, "failed": 0 },
-    "ml": { "passed": 7, "failed": 0 },
-    "webNode": { "passed": 36, "failed": 0 },
-    "flaskContract": { "passed": 55, "failed": 0 },
-    "frontendShape": { "passed": 43, "failed": 0 },
-    "staticDist": { "passed": true }
+    "prlPython": {"passed": 82, "failed": 0},
+    "scml": {"passed": 56, "failed": 0},
+    "ml": {"passed": 15, "failed": 0},
+    "scmlManifestRegression": {"passed": 2, "failed": 0},
+    "webNode": {"passed": 51, "failed": 0},
+    "flaskContract": {"passed": 57, "failed": 0},
+    "frontendShape": {"passed": 47, "failed": 0},
+    "staticDist": {"passed": true}
   },
   "sha256": {
-    "prlQualityReport": "6f7bc109dcf153a4ea1465571db760ffee6a45d965917d1fbbd9dead9854f0d8",
-    "prlCleaningReport": "9649892798a43e211cccfd34d19887e53819b9e6f4441008002dd5b684342b54",
-    "prlRunResult": "e17307bb7b301ed2de20c82197f75cd8550a50fd45211045620bbb176ae8d2cb",
-    "dwdHandoffManifest": "8e60c584bc5d755becb23b136a152f172b6bf060f99f8a56876053b37a47ad2f",
-    "mlMetrics": "eec9d247395a328aace6ed66b3a084619b6c33903038e9a48ddfd58f3dfcca0c",
-    "mlForecastDb": "95c753854e16bc6a22c7ebf5f15b81234f98315346a9c56b9b15f25860cde2bf",
-    "mlManifest": "db7d4d1b440752fe17c95ebb48c1f4865d60e626ccba378f61ef7cdb6b482385",
-    "adsDb": "ab281d6d7f71a7029de00b913a7a405065c68f0a2f3e678bd383c8c99585eaef",
-    "adsManifest": "4cdf39e86c573da407aceb537a8f78a0ba1a79230138bb8d2d9f0b96d5794aaf",
-    "mlForecastReceipt": "f1a195c24a3575fab293c6b4858003f55465fa6340d2f3cdb1c51d5a355afc30"
+    "prlQualityReport": "669acf60f67e1e41a2bff0f196f8c2da3fb74f3d0906d8f93728c7ed861b4646",
+    "prlCleaningReport": "e19476b2aa5dfba9a4f2c15a7465e7f4f7797a6ba3db75c2171566ed5ddbb8fd",
+    "prlRunResult": "06f321e0d1ac3636c0056ee5ffd669e14cdfd6574335d758445655895d36a30a",
+    "dwdHandoffManifest": "2f79cef027702b0547f071d3be904ec5c5aea324971ebe15993c3720823c3564",
+    "mlMetrics": "a0f7c35a8770189f33782d6c99e0af16b531fe7da25ef5b997576ecbb7986f72",
+    "mlForecastDb": "3089af37a4ecc29c74ec4115df366612802189e1f4db0d4023916d620aed31fc",
+    "mlManifest": "daf1fa396b2969121a7cb34d3282280476eda7aa0dbfc6137530ef56dec17d5a",
+    "adsDb": "7b9ba3d776fdf1110cc6414122679e725e8dbfc1eec985ac41bb0b5f891d4148",
+    "adsManifest": "899dff60f6cc67a2aebdf64d6d81a2a60c1c0623fbe47a868680bb4dff9a133c",
+    "adsDbSealedOriginal": "cb481d1a28e6d89fc823cc824729e4562906521533edd578fd2652e4047574e0"
+  },
+  "evidenceLocations": {
+    "repo": ["part2/docs/evidence/2026-09-15-formal-full.json", "part2/contracts/README.md §7"],
+    "handoffLocal": ["handoff/ads/ads.db", "handoff/ads/ads_manifest.json", "handoff/ads/quality-publish-receipt.json", "handoff/forecast/", "handoff/prl-20260915T133614Z-56524/（PRL 原始报告与 spark.log）"],
+    "demoHost": ["/home/bit/part2/logs/（run_pipeline.log、ml_*.log、dws_ads.log、ads_export*.log）", "/home/bit/ev-part2/evidence/prl-clean-20260915T133614Z-56524/", "HDFS /ev-charging/{ods,dwd,dws,ads,forecast,quality/batches}"],
+    "note": "YARN 重启后应用列表会清空，且未开启日志聚合，历史作业需以上表 applicationId + 日志/证据目录佐证。"
   },
   "environmentBoundary": {
-    "verifiedOn": "Ubuntu 25.04 / Java 8 / Hadoop 3.2.1 / Spark 3.5.7 / Python 3.10.21",
-    "ubuntu2204Verified": false,
-    "note": "Ubuntu 22.04 需在目标机使用相同交接包和启动命令复验；本摘要不把本机结果误称为跨平台认证。"
+    "verifiedOn": "Ubuntu 22.04.3（演示机 niyujun01）/ Java 17 / Hadoop 3.2.1 / Spark 3.5.7 / Python 3.10.12",
+    "prlAndMlOnUbuntu2204": true,
+    "note": "本批的 PRL 清洗与 ML 均在演示机（Ubuntu 22.04.3）的 YARN 上完成；DWS/ADS 为本地 Spark SQL 物化，未在 YARN 上运行，不冒称为集群作业。"
   }
 }

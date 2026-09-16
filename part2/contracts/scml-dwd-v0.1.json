@@ -1,6 +1,6 @@
 {
   "profile": "scml-dwd-v0.1",
-  "status": "SCHEMA_ADAPTED_POLICY_PENDING_TEAM_REVIEW",
+  "status": "SCHEMA_ADAPTED_POLICY_FROZEN",
   "upstream_commit": "e519d8d72129415af583e00ecbb1debbc93393d6",
   "upstream_latest_reviewed_commit": "13b18f0dff21b6988074cac65d7389057bcbce01",
   "upstream_file": "part2/scml/warehouse/sql/dwd_contract.sql",
@@ -37,13 +37,16 @@
       "columns": {"user_id": "integer", "mobile": "string", "nickname": "string", "balance_fen": "long", "status": "string", "registered_at": "string"}
     }
   },
-  "unresolved_policy_notes": [
-    "Q2：上游订单注入保留不同 id，与文档所写按主键检出不一致；不读取标签指导去重。",
-    "Q6：上游整数除以 100 已丢失分位；仅精确可证明的单位错误允许修正，其余隔离。",
-    "Q9：越界坐标仅置空该字段（latitude/longitude 已列为 optional，允许为空）并保留站点记录，不隔离、不填造坐标；coord_imputed 恒为 0。口径由 #2 TL 于 2026-09-15 拍板（contracts/README §7 第 4 条），与 quality-policy 的 bbox_note 一致。",
-    "Q5：本实现隔离超占用小时，不裁剪为满载；小时缺口必须在 ML 使用前核验。",
-    "合法未开工订单保留空 started_at/hour/dt，使用 Hive NULL 分区；不擅自改取预约日期。",
-    "可选 nickname/avatar_path 的展示默认值不计入 Q1；#4 dim_users 仅输出 nickname，不输出 avatar_path。dim_date 仍由 #4 生成。",
-    "业务表匹配下游精确字段；原始行与批次追踪在 audit/dwd_lineage，不作为额外业务列。"
-  ]
+  "frozen_at": "2026-09-16",
+  "frozen_by": "#2 TL（集成负责人）；评审记录见 part2/contracts/README.md §7 第 7 条",
+  "resolved_policy_notes": [
+    "Q2（2026-09-15 拍板，口径已冻结）：重复 = 业务主键重复；注入端已改为连业务主键一并复制。遗留：遥测键 (charger_id, recorded_at) 存在『自然重复』——实测单日 11.9% 的行与同桩同刻的其他帧共用该键（同一键最多 4 帧），需下一轮调整生成器时间轴或改用更细的键；在修正前按该键判重仍会产生 FP。",
+    "Q6（已确认）：上游整数除以 100 已丢失分位；仅『原值 × 100 与参考分值精确相等』的单位错误允许修正，其余隔离。",
+    "Q9（2026-09-15 拍板）：越界坐标仅置空该字段并保留站点记录（repair）；latitude/longitude 已列为 optional，coord_imputed 恒为 0，与 quality-policy 的 bbox_note 一致。",
+    "Q5（2026-09-15 拍板）：超占用小时隔离（reject）而非裁剪；由此产生的小时缺口由 ML 侧整点网格对齐兜住，row_offset_safe=false 时拒绝进入特征工程。",
+    "合法未开工订单（已确认）：保留空 started_at/hour/dt 并使用 Hive NULL 分区，不擅自改取预约日期。",
+    "可选 nickname/avatar_path（已确认）：展示默认值不计入 Q1；dim_users 仅输出 nickname，不输出 avatar_path；dim_date 由 #4 生成。",
+    "业务表字段（已确认）：匹配下游精确字段；原始行与批次追踪在 audit/dwd_lineage，不作为额外业务列。"
+  ],
+  "freeze_caveat": "本次冻结的是『策略口径』。已物化的演示批次 ads-20260915235603 / prl-clean-20260915T133614Z-56524 由口径修正前的注入端与生成器产出，团队决定不重跑，因此该批次报告中的 Q2 FP/FN 与 pending_policy_notes 属于冻结前的运行记录，不作为最终口径对外展示。"
 }

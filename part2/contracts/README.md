@@ -3,7 +3,7 @@
 当前状态分为两层：
 
 - **#4 结构已适配**：已按 SCML 提交 `e519d8d72129415af583e00ecbb1debbc93393d6` 中的 manifest、ODS 字段和 `dwd_contract.sql` 实现原生接收及七表 DWD 投影。2026-09-15 又复核到该分支最新 `13b18f0dff21b6988074cac65d7389057bcbce01`；新提交只增加正式规模交付闸门，没有改变生成器、ODS/DWD 字段或数仓 SQL。对应机器文件是 [scml-dwd-v0.1.json](scml-dwd-v0.1.json)。
-- **质量策略尚未冻结**：Q2/Q3/Q5/Q6/Q9、动态价格、可选展示字段和小时缺口处理仍需 #2 TL、#4 SCML、#5 PE 评审。对应文件是 [quality-policy-v0.1.json](quality-policy-v0.1.json)。
+- **质量策略已冻结（2026-09-16）**：Q2/Q3/Q5/Q6/Q9、动态价格、可选展示字段和小时缺口处理已由 #2 TL 逐条评审并定稿，`quality-policy-v0.1.json` 状态为 `0.2.2 / FROZEN_TEAM_REVIEWED`，`scml-dwd-v0.1.json` 状态为 `SCHEMA_ADAPTED_POLICY_FROZEN`；逐条结论与两条遗留说明见 §7 第 7 条。对应文件是 [quality-policy-v0.1.json](quality-policy-v0.1.json)。
 
 [ods-dwd-v0.1.json](ods-dwd-v0.1.json) 是 PRL 内部严格读入／规则契约，保留了第一阶段 `database/schema.sql` 的字段语义。SCML 适配层只转换清单元数据、表名和输出 schema，不改写 #4 的原始 CSV/JSONL。
 
@@ -101,3 +101,19 @@
 6. R04「时间格式混杂」检出恒 0 的归因与口径（缺陷 D15）。
    → **归因（2026-09-15）**：「检出 0」是 09-15 12:04 那批交付证据的结论。经逐层核查：注入端正常（`ods_orders.reserved_at` 1,200 条、`ods_telemetry.recorded_at` 10,000 条，斜杠/Unix 各半，脏值完整落盘）；PRL 检测端自 `baf3b2d`（09-15 09:55）起即按契约 policy 判定，集成机实跑得 **Q4 TP=11,200 / FP=0 / FN=0（召回 1.0）**。即 PRL 侧无需改代码，只需重跑并更新文档。
    → **吸附修复（ADS 侧独立复算）**：`scml/warehouse/jobs/{_lib,build_local,_ads_extras}.py` 此前仅在「不可解析」时计 R04，与契约「区分可解析的非标准格式与不可解析时间」不符，致大屏 `ads_quality_table` 的 R04 恒为 0。已新增 `_lib.is_nonstandard_time()`（原文非标准 ISO 8601 即计，可解析与不可解析两类都算），并在 orders / station_hourly / telemetry / events 四处对齐；**清洗解析保持宽容、剔除条件不变**（仍仅不可解析剔除，不因计数口径收紧而丢数据）。策略文件新增 `time_format_policy`（版本升至 `0.2.1-draft`），测试见 `scml/tests/test_quality_r04.py`（6 例）。
+
+7. **质量策略冻结（2026-09-16，#2 TL 逐条评审通过）**
+   → **状态变更**：`quality-policy-v0.1.json` 由 `0.2.2-draft / DRAFT_PENDING_TEAM_REVIEW` 升为 **`0.2.2 / FROZEN_TEAM_REVIEWED`**；`scml-dwd-v0.1.json` 由 `SCHEMA_ADAPTED_POLICY_PENDING_TEAM_REVIEW` 升为 **`SCHEMA_ADAPTED_POLICY_FROZEN`**，原 `unresolved_policy_notes` 逐条给出结论后改为 `resolved_policy_notes`。
+   → **逐条确认结果**：
+   - **Q2**：重复 = 业务主键重复（`orders.id`、`telemetry.(charger_id, recorded_at)`）；注入端 `_duplicate_payload` 已改为连业务主键一并复制。
+   - **Q3**：按数值范围与注入类型检出（`energy_kwh = -1 / 9999`、`power_kw ×10`、`load_kw > rated_power_kw`）；以本批对账为准 FP=0、FN=17（召回 99.5%），无系统性标签错位。
+   - **Q5**：超占用小时与订单状态/时间矛盾一律隔离（reject），不裁剪为满载；由此产生的小时缺口由 ML 侧整点网格对齐兜住（`row_offset_safe=false` 时拒绝进入特征工程）。
+   - **Q6**：仅可精确证明的元/分单位错误允许修正（原值 ×100 精确等于参考分值），其余隔离；金额恒为整数分、负值为违规。
+   - **Q9**：越界坐标仅置空该字段（repair）并保留站点记录；`latitude/longitude` 为 optional，`coord_imputed` 恒为 0（已实测不再触发整行剔除与 Q7 级联）。
+   - **未开工订单**：保留空 `started_at/hour/dt`，使用 Hive NULL 分区，不改取预约日期。
+   - **可选展示字段**：`nickname`/`avatar_path` 默认值不计入 Q1；`dim_users` 只输出 nickname；`dim_date` 由 #4 生成。
+   - **原始行追踪**：在 `audit/dwd_lineage`，不作为额外业务列。
+   → **两条遗留说明（不阻塞冻结，但必须如实记录）**：
+   - ⚠️ **Q2 的遥测键存在「自然重复」**：实测单日 **11.9%** 的 `ods_telemetry` 行与同桩同刻的其他帧共用 `(charger_id, recorded_at)`（同一键最多 4 帧），按契约主键判重仍会产生 FP。需 #4 在下一轮调整生成器时间轴或改用更细的键；**本批不重跑**。
+   - ⚠️ **已物化批次早于口径修正**：演示批次 `ads-20260915235603` / `prl-clean-20260915T133614Z-56524` 由修正前的注入端产出，其报告中的 Q2 FP/FN 与 `pending_policy_notes` 属冻结前的运行记录，**不作为最终口径展示**；`ready_for_team_delivery=false` 是如实标注，不因本次冻结改写。
+   → 对应机器文件：[quality-policy-v0.1.json](quality-policy-v0.1.json)、[scml-dwd-v0.1.json](scml-dwd-v0.1.json)。
