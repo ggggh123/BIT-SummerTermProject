@@ -24,6 +24,8 @@ export const ENDPOINTS = {
   },
   station: {
     coverage: ['station/coverage'],
+    // 《01》§3.3 增强：单站未来 24h 负荷预测（同一份 /api/forecast/24h，按站点过滤）
+    forecast24h: ['forecast/24h'],
     // station/{id}/utilization | mix | health 由页面按选中站点动态拼接路径
   },
   enterprise: {
@@ -39,5 +41,7 @@ export const ENDPOINTS = {
     carbon: ['gov/carbon'],
     peakLoad: ['gov/peak-load'],
     utilization: ['gov/utilization'],
+    // 《01》§3.5 增强：全城未来 24h 负荷预测与高峰预警（各启用站按小时求和）
+    forecast24h: ['forecast/24h'],
   },
 }

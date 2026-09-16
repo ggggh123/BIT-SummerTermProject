@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   buildCarbonSummary,
+  buildCityForecastOption,
   buildDistrictCoverageOption,
   buildPeakLoadOption,
   buildServiceStatsRows,
@@ -14,6 +15,7 @@ import serviceStats from './fixtures/gov_service-stats.json' with { type: 'json'
 import carbon from './fixtures/gov_carbon.json' with { type: 'json' }
 import peakLoad from './fixtures/gov_peak-load.json' with { type: 'json' }
 import utilization from './fixtures/gov_utilization.json' with { type: 'json' }
+import forecast24h from './fixtures/forecast_24h.json' with { type: 'json' }
 
 function assertClean(node, path = 'opt') {
   if (typeof node === 'number') return assert.ok(Number.isFinite(node), `${path} 非有限数`)
@@ -70,4 +72,23 @@ test('利用率公平性：按利用率升序并带全市均值参考线', () =>
   assert.deepEqual(vals, [...vals].sort((a, b) => a - b))
   assert.ok(opt.series[0].markLine.data[0].xAxis > 0)
   assert.ok(vals.every((v) => v >= 0 && v <= 100))
+})
+
+test('全城预测：按小时对各站求和，峰值与高峰预警自洽', () => {
+  const opt = buildCityForecastOption(forecast24h.data.points)
+  assertClean(opt)
+  assert.equal(opt.series[0].data.length, 24)
+  const firstHour = forecast24h.data.points.filter((p) => p.horizonH === 1)
+  const expected = Number(firstHour.reduce((s, p) => s + p.predictedLoadKw, 0).toFixed(1))
+  assert.ok(Math.abs(opt.series[0].data[0] - expected) < 0.05, '第 1 小时应为各站预测负荷之和')
+  assert.equal(opt.meta.peakLoadKw, Math.max(...opt.series[0].data))
+  assert.ok(opt.meta.warnHours.includes(opt.meta.peakHour), '峰值小时必须落在预警时段内')
+  assert.ok(opt.meta.predictedEnergyKwh > 0 && opt.meta.stations === firstHour.length)
+})
+
+test('全城预测：无预测点时给出空图与空元数据（界面显示「暂无预测」）', () => {
+  const opt = buildCityForecastOption([])
+  assert.equal(opt.meta.hours, 0)
+  assert.equal(opt.meta.peakHour, null)
+  assert.deepEqual(opt.series[0].data, [])
 })

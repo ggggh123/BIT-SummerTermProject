@@ -9,11 +9,12 @@ import { ENDPOINTS } from '@/api/endpoints'
 import { loadBeijingMap } from '@/lib/beijingMap'
 import { hasCoordinates } from '@/lib/coordinates'
 import { buildBeijingStationOption } from '@/lib/charts/beijingStation'
-import { buildCoverageOption, buildHealthOption, buildMixOption, buildUtilizationOption } from '@/lib/charts/station'
+import { buildCoverageOption, buildHealthOption, buildMixOption, buildStationForecastOption, buildUtilizationOption } from '@/lib/charts/station'
 import { createLatestRequest } from '@/lib/latestRequest'
 
 const data = ref(null), detail = ref(null), stationId = ref(null), error = ref('')
 const mapReady = ref(false), detailLoading = ref(false)
+const forecastPoints = ref([]), forecastNote = ref('')
 const route = useRoute()
 const detailRequest = createLatestRequest()
 let alive = true, initialized = false
@@ -54,18 +55,43 @@ watch(() => route.query.station, value => {
   const id = Number(value)
   if (data.value?.stations.some(s => s.stationId === id)) stationId.value = id
 })
-let stop
+/** 预测单独拉取：无激活批次时接口返回 code=4041，只看本站点的点，不影响其余面板 */
+async function loadForecast() {
+  try {
+    const { data: batch } = await fetchEnvelope(ENDPOINTS.station.forecast24h[0])
+    forecastPoints.value = batch?.points ?? []
+    forecastNote.value = ''
+  } catch (e) {
+    const msg = e?.message ?? String(e)
+    forecastPoints.value = []
+    forecastNote.value = /code=4041/.test(msg)
+      ? '暂无预测：当前 ADS 没有激活的预测批次。'
+      : `预测数据加载失败：${msg}`
+  }
+}
+
+let stop, stopForecast
 onMounted(() => {
   stop = startPolling(load, 60000)
+  stopForecast = startPolling(loadForecast, 60000)
   loadBeijingMap().then(() => { if (alive) mapReady.value = true }).catch(() => {})
 })
-onBeforeUnmount(() => { alive = false; detailRequest.invalidate(); stop?.() })
+onBeforeUnmount(() => { alive = false; detailRequest.invalidate(); stop?.(); stopForecast?.() })
 const stations = computed(() => data.value?.stations ?? [])
 const station = computed(() => stations.value.find(s => s.stationId === stationId.value))
 const stationName = computed(() => station.value?.name ?? '加载站点')
 const utilOption = computed(() => detail.value ? buildUtilizationOption(detail.value.utilization) : {})
 const mixOption = computed(() => detail.value ? buildMixOption(detail.value.mix) : {})
 const healthOption = computed(() => detail.value ? buildHealthOption(detail.value.health) : {})
+const stationForecast = computed(() => forecastPoints.value.filter(p => Number(p.stationId) === stationId.value))
+const forecastOption = computed(() => buildStationForecastOption(stationForecast.value, detail.value?.mix ?? null))
+const forecastMissing = computed(() => Boolean(forecastOption.value.meta?.noForecast))
+const forecastSummary = computed(() => {
+  const meta = forecastOption.value.meta ?? {}
+  if (meta.noForecast) return forecastNote.value || '该站点暂无预测，仅展示本批实际数据。'
+  const rated = meta.ratedPowerKw ? `｜额定容量 ${Math.round(meta.ratedPowerKw)} kW` : ''
+  return `${stationName.value}｜预测峰值 ${Math.round(meta.peakLoadKw)} kW（${meta.peakHour}）${rated}｜点色为预测拥堵等级`
+})
 const coverageOption = computed(() => {
   if (!data.value) return {}
   const rows = data.value.coverage.map(c => ({ ...stations.value.find(s => s.stationId === Number(c.stationId)), ...c, stationId: Number(c.stationId) }))
@@ -89,5 +115,6 @@ function selectMapStation(p) {
       <section class="panel panel--dv"><DvFrame title="快慢充结构（个）" code="02"><EChart v-if="detail" :option="mixOption" /><p v-if="detail" class="note">快充订单占比 {{ (detail.mix.fastOrderShare * 100).toFixed(0) }}% · 功率见图例</p></DvFrame></section>
       <section class="panel panel--dv"><DvFrame title="设备健康：Top 桩累计充电次数" code="03"><EChart v-if="detail" :option="healthOption" /><p v-if="detail" class="note">存在故障记录 {{ detail.health.faultCount }} 桩 · 运维巡检参考</p></DvFrame></section>
     </div>
+    <section class="panel panel--dv forecast-panel"><DvFrame title="未来 24h 负荷预测与满载风险（kW）" code="05"><EChart v-if="!forecastMissing" :option="forecastOption" /><p v-else class="empty-state">{{ forecastSummary }}</p><p class="note">{{ forecastSummary }}<br>预测来自本批 Spark MLlib 批次（`GET /api/forecast/24h` 按站点过滤），非实时遥测。</p></DvFrame></section>
   </section>
 </template>

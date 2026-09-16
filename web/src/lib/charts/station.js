@@ -52,6 +52,74 @@ export function buildHealthOption(health) {
   }
 }
 
+// 拥堵等级色标：等级取自接口 ads_forecast_24h.congestion_level，前端只着色、不重算
+const CONGESTION_COLOR = { low: '#65dec0', medium: '#d8b27a', high: '#e78d76' }
+const CONGESTION_LABEL = { low: '低拥堵', medium: '中拥堵', high: '高拥堵' }
+
+/**
+ * 单站未来 1–24h 预测负荷曲线（点色=预测拥堵等级），
+ * 并叠加由快慢充结构推出的站点额定容量参考线：接近容量即为预测满载风险。
+ */
+export function buildStationForecastOption(points = [], mix = null) {
+  const rows = [...points].sort((a, b) => a.horizonH - b.horizonH)
+  if (!rows.length) {
+    return {
+      xAxis: { type: 'category', data: [], name: '时刻' },
+      yAxis: { type: 'value', name: 'kW' },
+      series: [{ name: '未来预测负荷', type: 'line', data: [] }],
+      meta: { points: 0, peakHorizon: null, peakHour: null, peakLoadKw: null, ratedPowerKw: null, noForecast: true },
+    }
+  }
+  const peak = rows.reduce((acc, r, i) => (r.predictedLoadKw > rows[acc].predictedLoadKw ? i : acc), 0)
+  const rated = mix ? mix.fastCount * mix.fastPowerKw + mix.slowCount * mix.slowPowerKw : null
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        const row = rows[params?.[0]?.dataIndex]
+        if (!row) return ''
+        const level = CONGESTION_LABEL[row.congestionLevel] ?? row.congestionLevel
+        return `${row.forecastAt.slice(11, 16)}（第 ${row.horizonH} 小时）<br/>预测负荷 ${row.predictedLoadKw} kW` +
+          `<br/>预测空闲 ${row.predictedIdleCount} 桩 · ${level}`
+      },
+    },
+    xAxis: { type: 'category', data: rows.map((r) => r.forecastAt.slice(11, 16)), name: '时刻' },
+    yAxis: { type: 'value', name: 'kW' },
+    series: [
+      {
+        name: '未来预测负荷',
+        type: 'line',
+        smooth: true,
+        areaStyle: {},
+        data: rows.map((r) => ({
+          value: r.predictedLoadKw,
+          itemStyle: { color: CONGESTION_COLOR[r.congestionLevel] ?? '#78acd5' },
+        })),
+        markPoint: {
+          symbolSize: 46,
+          data: [{ coord: [peak, rows[peak].predictedLoadKw], name: '峰值', value: Math.round(rows[peak].predictedLoadKw) }],
+        },
+        ...(rated
+          ? {
+              markLine: {
+                symbol: 'none',
+                data: [{ yAxis: rated, label: { formatter: `额定容量 ${Math.round(rated)} kW` } }],
+              },
+            }
+          : {}),
+      },
+    ],
+    meta: {
+      points: rows.length,
+      peakHorizon: rows[peak].horizonH,
+      peakHour: rows[peak].forecastAt.slice(11, 16),
+      peakLoadKw: rows[peak].predictedLoadKw,
+      ratedPowerKw: rated,
+      noForecast: false,
+    },
+  }
+}
+
 /** 区域覆盖与选址：站点分布散点（点大小=桩数，悬停看服务半径） */
 export function buildCoverageOption(rows) {
   return {

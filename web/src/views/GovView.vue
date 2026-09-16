@@ -2,12 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import EChart from '@/components/EChart.vue'
 import DvFrame from '@/components/DvFrame.vue'
-import { fetchGroup } from '@/api/client'
+import { fetchEnvelope, fetchGroup } from '@/api/client'
 import { startPolling } from '@/api/polling'
 import { ENDPOINTS } from '@/api/endpoints'
 import { formatKwh } from '@/lib/contracts'
 import {
   buildCarbonSummary,
+  buildCityForecastOption,
   buildDistrictCoverageOption,
   buildPeakLoadOption,
   buildServiceStatsRows,
@@ -16,6 +17,7 @@ import {
 
 const data = ref(null)
 const error = ref('')
+const forecastPoints = ref([]), forecastNote = ref('')
 
 async function load() {
   try {
@@ -33,15 +35,43 @@ async function load() {
   }
 }
 
+/** 预测单独拉取：无激活批次时接口返回 code=4041，只影响预测面板，不影响其余指标 */
+async function loadForecast() {
+  try {
+    const { data: batch } = await fetchEnvelope(ENDPOINTS.gov.forecast24h[0])
+    forecastPoints.value = batch?.points ?? []
+    forecastNote.value = ''
+  } catch (e) {
+    const msg = e?.message ?? String(e)
+    forecastPoints.value = []
+    forecastNote.value = /code=4041/.test(msg)
+      ? '暂无预测：当前 ADS 没有激活的预测批次。'
+      : `预测数据加载失败：${msg}`
+  }
+}
+
 let stop = null
-onMounted(() => { stop = startPolling(load, 60000) })
-onBeforeUnmount(() => stop?.())
+let stopForecast = null
+onMounted(() => {
+  stop = startPolling(load, 60000)
+  stopForecast = startPolling(loadForecast, 60000)
+})
+onBeforeUnmount(() => { stop?.(); stopForecast?.() })
 
 const coverageOption = computed(() => (data.value ? buildDistrictCoverageOption(data.value.coverage) : {}))
 const serviceRows = computed(() => (data.value ? buildServiceStatsRows(data.value.serviceStats) : []))
 const carbon = computed(() => (data.value ? buildCarbonSummary(data.value.carbon) : null))
 const peakOption = computed(() => (data.value ? buildPeakLoadOption(data.value.peakLoad) : {}))
 const utilOption = computed(() => (data.value ? buildUtilizationFairnessOption(data.value.utilization) : {}))
+const cityForecastOption = computed(() => buildCityForecastOption(forecastPoints.value))
+const cityForecastMissing = computed(() => Boolean(cityForecastOption.value.meta?.noForecast) || !forecastPoints.value.length)
+const cityForecastSummary = computed(() => {
+  const meta = cityForecastOption.value.meta ?? {}
+  if (!meta.hours) return forecastNote.value || '暂无预测：当前 ADS 没有激活的预测批次。'
+  const warn = meta.warnHours?.length ? meta.warnHours.join('、') : '无'
+  return `${meta.stations} 个启用站按小时求和｜预测峰值 ${Math.round(meta.peakLoadKw)} kW（${meta.peakHour}）｜预测高峰时段 ${warn}` +
+    `｜折算预测电量约 ${Math.round(meta.predictedEnergyKwh).toLocaleString('zh-CN')} kWh（各小时负荷 × 1h 求和）`
+})
 </script>
 
 <template>
@@ -56,7 +86,8 @@ const utilOption = computed(() => (data.value ? buildUtilizationFairnessOption(d
   <section class="analysis-grid gov-grid">
     <section class="panel panel--dv"><DvFrame title="行政区覆盖密度（桩数 / 每万人桩数）" code="01"><EChart v-if="data" :option="coverageOption" tall /><p class="chart-note">设备数量与人口密度并读，识别相对供给差异。</p></DvFrame></section>
     <section class="panel panel--dv"><DvFrame title="全城 24 小时负荷曲线（辅助电网调度）" code="02"><EChart v-if="data" :option="peakOption" tall /><p class="chart-note">仅本批最后一日负荷 · 金色标记为当日峰值时段。</p></DvFrame></section>
-    <section class="panel panel--dv"><DvFrame title="各区服务指标（订单 / 服务用户 / 平均等待）" code="03"><div class="table-scroll"><table class="data-table"><thead><tr><th>行政区</th><th>订单量</th><th>服务用户</th><th>平均等待</th><th>人均单量</th></tr></thead><tbody><tr v-for="r in serviceRows" :key="r.district"><td>{{ r.district }}</td><td>{{ r.orderCount.toLocaleString('zh-CN') }}</td><td>{{ r.servedUserCnt.toLocaleString('zh-CN') }}</td><td>{{ r.avgWaitMin }} 分钟</td><td>{{ r.ordersPerUser }}</td></tr></tbody></table></div><p class="chart-note">服务用户按行政区去重；跨区充电的用户可能出现在多个区。</p></DvFrame></section>
+    <section class="panel panel--dv"><DvFrame title="各区服务指标（订单 / 服务用户 / 平均等待）" code="03"><div class="table-scroll"><table class="data-table"><thead><tr><th>行政区</th><th>订单量</th><th>服务用户</th><th>平均等待</th><th>人均单量</th></tr></thead><tbody><tr v-for="r in serviceRows" :key="r.district"><td>{{ r.district }}</td><td>{{ r.orderCount.toLocaleString('zh-CN') }}</td><td>{{ r.servedUserCnt.toLocaleString('zh-CN') }}</td><td>{{ r.avgWaitMin }} 分钟</td><td>{{ r.ordersPerUser }}</td></tr></tbody></table></div><p class="chart-note">服务用户按行政区去重；跨区充电的用户可能出现在多个区。</p><p class="chart-note">平均等待≈0 是本批模拟数据的特征：约 99.7% 的完成订单「预约后立即开始」（各区均值 0.2–0.4 分钟），生成器未模拟排队等待，不代表真实排队时长。</p></DvFrame></section>
     <section class="panel panel--dv"><DvFrame title="设施利用率公平性（识别「建而不用」）" code="04"><EChart v-if="data" :option="utilOption" /><p v-if="carbon" class="chart-note">减排口径：{{ carbon.note }}。电量 × 因子核验：{{ carbon.consistent ? '一致' : '不一致，需核对' }}。</p></DvFrame></section>
+    <section class="panel panel--dv city-forecast-panel"><DvFrame title="全城未来 24h 负荷预测与高峰预警（kW）" code="05"><EChart v-if="!cityForecastMissing" :option="cityForecastOption" tall /><p v-else class="empty-state">{{ cityForecastSummary }}</p><p class="chart-note">{{ cityForecastSummary }}<br>基于本批 Spark MLlib 预测批次（`GET /api/forecast/24h`），为各启用站点预测负荷之和，仅作调度参考。</p></DvFrame></section>
   </section>
 </template>

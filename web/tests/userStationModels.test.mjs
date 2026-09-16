@@ -11,6 +11,7 @@ import {
   buildCoverageOption,
   buildHealthOption,
   buildMixOption,
+  buildStationForecastOption,
   buildUtilizationOption,
 } from '../src/lib/charts/station.js'
 
@@ -20,6 +21,7 @@ import idleRanking from './fixtures/user_idle-ranking.json' with { type: 'json' 
 import peakHeatmap from './fixtures/user_peak-heatmap.json' with { type: 'json' }
 import coverage from './fixtures/station_coverage.json' with { type: 'json' }
 import stationDetail from './fixtures/station_detail.json' with { type: 'json' }
+import forecast24h from './fixtures/forecast_24h.json' with { type: 'json' }
 
 function assertClean(node, path = 'opt') {
   if (typeof node === 'number') return assert.ok(Number.isFinite(node), `${path} 非有限数`)
@@ -97,4 +99,25 @@ test('区域覆盖：8 个站点且经纬度在北京范围内', () => {
     assert.ok(d.value[0] > 115.4 && d.value[0] < 117.5, '经度应在北京范围')
     assert.ok(d.value[1] > 39.4 && d.value[1] < 41.1, '纬度应在北京范围')
   }
+})
+
+test('单站预测：按站点过滤出 24 点，额定容量参考线由快慢充结构推出', () => {
+  const points = forecast24h.data.points.filter((p) => p.stationId === 1)
+  const mix = stationDetail.data['1'].mix
+  const opt = buildStationForecastOption(points, mix)
+  assertClean(opt)
+  assert.equal(opt.series[0].data.length, 24)
+  assert.equal(opt.meta.points, 24)
+  const rated = mix.fastCount * mix.fastPowerKw + mix.slowCount * mix.slowPowerKw
+  assert.equal(opt.meta.ratedPowerKw, rated)
+  assert.equal(opt.series[0].markLine.data[0].yAxis, rated)
+  assert.equal(opt.meta.peakLoadKw, Math.max(...opt.series[0].data.map((d) => d.value)))
+  assert.ok(opt.series[0].data.every((d) => d.itemStyle.color), '每个点都应有预测拥堵等级配色')
+})
+
+test('单站预测：无该站点预测点时返回 noForecast（界面显示「暂无预测」而非空图）', () => {
+  const opt = buildStationForecastOption([], null)
+  assert.equal(opt.meta.noForecast, true)
+  assert.equal(opt.meta.ratedPowerKw, null)
+  assert.deepEqual(opt.series[0].data, [])
 })
