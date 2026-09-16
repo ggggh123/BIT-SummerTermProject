@@ -31,7 +31,7 @@ async function load() {
     error.value = e?.message ?? String(e)
   }
   try {
-    const response = await fetchEnvelope('forecast/recommend')
+    const response = await fetchEnvelope(ENDPOINTS.user.recommend[0])
     recommendations.value = response.data
     recommendError.value = ''
   } catch (e) {

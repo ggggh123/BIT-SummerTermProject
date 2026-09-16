@@ -1,6 +1,8 @@
 {
-  "policy_version": "0.2.2-draft",
-  "status": "DRAFT_PENDING_TEAM_REVIEW",
+  "policy_version": "0.2.2",
+  "status": "FROZEN_TEAM_REVIEWED",
+  "frozen_at": "2026-09-16",
+  "frozen_by": "#2 TL（集成负责人）；逐条结论与遗留说明见 part2/contracts/README.md §7 第 7 条",
   "sample_limit": 5,
   "timestamp_year_range": [1900, 2100],
   "money": {

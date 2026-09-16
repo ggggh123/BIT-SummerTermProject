@@ -90,7 +90,9 @@ def build_ads_manifest(
         },
         "forecast": {
             "source": batch["model_version"] if batch else "none",
-            "isBaseline": bool(batch),
+            # 与 build_local.py 同口径：存在批次 ≠ 基线，只有 is_baseline=1 才是降级基线。
+            # 原写法 bool(batch) 会把真实 MLlib 批次（is_baseline=0）也标成基线，与库内/接口矛盾。
+            "isBaseline": bool(batch and int(batch.get("is_baseline", 0))),
         },
     }
 

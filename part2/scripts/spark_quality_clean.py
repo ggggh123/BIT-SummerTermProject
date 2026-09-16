@@ -149,7 +149,9 @@ def main():
         metadata = {"contract_version": contract["contract_version"], "policy_version": policy["policy_version"], "contract_status": contract["status"], "run_id": args.run_id, "source_run_id": manifest["run_id"], "source_kind": manifest["kind"], "data_cutoff": manifest.get("data_cutoff"), "generated_at": datetime.now(SHANGHAI).isoformat(), "application_id": spark.sparkContext.applicationId, "master": spark.sparkContext.master, "spark": spark.version, "driver_python": sys.version.split()[0], "worker_python": workers, "money_reference": policy["money"], "output": args.output, "ubuntu22_verified": False}
         metadata.update(input_profile=manifest.get("input_profile", "prl-draft"), source_contract_version=manifest.get("source_contract_version", manifest["contract_version"]), source_manifest_sha256=manifest.get("source_manifest_sha256"), dwd_profile=PROFILE if scml_output else "draft", ready_for_team_delivery=False)
         if scml_output:
-            metadata["pending_policy_notes"] = load_scml_contract()["unresolved_policy_notes"]
+            # 质量策略已于 2026-09-16 冻结：契约改用 resolved_policy_notes 记录逐条结论，
+            # 因此这里允许缺省（缺省 = 本批没有待确认策略），不再强制要求旧字段。
+            metadata["pending_policy_notes"] = load_scml_contract().get("unresolved_policy_notes", [])
             if manifest.get("dataWindow"):
                 expected_hours = readback["dim_stations"].count() * int(manifest["dataWindow"]["days"]) * 24
                 actual_hours = next(item["rows"] for item in checks if item["table"] == "dwd_station_hourly")

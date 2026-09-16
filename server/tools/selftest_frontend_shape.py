@@ -54,6 +54,7 @@ CASES: list[tuple[str, str, dict]] = [
     ("gov_peak-load.json", "/api/gov/peak-load", {}),
     ("gov_utilization.json", "/api/gov/utilization", {}),
     ("forecast_24h.json", "/api/forecast/24h", {}),
+    ("forecast_recommend.json", "/api/forecast/recommend", {}),
 ]
 
 # station_detail.json 一个 mock 文件覆盖三条端点，单独处理

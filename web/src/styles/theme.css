@@ -83,19 +83,19 @@ a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid
 .online-gauge { position: absolute; right: 20px; top: 46px; width: 56px; height: 56px; transform: rotate(-90deg); }
 .online-gauge circle { fill: none; stroke: #25434a; stroke-width: 3; }
 .online-gauge circle:last-child { stroke: var(--accent); stroke-linecap: round; }
-.grid.home-main { grid-template-columns: 380px 1fr 400px; gap: 16px; margin-top: 16px; height: 446px; }
+.grid.home-main { grid-template-columns: 396px 1fr 416px; gap: 16px; margin-top: 16px; height: 472px; }
 .dv-col { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; }
-.home-main .chart.side-chart { height: 147px; }
+.home-main .chart.side-chart { height: 160px; }
 .home-main .panel h2 { font-size: 13px; }
-.grid.home-bottom { grid-template-columns: 1fr 520px; margin-top: 16px; height: 255px; }
-.home-bottom .chart { height: 172px; }
+.grid.home-bottom { grid-template-columns: 1fr 520px; margin-top: 16px; height: 274px; }
+.home-bottom .chart { height: 186px; }
 .home-bottom .panel-heading { margin-bottom: 4px; }
-.event-board { height: 175px; font-size: 12px; color: #aec6c6; }
+.event-board { height: 188px; font-size: 12px; color: #aec6c6; }
 .event-board .dv-scroll-board .header { color: #6f9999; font-size: 10px; letter-spacing: 1px; }
 .event-board .dv-scroll-board .rows .ceil { font-size: 12px; }
 .map-panel { position: relative; overflow: hidden; border: 1px solid #315653; background: radial-gradient(ellipse at 50% 48%, #17393855, #0b1c24 67%); }
 .map-panel::before { pointer-events: none; position: absolute; inset: 0; content: ""; background-image: linear-gradient(#7ddcc006 1px, transparent 1px), linear-gradient(90deg, #7ddcc006 1px, transparent 1px); background-size: 24px 24px; }
-.map-panel .map-chart { height: 380px; width: 100%; }
+.map-panel .map-chart { height: 400px; width: 100%; }
 .map-heading { display: flex; align-items: flex-start; justify-content: space-between; position: relative; z-index: 1; padding: 20px 22px 0; }
 .map-heading h2 { font-size: 18px; letter-spacing: 3px; margin: 0; font-weight: 500; }
 .map-heading small { display: block; font: 9px monospace; letter-spacing: 2px; color: #658f8b; margin-top: 6px; }
@@ -140,15 +140,18 @@ a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid
 .enterprise-grid { grid-template-columns: 1.05fr 1.05fr 1fr; }
 .enterprise-grid .trend-panel { grid-column: span 2; }
 .enterprise-grid .monthly-panel, .enterprise-grid .growth-panel { grid-column: auto; }
-.analysis-grid .chart { height: 220px; }
-.analysis-grid .chart.tall { height: 240px; }
-.enterprise-grid .rfm-panel .chart { height: 220px; }
+.analysis-grid .chart { height: 180px; }
+.analysis-grid .chart.tall { height: 200px; }
+.enterprise-grid .rfm-panel .chart { height: 180px; }
 .gov-grid { grid-template-columns: 1.25fr 1fr; }
 .user-grid { grid-template-columns: 1fr 1.2fr; }
 .station-grid { grid-template-columns: 1.5fr 1fr; }
 .station-grid .coverage-panel { grid-column: 2; grid-row: 1 / span 2; }
-.station-grid .coverage-panel .chart { height: 480px; }
+.station-grid .coverage-panel .chart { height: 380px; }
 .station-grid .station-secondary { display: grid; grid-template-columns: 1fr 1.15fr; gap: 16px; }
+.station-grid .forecast-panel { grid-column: span 2; }
+.station-grid .forecast-panel .chart { height: 180px; }
+.gov-grid .city-forecast-panel { grid-column: span 2; }
 .station-selector { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-dim); }
 .station-selector select { min-width: 210px; }
 .station-facts { display: flex; align-items: center; gap: 26px; font-size: 11px; color: var(--text-dim); }
@@ -188,9 +191,9 @@ a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid
   .nav-link small { font-size: 8px; }
   .status-area { font-size: 9px; } .pill { font-size: 10px; }
   .page { padding: 20px 20px 16px; }
-  .analysis-grid .chart { height: 240px; } .analysis-grid .chart.tall { height: 260px; }
+  .analysis-grid .chart { height: 200px; } .analysis-grid .chart.tall { height: 220px; }
   .station-grid .station-secondary { grid-template-columns: 1fr; }
-  .station-grid .coverage-panel .chart { height: 600px; }
+  .station-grid .coverage-panel .chart { height: 460px; }
   .footnote { padding-left: 20px; padding-right: 20px; }
 }
 @media (max-width: 1050px) {

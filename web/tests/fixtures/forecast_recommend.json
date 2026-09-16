@@ -1,0 +1,43 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "stationId": 6,
+      "name": "朝阳区6号充电站",
+      "predictedIdleCount": 29,
+      "congestionLevel": "low"
+    },
+    {
+      "stationId": 1,
+      "name": "朝阳区1号充电站",
+      "predictedIdleCount": 27,
+      "congestionLevel": "low"
+    },
+    {
+      "stationId": 3,
+      "name": "丰台区3号充电站",
+      "predictedIdleCount": 27,
+      "congestionLevel": "low"
+    },
+    {
+      "stationId": 4,
+      "name": "通州区4号充电站",
+      "predictedIdleCount": 27,
+      "congestionLevel": "low"
+    },
+    {
+      "stationId": 5,
+      "name": "大兴区5号充电站",
+      "predictedIdleCount": 27,
+      "congestionLevel": "low"
+    },
+    {
+      "stationId": 2,
+      "name": "海淀区2号充电站",
+      "predictedIdleCount": 26,
+      "congestionLevel": "low"
+    }
+  ],
+  "generatedAt": "2026-09-15T23:56:03+08:00"
+}
